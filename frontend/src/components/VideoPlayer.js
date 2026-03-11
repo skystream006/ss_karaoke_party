@@ -55,7 +55,7 @@ export default function VideoPlayer({ videoId, onEnded, settings }) {
         playerRef.current = null;
       }
     };
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onEnded is a callback prop; re-creating the player on each render would be disruptive
   }, [videoId]);
 
   const applySettings = (player) => {
@@ -68,7 +68,9 @@ export default function VideoPlayer({ videoId, onEnded, settings }) {
     if (settings.tempo !== undefined) {
       try {
         player.setPlaybackRate(settings.tempo);
-      } catch {}
+      } catch (err) {
+        console.warn('setPlaybackRate not supported:', err);
+      }
     }
   };
 
@@ -77,7 +79,7 @@ export default function VideoPlayer({ videoId, onEnded, settings }) {
     if (playerRef.current && playerRef.current.setVolume) {
       applySettings(playerRef.current);
     }
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applySettings is defined in component scope and stable; settings is the only changing dep
   }, [settings]);
 
   if (!videoId) {

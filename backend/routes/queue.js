@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/db');
+const { writeLimiter } = require('../middleware/rateLimiter');
 
 // GET /api/queue/:partyId - Get the queue for a party
 router.get('/:partyId', async (req, res) => {
@@ -21,7 +22,7 @@ router.get('/:partyId', async (req, res) => {
 });
 
 // POST /api/queue/:partyId - Add a song to the queue
-router.post('/:partyId', async (req, res) => {
+router.post('/:partyId', writeLimiter, async (req, res) => {
   const { member_id, singer_name, video_id, video_title, video_thumbnail } = req.body;
   if (!singer_name || !video_id || !video_title) {
     return res.status(400).json({ error: 'singer_name, video_id, and video_title are required' });
@@ -65,7 +66,7 @@ router.post('/:partyId', async (req, res) => {
 });
 
 // DELETE /api/queue/:partyId/:itemId - Remove a song from the queue
-router.delete('/:partyId/:itemId', async (req, res) => {
+router.delete('/:partyId/:itemId', writeLimiter, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -116,7 +117,7 @@ router.delete('/:partyId/:itemId', async (req, res) => {
 });
 
 // PUT /api/queue/:partyId/reorder - Reorder the queue
-router.put('/:partyId/reorder', async (req, res) => {
+router.put('/:partyId/reorder', writeLimiter, async (req, res) => {
   const { order } = req.body; // Array of { id, position }
   if (!Array.isArray(order)) {
     return res.status(400).json({ error: 'order must be an array' });
@@ -156,7 +157,7 @@ router.put('/:partyId/reorder', async (req, res) => {
 });
 
 // PATCH /api/queue/:partyId/:itemId/status - Update item status (e.g., mark as playing/played)
-router.patch('/:partyId/:itemId/status', async (req, res) => {
+router.patch('/:partyId/:itemId/status', writeLimiter, async (req, res) => {
   const { status } = req.body;
   if (!['queued', 'playing', 'played'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });

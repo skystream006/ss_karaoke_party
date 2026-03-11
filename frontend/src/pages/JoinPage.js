@@ -21,7 +21,7 @@ export default function JoinPage() {
     if (codeFromUrl) {
       handleCodeLookup(codeFromUrl);
     }
-    // eslint-disable-next-line
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCodeLookup is stable; we only want this effect to run once on mount
   }, []);
 
   const fetchParties = async () => {

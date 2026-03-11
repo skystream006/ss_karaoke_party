@@ -6,6 +6,7 @@ const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
 const pool = require('./db/db');
+const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
 
 const app = express();
 const server = http.createServer(app);
@@ -27,10 +28,13 @@ app.set('io', io);
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
 
-// Routes
+// Apply general rate limiter to all API routes
+app.use('/api', generalLimiter);
+
+// Routes (more specific limiters are applied per-route inside route files)
 app.use('/api/parties', require('./routes/parties'));
 app.use('/api/queue', require('./routes/queue'));
-app.use('/api/youtube', require('./routes/youtube'));
+app.use('/api/youtube', searchLimiter, require('./routes/youtube'));
 
 // Health check
 app.get('/api/health', (req, res) => {

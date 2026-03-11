@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db/db');
 const { v4: uuidv4 } = require('uuid');
+const { writeLimiter } = require('../middleware/rateLimiter');
 
 // Generate a short join code
 function generateJoinCode() {
@@ -27,7 +28,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/parties - Create a new party
-router.post('/', async (req, res) => {
+router.post('/', writeLimiter, async (req, res) => {
   const { name, organizer_name } = req.body;
   if (!name || !organizer_name) {
     return res.status(400).json({ error: 'Party name and organizer name are required' });
@@ -104,7 +105,7 @@ router.get('/join/:code', async (req, res) => {
 });
 
 // POST /api/parties/:id/join - Join a party
-router.post('/:id/join', async (req, res) => {
+router.post('/:id/join', writeLimiter, async (req, res) => {
   const { name, role } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Name is required' });
