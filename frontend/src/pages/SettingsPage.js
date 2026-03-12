@@ -228,7 +228,7 @@ export default function SettingsPage() {
       </header>
 
       <div className="settings-content">
-        {/* Parties Section */}
+        {/* Parties Section (left column) */}
         <section className="settings-section">
           <div className="settings-section-header">
             <h2>🎉 Parties</h2>
@@ -337,14 +337,19 @@ export default function SettingsPage() {
           )}
         </section>
 
-        {/* Members Section */}
-        {selectedParty && (
-          <section className="settings-section">
-            <div className="settings-section-header">
-              <h2>
-                👥 Members —{' '}
-                <span className="settings-section-subtitle">{selectedParty.name}</span>
-              </h2>
+        {/* Members Section (right column) */}
+        <section className="settings-section">
+          <div className="settings-section-header">
+            <h2>
+              👥 Members
+              {selectedParty && (
+                <>
+                  {' '}—{' '}
+                  <span className="settings-section-subtitle">{selectedParty.name}</span>
+                </>
+              )}
+            </h2>
+            {selectedParty && (
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() => {
@@ -355,104 +360,112 @@ export default function SettingsPage() {
               >
                 ✕ Close
               </button>
+            )}
+          </div>
+
+          {!selectedParty ? (
+            <div className="settings-empty settings-members-placeholder">
+              Select a party to view its members.
             </div>
+          ) : (
+            <>
+              {membersError && <div className="settings-error">{membersError}</div>}
 
-            {membersError && <div className="settings-error">{membersError}</div>}
+              {membersLoading ? (
+                <div className="settings-loading">Loading members…</div>
+              ) : members.length === 0 ? (
+                <div className="settings-empty">No members in this party.</div>
+              ) : (
+                <div className="settings-list">
+                  {members.map((member) => (
+                    <div key={member.id} className="settings-item">
+                      <div className="settings-item-main">
+                        {editingMemberId === member.id ? (
+                          <div className="settings-inline-edit">
+                            <input
+                              type="text"
+                              value={editingMemberName}
+                              onChange={(e) => setEditingMemberName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') saveEditMember(member.id);
+                                if (e.key === 'Escape') cancelEditMember();
+                              }}
+                              autoFocus
+                              maxLength={60}
+                              className="settings-inline-input"
+                            />
+                            <select
+                              value={editingMemberRole}
+                              onChange={(e) => setEditingMemberRole(e.target.value)}
+                              className="settings-inline-select"
+                            >
+                              <option value="organizer">Organizer</option>
+                              <option value="guest">Guest</option>
+                            </select>
+                            {memberEditError && (
+                              <span className="settings-inline-error">{memberEditError}</span>
+                            )}
+                            <div className="settings-inline-actions">
+                              <button
+                                className="btn btn-primary btn-sm"
+                                onClick={() => saveEditMember(member.id)}
+                                disabled={memberEditLoading}
+                              >
+                                Save
+                              </button>
+                              <button className="btn btn-ghost btn-sm" onClick={cancelEditMember}>
+                                Cancel
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="settings-item-info">
+                            <div className="settings-item-name">
+                              {member.name}
+                              <span
+                                className={`settings-badge ${member.role === 'organizer' ? 'settings-badge--organizer' : 'settings-badge--guest'}`}
+                              >
+                                {member.role}
+                              </span>
+                            </div>
+                            <div className="settings-item-meta">
+                              Joined {formatDate(member.joined_at)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
 
-            {membersLoading ? (
-              <div className="settings-loading">Loading members…</div>
-            ) : members.length === 0 ? (
-              <div className="settings-empty">No members in this party.</div>
-            ) : (
-              <div className="settings-list">
-                {members.map((member) => (
-                  <div key={member.id} className="settings-item">
-                    <div className="settings-item-main">
-                      {editingMemberId === member.id ? (
-                        <div className="settings-inline-edit">
-                          <input
-                            type="text"
-                            value={editingMemberName}
-                            onChange={(e) => setEditingMemberName(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') saveEditMember(member.id);
-                              if (e.key === 'Escape') cancelEditMember();
-                            }}
-                            autoFocus
-                            maxLength={60}
-                            className="settings-inline-input"
-                          />
-                          <select
-                            value={editingMemberRole}
-                            onChange={(e) => setEditingMemberRole(e.target.value)}
-                            className="settings-inline-select"
+                      {editingMemberId !== member.id && (
+                        <div className="settings-item-actions">
+                          <button
+                            className="btn btn-ghost btn-sm"
+                            onClick={() => startEditMember(member)}
+                            title="Edit member"
                           >
-                            <option value="organizer">Organizer</option>
-                            <option value="guest">Guest</option>
-                          </select>
-                          {memberEditError && (
-                            <span className="settings-inline-error">{memberEditError}</span>
-                          )}
-                          <div className="settings-inline-actions">
-                            <button
-                              className="btn btn-primary btn-sm"
-                              onClick={() => saveEditMember(member.id)}
-                              disabled={memberEditLoading}
-                            >
-                              Save
-                            </button>
-                            <button className="btn btn-ghost btn-sm" onClick={cancelEditMember}>
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="settings-item-info">
-                          <div className="settings-item-name">
-                            {member.name}
-                            <span
-                              className={`settings-badge ${member.role === 'organizer' ? 'settings-badge--organizer' : 'settings-badge--guest'}`}
-                            >
-                              {member.role}
-                            </span>
-                          </div>
-                          <div className="settings-item-meta">
-                            Joined {formatDate(member.joined_at)}
-                          </div>
+                            ✏️
+                          </button>
+                          <button
+                            className="btn btn-danger btn-sm"
+                            onClick={() =>
+                              setConfirmDelete({
+                                type: 'member',
+                                id: member.id,
+                                name: member.name,
+                              })
+                            }
+                            title="Remove member"
+                          >
+                            🗑
+                          </button>
                         </div>
                       )}
                     </div>
-
-                    {editingMemberId !== member.id && (
-                      <div className="settings-item-actions">
-                        <button
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => startEditMember(member)}
-                          title="Edit member"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() =>
-                            setConfirmDelete({
-                              type: 'member',
-                              id: member.id,
-                              name: member.name,
-                            })
-                          }
-                          title="Remove member"
-                        >
-                          🗑
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </section>
       </div>
 
       {/* Confirmation Modal */}
