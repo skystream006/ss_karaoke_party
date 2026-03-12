@@ -109,11 +109,11 @@ const ThemeContext = createContext(null);
 
 export function ThemeProvider({ children }) {
   const [themeKey, setThemeKey] = useState(
-    () => localStorage.getItem('karaokeTheme') || 'classic'
+    () => localStorage.getItem('karaokeTheme') || 'neonPurple'
   );
 
   useEffect(() => {
-    const theme = themes[themeKey] || themes.classic;
+    const theme = themes[themeKey] || themes.neonPurple;
     const root = document.documentElement;
     Object.entries(theme.vars).forEach(([prop, value]) => {
       root.style.setProperty(prop, value);
