@@ -6,13 +6,18 @@ const api = axios.create({
 
 // Parties
 export const getParties = () => api.get('/parties');
+export const getAllParties = () => api.get('/parties/all');
 export const createParty = (data) => api.post('/parties', data);
 export const getParty = (id) => api.get(`/parties/${id}`);
+export const updateParty = (id, data) => api.patch(`/parties/${id}`, data);
 export const joinParty = (partyId, data) => api.post(`/parties/${partyId}/join`, data);
 export const getPartyByCode = (code) => api.get(`/parties/join/${code}`);
 export const endParty = (partyId) => api.delete(`/parties/${partyId}`);
 export const deleteParty = (partyId) => api.delete(`/parties/${partyId}/remove`);
 export const reactivateParty = (partyId) => api.patch(`/parties/${partyId}/reactivate`);
+export const getPartyMembers = (partyId) => api.get(`/parties/${partyId}/members`);
+export const updateMember = (partyId, memberId, data) => api.patch(`/parties/${partyId}/members/${memberId}`, data);
+export const removeMember = (partyId, memberId) => api.delete(`/parties/${partyId}/members/${memberId}`);
 
 // Queue
 export const getQueue = (partyId) => api.get(`/queue/${partyId}`);

@@ -50,6 +50,9 @@ export default function WelcomePage() {
           <button className="btn btn-secondary btn-large" onClick={() => navigate('/join')}>
             🎵 Join a Party
           </button>
+          <button className="btn btn-ghost btn-large" onClick={() => navigate('/settings')}>
+            ⚙️ Settings
+          </button>
         </div>
       )}
 

@@ -27,6 +27,19 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /api/parties/all - List all parties (active and inactive)
+router.get('/all', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, name, join_code, is_active, created_at FROM parties ORDER BY created_at DESC'
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch parties' });
+  }
+});
+
 // POST /api/parties - Create a new party
 router.post('/', writeLimiter, async (req, res) => {
   const { name, organizer_name } = req.body;
@@ -132,6 +145,27 @@ router.post('/:id/join', writeLimiter, async (req, res) => {
   }
 });
 
+// PATCH /api/parties/:id - Update party details (e.g. name)
+router.patch('/:id', writeLimiter, async (req, res) => {
+  const { name } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Party name is required' });
+  }
+  try {
+    const result = await pool.query(
+      'UPDATE parties SET name = $1 WHERE id = $2 RETURNING id, name, join_code, is_active, created_at',
+      [name.trim(), req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update party' });
+  }
+});
+
 // PATCH /api/parties/:id/reactivate - Reactivate an ended party
 router.patch('/:id/reactivate', async (req, res) => {
   try {
@@ -177,6 +211,63 @@ router.delete('/:id/remove', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to remove party' });
+  }
+});
+
+// GET /api/parties/:id/members - List all members of a party
+router.get('/:id/members', async (req, res) => {
+  try {
+    const partyResult = await pool.query('SELECT id FROM parties WHERE id = $1', [req.params.id]);
+    if (partyResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    const result = await pool.query(
+      'SELECT id, party_id, name, role, joined_at FROM party_members WHERE party_id = $1 ORDER BY joined_at ASC',
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch members' });
+  }
+});
+
+// PATCH /api/parties/:id/members/:memberId - Update a party member
+router.patch('/:id/members/:memberId', writeLimiter, async (req, res) => {
+  const { name, role } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ error: 'Member name is required' });
+  }
+  const memberRole = role === 'organizer' ? 'organizer' : 'guest';
+  try {
+    const result = await pool.query(
+      'UPDATE party_members SET name = $1, role = $2 WHERE id = $3 AND party_id = $4 RETURNING id, party_id, name, role, joined_at',
+      [name.trim(), memberRole, req.params.memberId, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update member' });
+  }
+});
+
+// DELETE /api/parties/:id/members/:memberId - Remove a party member
+router.delete('/:id/members/:memberId', writeLimiter, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'DELETE FROM party_members WHERE id = $1 AND party_id = $2 RETURNING id',
+      [req.params.memberId, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to remove member' });
   }
 });
 

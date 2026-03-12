@@ -4,6 +4,7 @@ import WelcomePage from './pages/WelcomePage';
 import OrganizerPage from './pages/OrganizerPage';
 import GuestPage from './pages/GuestPage';
 import JoinPage from './pages/JoinPage';
+import SettingsPage from './pages/SettingsPage';
 import './App.css';
 
 function App() {
@@ -15,6 +16,7 @@ function App() {
         <Route path="/join/:joinCode" element={<JoinPage />} />
         <Route path="/organizer/:partyId" element={<OrganizerPage />} />
         <Route path="/guest/:partyId" element={<GuestPage />} />
+        <Route path="/settings" element={<SettingsPage />} />
       </Routes>
     </BrowserRouter>
   );
