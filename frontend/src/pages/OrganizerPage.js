@@ -31,7 +31,7 @@ export default function OrganizerPage() {
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
   const [currentVideoId, setCurrentVideoId] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'settings'
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
   const [loading, setLoading] = useState(true);
