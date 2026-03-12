@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { getParty, getQueue, removeFromQueue, reorderQueue } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
+import ThemePicker from '../components/ThemePicker';
 import './GuestPage.css';
 
 const SOCKET_URL =
@@ -108,7 +109,10 @@ export default function GuestPage() {
           <span className="party-badge">🎉 {party.name}</span>
           <span className="member-badge">👤 {memberName}</span>
         </div>
-        <button className="btn-leave" onClick={() => navigate('/')}>Leave</button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <ThemePicker />
+          <button className="btn-leave" onClick={() => navigate('/')}>Leave</button>
+        </div>
       </header>
 
       {/* Content */}

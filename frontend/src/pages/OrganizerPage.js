@@ -15,6 +15,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import Playlist from '../components/Playlist';
 import QRCodeModal from '../components/QRCodeModal';
 import CustomizationPanel from '../components/CustomizationPanel';
+import ThemePicker from '../components/ThemePicker';
 import './OrganizerPage.css';
 
 const SOCKET_URL =
@@ -205,6 +206,7 @@ export default function OrganizerPage() {
         </div>
         <div className="header-right">
           <span className="member-name-badge">👤 {memberName}</span>
+          <ThemePicker />
           <button className="btn btn-danger-sm" onClick={handleEndParty}>
             End Party
           </button>
