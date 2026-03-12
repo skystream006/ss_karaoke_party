@@ -11,6 +11,8 @@ export const getParty = (id) => api.get(`/parties/${id}`);
 export const joinParty = (partyId, data) => api.post(`/parties/${partyId}/join`, data);
 export const getPartyByCode = (code) => api.get(`/parties/join/${code}`);
 export const endParty = (partyId) => api.delete(`/parties/${partyId}`);
+export const deleteParty = (partyId) => api.delete(`/parties/${partyId}/remove`);
+export const reactivateParty = (partyId) => api.patch(`/parties/${partyId}/reactivate`);
 
 // Queue
 export const getQueue = (partyId) => api.get(`/queue/${partyId}`);

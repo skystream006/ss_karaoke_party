@@ -8,6 +8,8 @@ import {
   reorderQueue,
   updateQueueItemStatus,
   endParty,
+  deleteParty,
+  reactivateParty,
 } from '../services/api';
 import VideoPlayer from '../components/VideoPlayer';
 import Playlist from '../components/Playlist';
@@ -146,6 +148,28 @@ export default function OrganizerPage() {
     }
   };
 
+  const handleDeleteParty = async () => {
+    const input = window.prompt(
+      'This will permanently delete the party and all its data.\nType DELETE to confirm.'
+    );
+    if (input !== 'DELETE') return;
+    try {
+      await deleteParty(partyId);
+      navigate('/');
+    } catch {
+      setError('Failed to delete party.');
+    }
+  };
+
+  const handleReactivateParty = async () => {
+    try {
+      const res = await reactivateParty(partyId);
+      setParty(res.data);
+    } catch {
+      setError('Failed to reactivate party.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -184,6 +208,9 @@ export default function OrganizerPage() {
           <button className="btn btn-danger-sm" onClick={handleEndParty}>
             End Party
           </button>
+          <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party">
+            Delete Party
+          </button>
         </div>
       </header>
 
@@ -192,6 +219,16 @@ export default function OrganizerPage() {
         <div className="error-banner">
           {error}
           <button onClick={() => setError('')}>✕</button>
+        </div>
+      )}
+
+      {/* Inactive party banner */}
+      {!party.is_active && (
+        <div className="inactive-banner">
+          <span>⚠️ This party has ended.</span>
+          <button className="btn btn-reactivate" onClick={handleReactivateParty}>
+            Reactivate Party
+          </button>
         </div>
       )}
 
