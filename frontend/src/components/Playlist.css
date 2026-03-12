@@ -1,0 +1,140 @@
+.playlist-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.playlist-item {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--bg-surface);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.playlist-item.playing {
+  border-color: var(--primary);
+  background: rgba(233, 69, 96, 0.1);
+}
+
+.playlist-item.dragging {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  background: var(--bg-card);
+}
+
+.playlist-pos {
+  min-width: 24px;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+}
+
+.playing-indicator {
+  color: var(--primary);
+  font-size: 1.1rem;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.drag-handle {
+  color: var(--text-secondary);
+  cursor: grab;
+  font-size: 1.2rem;
+  padding: 0 0.1rem;
+  user-select: none;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.playlist-thumb {
+  width: 60px;
+  height: 45px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.playlist-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.playlist-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.playlist-singer {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  margin-top: 0.15rem;
+}
+
+.playlist-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-shrink: 0;
+}
+
+.btn-icon-action {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.btn-play {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.btn-play:hover {
+  background: var(--accent);
+  color: #1a1a2e;
+}
+
+.btn-remove {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-remove:hover {
+  background: var(--primary);
+  color: white;
+}
+
+.playlist-empty {
+  text-align: center;
+  padding: 2rem 1rem;
+  color: var(--text-secondary);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.playlist-empty span {
+  font-size: 2.5rem;
+}
+
+.playlist-empty .muted {
+  font-size: 0.85rem;
+}
