@@ -139,6 +139,20 @@ export default function OrganizerPage() {
     }
   }, [partyId, queue]);
 
+  const handlePrevious = useCallback(async () => {
+    const playing = queue.find((i) => i.status === 'playing');
+    const playedItems = queue.filter((i) => i.status === 'played');
+    if (!playedItems.length) return;
+    // Most-recently played: highest position among played items
+    const prev = [...playedItems].sort((a, b) => b.position - a.position)[0];
+    if (playing) {
+      await updateQueueItemStatus(partyId, playing.id, 'queued');
+    }
+    await updateQueueItemStatus(partyId, prev.id, 'playing');
+    setCurrentVideoId(prev.video_id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- updateQueueItemStatus and setCurrentVideoId are stable references
+  }, [partyId, queue]);
+
   const handleEndParty = async () => {
     if (!window.confirm('End this party? All guests will be disconnected.')) return;
     try {
@@ -288,6 +302,8 @@ export default function OrganizerPage() {
           <VideoPlayer
             videoId={currentVideoId}
             onEnded={handleVideoEnded}
+            onNext={queue.some((i) => i.status === 'queued') ? handleVideoEnded : null}
+            onPrevious={queue.some((i) => i.status === 'played') ? handlePrevious : null}
             settings={settings}
           />
 

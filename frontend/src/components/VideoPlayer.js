@@ -1,9 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './VideoPlayer.css';
 
-export default function VideoPlayer({ videoId, onEnded, settings }) {
+export default function VideoPlayer({ videoId, onEnded, onNext, onPrevious, settings }) {
   const playerRef = useRef(null);
   const containerRef = useRef(null);
+  const wrapperRef = useRef(null);
+  const hideTimerRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [controlsVisible, setControlsVisible] = useState(true);
 
   useEffect(() => {
     if (!window.YT) {
@@ -28,6 +32,7 @@ export default function VideoPlayer({ videoId, onEnded, settings }) {
           controls: 1,
           rel: 0,
           modestbranding: 1,
+          fs: 0,
         },
         events: {
           onReady: (event) => {
@@ -82,6 +87,47 @@ export default function VideoPlayer({ videoId, onEnded, settings }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- applySettings is defined in component scope and stable; settings is the only changing dep
   }, [settings]);
 
+  // Fullscreen detection
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(document.fullscreenElement === wrapperRef.current);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  // Start / reset the 2-second hide timer for fullscreen overlay controls
+  const resetHideTimer = useCallback(() => {
+    setControlsVisible(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setControlsVisible(false), 2000);
+  }, []);
+
+  // When entering fullscreen start the timer; when leaving always show controls
+  useEffect(() => {
+    if (isFullscreen) {
+      resetHideTimer();
+    } else {
+      setControlsVisible(true);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    }
+    return () => {
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, [isFullscreen, resetHideTimer]);
+
+  const handleMouseMove = useCallback(() => {
+    if (isFullscreen) resetHideTimer();
+  }, [isFullscreen, resetHideTimer]);
+
+  const handleFullscreenToggle = useCallback(() => {
+    if (!document.fullscreenElement) {
+      wrapperRef.current?.requestFullscreen();
+    } else {
+      document.exitFullscreen();
+    }
+  }, []);
+
   if (!videoId) {
     return (
       <div className="video-placeholder">
@@ -95,8 +141,65 @@ export default function VideoPlayer({ videoId, onEnded, settings }) {
   }
 
   return (
-    <div className="video-container">
-      <div ref={containerRef} id="yt-player" />
+    <div
+      ref={wrapperRef}
+      className={`video-wrapper${isFullscreen ? ' video-wrapper--fullscreen' : ''}`}
+      onMouseMove={handleMouseMove}
+    >
+      <div className="video-container">
+        <div ref={containerRef} id="yt-player" />
+      </div>
+
+      {/* Normal mode: navigation buttons below the video */}
+      {!isFullscreen && (
+        <div className="video-nav-controls">
+          <button
+            className="nav-btn nav-btn--prev"
+            onClick={onPrevious}
+            disabled={!onPrevious}
+            aria-label="Previous song"
+          >
+            ⏮ Previous
+          </button>
+          <button
+            className="nav-btn nav-btn--fullscreen"
+            onClick={handleFullscreenToggle}
+            aria-label="Enter fullscreen"
+          >
+            ⛶ Fullscreen
+          </button>
+          <button
+            className="nav-btn nav-btn--next"
+            onClick={onNext}
+            disabled={!onNext}
+            aria-label="Next song"
+          >
+            Next ⏭
+          </button>
+        </div>
+      )}
+
+      {/* Fullscreen mode: overlay prev/next buttons on left and right */}
+      {isFullscreen && (
+        <>
+          <button
+            className={`fs-nav-btn fs-nav-btn--prev${controlsVisible ? ' visible' : ''}`}
+            onClick={onPrevious}
+            disabled={!onPrevious}
+            aria-label="Previous song"
+          >
+            ◀
+          </button>
+          <button
+            className={`fs-nav-btn fs-nav-btn--next${controlsVisible ? ' visible' : ''}`}
+            onClick={onNext}
+            disabled={!onNext}
+            aria-label="Next song"
+          >
+            ▶
+          </button>
+        </>
+      )}
     </div>
   );
 }
