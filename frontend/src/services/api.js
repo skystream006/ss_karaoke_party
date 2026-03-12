@@ -34,4 +34,7 @@ export const searchYouTube = (query, karaoke = false) =>
 // YouTube video lookup by URL
 export const getYouTubeVideoByUrl = (url) => api.get(`/youtube/video?url=${encodeURIComponent(url)}`);
 
+// Server info
+export const getServerInfo = () => api.get('/server-info');
+
 export default api;

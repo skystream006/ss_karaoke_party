@@ -4,6 +4,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const pool = require('./db/db');
 const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
@@ -39,6 +40,22 @@ app.use('/api/youtube', searchLimiter, require('./routes/youtube'));
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Server info (local IP address)
+app.get('/api/server-info', (req, res) => {
+  const interfaces = os.networkInterfaces();
+  let localIp = null;
+  for (const iface of Object.values(interfaces)) {
+    for (const alias of iface) {
+      if ((alias.family === 'IPv4' || alias.family === 4) && !alias.internal) {
+        localIp = alias.address;
+        break;
+      }
+    }
+    if (localIp) break;
+  }
+  res.json({ ip: localIp });
 });
 
 // Socket.IO
