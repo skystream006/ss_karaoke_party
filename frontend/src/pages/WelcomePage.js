@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createParty } from '../services/api';
+import ThemePicker from '../components/ThemePicker';
 import './WelcomePage.css';
 
 export default function WelcomePage() {
@@ -36,6 +37,18 @@ export default function WelcomePage() {
 
   return (
     <div className="welcome-container">
+      <div className="welcome-theme-corner">
+        <ThemePicker />
+      </div>
+
+      <div className="welcome-notes" aria-hidden="true">
+        <span className="welcome-note welcome-note--1">♪</span>
+        <span className="welcome-note welcome-note--2">♫</span>
+        <span className="welcome-note welcome-note--3">♩</span>
+        <span className="welcome-note welcome-note--4">♬</span>
+        <span className="welcome-note welcome-note--5">♪</span>
+      </div>
+
       <div className="welcome-hero">
         <div className="welcome-icon">🎤</div>
         <h1 className="welcome-title">Karaoke Party</h1>
