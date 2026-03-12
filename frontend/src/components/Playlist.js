@@ -2,7 +2,10 @@ import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import './Playlist.css';
 
-export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganizer }) {
+export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganizer, canReorder, canRemove }) {
+  // canReorder/canRemove default to isOrganizer when not explicitly provided
+  const allowReorder = canReorder !== undefined ? canReorder : isOrganizer;
+  const allowRemove = canRemove !== undefined ? canRemove : isOrganizer;
   const handleDragEnd = (result) => {
     if (!result.destination) return;
     if (result.source.index === result.destination.index) return;
@@ -28,7 +31,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganiz
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
-      <Droppable droppableId="playlist" isDropDisabled={!isOrganizer}>
+      <Droppable droppableId="playlist" isDropDisabled={!allowReorder}>
         {(provided) => (
           <ul
             className="playlist-list"
@@ -40,7 +43,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganiz
                 key={item.id}
                 draggableId={item.id}
                 index={index}
-                isDragDisabled={!isOrganizer}
+                isDragDisabled={!allowReorder}
               >
                 {(dragProvided, snapshot) => (
                   <li
@@ -57,8 +60,8 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganiz
                       )}
                     </div>
 
-                    {/* Drag handle (organizer only) */}
-                    {isOrganizer && (
+                    {/* Drag handle */}
+                    {allowReorder && (
                       <div
                         {...dragProvided.dragHandleProps}
                         className="drag-handle"
@@ -94,7 +97,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganiz
                           ▶
                         </button>
                       )}
-                      {isOrganizer && (
+                      {allowRemove && (
                         <button
                           className="btn-icon-action btn-remove"
                           onClick={() => onRemove(item.id)}
