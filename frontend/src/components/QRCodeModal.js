@@ -6,8 +6,8 @@ export default function QRCodeModal({ party, onClose }) {
   const joinUrl = `${window.location.origin}/join/${party.join_code}`;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+    <div className="qr-panel">
+      <div className="modal-content">
         <div className="modal-header">
           <h2>Join "{party.name}"</h2>
           <button className="modal-close" onClick={onClose}>✕</button>
