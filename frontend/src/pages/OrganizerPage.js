@@ -8,6 +8,7 @@ import {
   reorderQueue,
   updateQueueItemStatus,
   endParty,
+  deleteParty,
 } from '../services/api';
 import VideoPlayer from '../components/VideoPlayer';
 import Playlist from '../components/Playlist';
@@ -146,6 +147,19 @@ export default function OrganizerPage() {
     }
   };
 
+  const handleDeleteParty = async () => {
+    const input = window.prompt(
+      'This will permanently delete the party and all its data.\nType DELETE to confirm.'
+    );
+    if (input !== 'DELETE') return;
+    try {
+      await deleteParty(partyId);
+      navigate('/');
+    } catch {
+      setError('Failed to delete party.');
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -183,6 +197,9 @@ export default function OrganizerPage() {
           <span className="member-name-badge">👤 {memberName}</span>
           <button className="btn btn-danger-sm" onClick={handleEndParty}>
             End Party
+          </button>
+          <button className="btn btn-delete-sm" onClick={handleDeleteParty}>
+            Delete Party
           </button>
         </div>
       </header>
