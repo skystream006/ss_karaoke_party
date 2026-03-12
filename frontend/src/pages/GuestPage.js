@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { getParty, getQueue, removeFromQueue, reorderQueue } from '../services/api';
@@ -9,9 +9,7 @@ import './GuestPage.css';
 
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL ||
-  (window.location.hostname === 'localhost'
-    ? 'http://localhost:5000'
-    : window.location.origin);
+  `${window.location.protocol}//${window.location.hostname}:5000`;
 
 export default function GuestPage() {
   const { partyId } = useParams();
@@ -36,6 +34,16 @@ export default function GuestPage() {
       setError('Failed to remove song.');
     }
   };
+
+  const handleSongAdded = useCallback(async () => {
+    try {
+      const res = await getQueue(partyId);
+      setQueue(res.data);
+    } catch (err) {
+      console.error('Failed to refresh queue after adding song:', err);
+      // socket will handle the update if this fails
+    }
+  }, [partyId]);
 
   const handleReorder = async (reordered) => {
     const previous = queue;
@@ -126,6 +134,7 @@ export default function GuestPage() {
             <SongSearch
               partyId={partyId}
               member={member}
+              onAdded={handleSongAdded}
             />
           </div>
 
