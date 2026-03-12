@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getParty, getQueue } from '../services/api';
+import { getParty, getQueue, removeFromQueue, reorderQueue } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import './GuestPage.css';
@@ -25,6 +25,28 @@ export default function GuestPage() {
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = sessionStorage.getItem('memberId');
   const member = { id: memberId, name: memberName };
+
+  const handleRemove = async (itemId) => {
+    const previous = queue;
+    setQueue((prev) => prev.filter((item) => item.id !== itemId));
+    try {
+      await removeFromQueue(partyId, itemId);
+    } catch {
+      setQueue(previous);
+      setError('Failed to remove song.');
+    }
+  };
+
+  const handleReorder = async (reordered) => {
+    const previous = queue;
+    setQueue(reordered);
+    try {
+      await reorderQueue(partyId, reordered.map((item) => item.id));
+    } catch {
+      setQueue(previous);
+      setError('Failed to reorder queue.');
+    }
+  };
 
   useEffect(() => {
     const loadData = async () => {
@@ -129,9 +151,11 @@ export default function GuestPage() {
                 </div>
                 <Playlist
                   queue={queue}
-                  onRemove={() => {}}
-                  onReorder={() => {}}
+                  onRemove={handleRemove}
+                  onReorder={handleReorder}
                   isOrganizer={false}
+                  canReorder={true}
+                  canRemove={true}
                 />
               </>
             )}
