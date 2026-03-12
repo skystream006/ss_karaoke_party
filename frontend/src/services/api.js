@@ -21,7 +21,8 @@ export const updateQueueItemStatus = (partyId, itemId, status) =>
   api.patch(`/queue/${partyId}/${itemId}/status`, { status });
 
 // YouTube search
-export const searchYouTube = (query) => api.get(`/youtube/search?q=${encodeURIComponent(query)}`);
+export const searchYouTube = (query, karaoke = false) =>
+  api.get(`/youtube/search?q=${encodeURIComponent(query)}&karaoke=${karaoke}`);
 
 // YouTube video lookup by URL
 export const getYouTubeVideoByUrl = (url) => api.get(`/youtube/video?url=${encodeURIComponent(url)}`);
