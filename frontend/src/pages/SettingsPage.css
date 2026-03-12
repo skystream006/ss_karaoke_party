@@ -43,12 +43,13 @@
 .settings-content {
   flex: 1;
   padding: 2rem 1.5rem;
-  max-width: 900px;
+  max-width: 1200px;
   width: 100%;
   margin: 0 auto;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 2rem;
+  align-items: start;
 }
 
 /* Section */
@@ -336,9 +337,14 @@
   justify-content: flex-end;
 }
 
+.settings-members-placeholder {
+  font-style: italic;
+}
+
 /* Responsive */
-@media (max-width: 600px) {
+@media (max-width: 768px) {
   .settings-content {
+    grid-template-columns: 1fr;
     padding: 1rem;
   }
 
