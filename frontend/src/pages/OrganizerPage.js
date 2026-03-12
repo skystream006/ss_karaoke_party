@@ -232,86 +232,84 @@ export default function OrganizerPage() {
         </div>
       )}
 
-      {/* Main content */}
-      <main className="organizer-main">
-        <VideoPlayer
-          videoId={currentVideoId}
-          onEnded={handleVideoEnded}
-          settings={settings}
-        />
-
-        {/* Now playing info */}
-        {currentVideoId && queue.find((i) => i.status === 'playing') && (
-          <div className="now-playing">
-            <span className="np-label">Now Playing</span>
-            <span className="np-title">
-              {queue.find((i) => i.status === 'playing')?.video_title}
-            </span>
-            <span className="np-singer">
-              🎤 {queue.find((i) => i.status === 'playing')?.singer_name}
-            </span>
-          </div>
-        )}
-
-        <div className="next-up-hint">
-          <span>Guests can join at: <strong>{party.join_code}</strong></span>
-          <button className="btn btn-sm btn-outline" onClick={() => { setSidebarOpen(true); setShowQR(true); }}>
-            Show QR Code
-          </button>
-        </div>
-      </main>
-
-      {/* Slide-out Sidebar */}
-      <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
-        <div className="sidebar-header">
-          <div className="sidebar-tabs">
+      {/* Body: sidebar + main content side by side */}
+      <div className="organizer-body">
+        {/* Slide-out Sidebar (left) */}
+        <aside className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
+          <div className="sidebar-header">
+            <div className="sidebar-tabs">
+              <button
+                className={`sidebar-tab ${sidebarTab === 'playlist' ? 'active' : ''}`}
+                onClick={() => setSidebarTab('playlist')}
+              >
+                🎵 Playlist
+              </button>
+              <button
+                className={`sidebar-tab ${sidebarTab === 'settings' ? 'active' : ''}`}
+                onClick={() => setSidebarTab('settings')}
+              >
+                🎛️ Settings
+              </button>
+            </div>
             <button
-              className={`sidebar-tab ${sidebarTab === 'playlist' ? 'active' : ''}`}
-              onClick={() => setSidebarTab('playlist')}
+              className="qr-btn"
+              onClick={() => setShowQR(true)}
+              title="Show QR code"
             >
-              🎵 Playlist
-            </button>
-            <button
-              className={`sidebar-tab ${sidebarTab === 'settings' ? 'active' : ''}`}
-              onClick={() => setSidebarTab('settings')}
-            >
-              🎛️ Settings
+              📱 QR Code
             </button>
           </div>
-          <button
-            className="qr-btn"
-            onClick={() => setShowQR(true)}
-            title="Show QR code"
-          >
-            📱 QR Code
-          </button>
-        </div>
 
-        <div className="sidebar-body">
-          {sidebarTab === 'playlist' && (
-            <>
-              <div className="queue-count">
-                {queue.length} song{queue.length !== 1 ? 's' : ''} in queue
-              </div>
-              <Playlist
-                queue={queue}
-                onRemove={handleRemove}
-                onReorder={handleReorder}
-                onPlay={handlePlay}
-                isOrganizer={true}
-              />
-            </>
-          )}
-          {sidebarTab === 'settings' && (
-            <CustomizationPanel settings={settings} onChange={setSettings} />
-          )}
-        </div>
-      </aside>
+          <div className="sidebar-body">
+            {sidebarTab === 'playlist' && (
+              <>
+                <div className="queue-count">
+                  {queue.length} song{queue.length !== 1 ? 's' : ''} in queue
+                </div>
+                <Playlist
+                  queue={queue}
+                  onRemove={handleRemove}
+                  onReorder={handleReorder}
+                  onPlay={handlePlay}
+                  isOrganizer={true}
+                />
+              </>
+            )}
+            {sidebarTab === 'settings' && (
+              <CustomizationPanel settings={settings} onChange={setSettings} />
+            )}
+          </div>
+        </aside>
 
-      {/* Overlay for mobile when sidebar is open */}
-      {sidebarOpen && (
-        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
-      )}
+        {/* Main content */}
+        <main className="organizer-main">
+          <VideoPlayer
+            videoId={currentVideoId}
+            onEnded={handleVideoEnded}
+            settings={settings}
+          />
+
+          {/* Now playing info */}
+          {currentVideoId && queue.find((i) => i.status === 'playing') && (
+            <div className="now-playing">
+              <span className="np-label">Now Playing</span>
+              <span className="np-title">
+                {queue.find((i) => i.status === 'playing')?.video_title}
+              </span>
+              <span className="np-singer">
+                🎤 {queue.find((i) => i.status === 'playing')?.singer_name}
+              </span>
+            </div>
+          )}
+
+          <div className="next-up-hint">
+            <span>Guests can join at: <strong>{party.join_code}</strong></span>
+            <button className="btn btn-sm btn-outline" onClick={() => { setSidebarOpen(true); setShowQR(true); }}>
+              Show QR Code
+            </button>
+          </div>
+        </main>
+      </div>
 
       {/* QR Code Modal */}
       {showQR && <QRCodeModal party={party} onClose={() => setShowQR(false)} />}
