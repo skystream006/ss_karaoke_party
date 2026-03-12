@@ -132,6 +132,23 @@ router.post('/:id/join', writeLimiter, async (req, res) => {
   }
 });
 
+// PATCH /api/parties/:id/reactivate - Reactivate an ended party
+router.patch('/:id/reactivate', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'UPDATE parties SET is_active = true WHERE id = $1 RETURNING id, name, join_code, is_active, created_at',
+      [req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reactivate party' });
+  }
+});
+
 // DELETE /api/parties/:id - End a party (organizer only)
 router.delete('/:id', async (req, res) => {
   try {

@@ -113,6 +113,37 @@
   color: white;
 }
 
+/* Inactive party banner */
+.inactive-banner {
+  background: rgba(234, 179, 8, 0.15);
+  border-bottom: 1px solid #eab308;
+  padding: 0.6rem 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fde68a;
+  font-size: 0.9rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-reactivate {
+  padding: 0.4rem 0.85rem;
+  background: #eab308;
+  border: none;
+  border-radius: 8px;
+  color: #1a1a1a;
+  font-size: 0.85rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+}
+
+.btn-reactivate:hover {
+  background: #fbbf24;
+}
+
 /* Error banner */
 .error-banner {
   background: rgba(233, 69, 96, 0.2);
