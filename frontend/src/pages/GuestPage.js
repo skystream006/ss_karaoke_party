@@ -18,7 +18,6 @@ export default function GuestPage() {
 
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
-  const [activeTab, setActiveTab] = useState('queue'); // 'queue' | 'search'
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -112,66 +111,44 @@ export default function GuestPage() {
         <button className="btn-leave" onClick={() => navigate('/')}>Leave</button>
       </header>
 
-      {/* Tab bar */}
-      <div className="tab-bar">
-        <button
-          className={`tab-btn ${activeTab === 'queue' ? 'active' : ''}`}
-          onClick={() => setActiveTab('queue')}
-        >
-          🎵 Queue
-          {queue.length > 0 && <span className="badge">{queue.length}</span>}
-        </button>
-        <button
-          className={`tab-btn ${activeTab === 'search' ? 'active' : ''}`}
-          onClick={() => setActiveTab('search')}
-        >
-          🔍 Search Songs
-        </button>
-      </div>
-
       {/* Content */}
       <main className="guest-main">
         {error && <div className="error-msg">{error}</div>}
 
-        {activeTab === 'queue' && (
-          <div className="queue-section">
-            {queue.length === 0 ? (
-              <div className="empty-state">
-                <span>🎵</span>
-                <p>No songs yet!</p>
-                <p className="muted">Search for songs to add to the queue.</p>
-                <button className="btn btn-primary" onClick={() => setActiveTab('search')}>
-                  Search Songs
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="section-heading">
-                  {queue.length} song{queue.length !== 1 ? 's' : ''} in queue
-                </div>
-                <Playlist
-                  queue={queue}
-                  onRemove={handleRemove}
-                  onReorder={handleReorder}
-                  isOrganizer={false}
-                  canReorder={true}
-                  canRemove={true}
-                />
-              </>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'search' && (
+        <div className="guest-columns">
+          {/* Search section */}
           <div className="search-section">
             <div className="section-heading">Search for songs to add</div>
             <SongSearch
               partyId={partyId}
               member={member}
-              onAdded={() => setActiveTab('queue')}
             />
           </div>
-        )}
+
+          {/* Queue section */}
+          <div className="queue-section">
+            <div className="section-heading">
+              🎵 Queue
+              {queue.length > 0 && <span className="badge">{queue.length}</span>}
+            </div>
+            {queue.length === 0 ? (
+              <div className="empty-state">
+                <span>🎵</span>
+                <p>No songs yet!</p>
+                <p className="muted">Use the search panel to find and add songs.</p>
+              </div>
+            ) : (
+              <Playlist
+                queue={queue}
+                onRemove={handleRemove}
+                onReorder={handleReorder}
+                isOrganizer={false}
+                canReorder={true}
+                canRemove={true}
+              />
+            )}
+          </div>
+        </div>
       </main>
     </div>
   );
