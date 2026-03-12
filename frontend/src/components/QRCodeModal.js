@@ -2,7 +2,7 @@ import React from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import './QRCodeModal.css';
 
-export default function QRCodeModal({ party, onClose }) {
+export default function QRCodeModal({ party }) {
   const joinUrl = `${window.location.origin}/join/${party.join_code}`;
 
   return (
@@ -10,7 +10,6 @@ export default function QRCodeModal({ party, onClose }) {
       <div className="modal-content">
         <div className="modal-header">
           <h2>Join "{party.name}"</h2>
-          <button className="modal-close" onClick={onClose}>✕</button>
         </div>
 
         <div className="qr-section">

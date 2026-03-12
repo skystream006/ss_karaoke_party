@@ -33,7 +33,6 @@ export default function OrganizerPage() {
   const [currentVideoId, setCurrentVideoId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'settings'
-  const [showQR, setShowQR] = useState(false);
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -253,13 +252,7 @@ export default function OrganizerPage() {
                 🎛️ Settings
               </button>
             </div>
-            <button
-              className="qr-btn"
-              onClick={() => setShowQR(true)}
-              title="Show QR code"
-            >
-              📱 QR Code
-            </button>
+
           </div>
 
           <div className="sidebar-body">
@@ -285,36 +278,37 @@ export default function OrganizerPage() {
 
         {/* Main content */}
         <main className="organizer-main">
-          <VideoPlayer
-            videoId={currentVideoId}
-            onEnded={handleVideoEnded}
-            settings={settings}
-          />
+          <div className="main-video-section">
+            <VideoPlayer
+              videoId={currentVideoId}
+              onEnded={handleVideoEnded}
+              settings={settings}
+            />
 
-          {/* Now playing info */}
-          {currentVideoId && queue.find((i) => i.status === 'playing') && (
-            <div className="now-playing">
-              <span className="np-label">Now Playing</span>
-              <span className="np-title">
-                {queue.find((i) => i.status === 'playing')?.video_title}
-              </span>
-              <span className="np-singer">
-                🎤 {queue.find((i) => i.status === 'playing')?.singer_name}
-              </span>
+            {/* Now playing info */}
+            {currentVideoId && queue.find((i) => i.status === 'playing') && (
+              <div className="now-playing">
+                <span className="np-label">Now Playing</span>
+                <span className="np-title">
+                  {queue.find((i) => i.status === 'playing')?.video_title}
+                </span>
+                <span className="np-singer">
+                  🎤 {queue.find((i) => i.status === 'playing')?.singer_name}
+                </span>
+              </div>
+            )}
+
+            <div className="next-up-hint">
+              <span>Guests can join at: <strong>{party.join_code}</strong></span>
             </div>
-          )}
+          </div>
 
-          <div className="next-up-hint">
-            <span>Guests can join at: <strong>{party.join_code}</strong></span>
-            <button className="btn btn-sm btn-outline" onClick={() => { setSidebarOpen(true); setShowQR(true); }}>
-              Show QR Code
-            </button>
+          <div className="main-qr-section">
+            <QRCodeModal party={party} />
           </div>
         </main>
       </div>
 
-      {/* QR Code Modal */}
-      {showQR && <QRCodeModal party={party} onClose={() => setShowQR(false)} />}
     </div>
   );
 }
