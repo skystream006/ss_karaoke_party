@@ -3,6 +3,9 @@ const router = express.Router();
 const pool = require('../db/db');
 const { writeLimiter } = require('../middleware/rateLimiter');
 
+// Order: active songs (queued/playing) first by position, then played songs by position
+const QUEUE_ORDER_BY = `CASE WHEN status = 'played' THEN 1 ELSE 0 END ASC, position ASC`;
+
 // GET /api/queue/:partyId - Get the queue for a party
 router.get('/:partyId', async (req, res) => {
   try {
@@ -10,8 +13,8 @@ router.get('/:partyId', async (req, res) => {
       `SELECT q.id, q.party_id, q.member_id, q.singer_name, q.video_id,
               q.video_title, q.video_thumbnail, q.position, q.status, q.added_at
        FROM queue q
-       WHERE q.party_id = $1 AND q.status != 'played'
-       ORDER BY q.position ASC`,
+       WHERE q.party_id = $1
+       ORDER BY ${QUEUE_ORDER_BY}`,
       [req.params.partyId]
     );
     res.json(result.rows);
@@ -35,7 +38,7 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
     // Get next position
     const posResult = await client.query(
       `SELECT COALESCE(MAX(position), 0) + 1 AS next_pos
-       FROM queue WHERE party_id = $1 AND status != 'played'`,
+       FROM queue WHERE party_id = $1`,
       [req.params.partyId]
     );
     const position = posResult.rows[0].next_pos;
@@ -53,7 +56,8 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       const updatedQueue = await pool.query(
-        `SELECT * FROM queue WHERE party_id = $1 AND status != 'played' ORDER BY position ASC`,
+        `SELECT * FROM queue WHERE party_id = $1
+         ORDER BY ${QUEUE_ORDER_BY}`,
         [req.params.partyId]
       );
       io.to(req.params.partyId).emit('queue:update', { action: 'add', queue: updatedQueue.rows });
@@ -85,12 +89,12 @@ router.delete('/:partyId/:itemId', writeLimiter, async (req, res) => {
       return res.status(404).json({ error: 'Queue item not found' });
     }
 
-    // Renumber positions
+    // Renumber positions for all remaining songs
     await client.query(
       `WITH ordered AS (
         SELECT id, ROW_NUMBER() OVER (ORDER BY position ASC) AS new_pos
         FROM queue
-        WHERE party_id = $1 AND status != 'played'
+        WHERE party_id = $1
       )
       UPDATE queue SET position = ordered.new_pos
       FROM ordered WHERE queue.id = ordered.id`,
@@ -104,7 +108,8 @@ router.delete('/:partyId/:itemId', writeLimiter, async (req, res) => {
     if (io) {
       // Fetch updated queue
       const updatedQueue = await pool.query(
-        `SELECT * FROM queue WHERE party_id = $1 AND status != 'played' ORDER BY position ASC`,
+        `SELECT * FROM queue WHERE party_id = $1
+         ORDER BY ${QUEUE_ORDER_BY}`,
         [req.params.partyId]
       );
       io.to(req.params.partyId).emit('queue:update', { action: 'remove', queue: updatedQueue.rows });
@@ -144,7 +149,8 @@ router.put('/:partyId/reorder', writeLimiter, async (req, res) => {
     const io = req.app.get('io');
     if (io) {
       const updatedQueue = await pool.query(
-        `SELECT * FROM queue WHERE party_id = $1 AND status != 'played' ORDER BY position ASC`,
+        `SELECT * FROM queue WHERE party_id = $1
+         ORDER BY ${QUEUE_ORDER_BY}`,
         [req.params.partyId]
       );
       io.to(req.params.partyId).emit('queue:update', { action: 'reorder', queue: updatedQueue.rows });
@@ -189,26 +195,13 @@ router.patch('/:partyId/:itemId/status', writeLimiter, async (req, res) => {
       return res.status(404).json({ error: 'Queue item not found' });
     }
 
-    // If marked as played, renumber remaining
-    if (status === 'played') {
-      await client.query(
-        `WITH ordered AS (
-          SELECT id, ROW_NUMBER() OVER (ORDER BY position ASC) AS new_pos
-          FROM queue
-          WHERE party_id = $1 AND status != 'played'
-        )
-        UPDATE queue SET position = ordered.new_pos
-        FROM ordered WHERE queue.id = ordered.id`,
-        [req.params.partyId]
-      );
-    }
-
     await client.query('COMMIT');
 
     const io = req.app.get('io');
     if (io) {
       const updatedQueue = await pool.query(
-        `SELECT * FROM queue WHERE party_id = $1 AND status != 'played' ORDER BY position ASC`,
+        `SELECT * FROM queue WHERE party_id = $1
+         ORDER BY ${QUEUE_ORDER_BY}`,
         [req.params.partyId]
       );
       io.to(req.params.partyId).emit('queue:update', { action: 'status', queue: updatedQueue.rows });
