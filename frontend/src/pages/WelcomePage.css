@@ -5,7 +5,45 @@
   align-items: center;
   justify-content: center;
   padding: 2rem 1rem;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-card) 50%, var(--bg-surface) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.welcome-theme-corner {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 10;
+}
+
+/* Floating music notes */
+.welcome-notes {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.welcome-note {
+  position: absolute;
+  font-size: 1.5rem;
+  color: var(--primary);
+  opacity: 0.12;
+  animation: floatNote linear infinite;
+}
+
+.welcome-note--1 { left: 8%;  font-size: 2rem;   animation-duration: 9s;  animation-delay: 0s;   }
+.welcome-note--2 { left: 22%; font-size: 1.4rem;  animation-duration: 12s; animation-delay: 2s;   }
+.welcome-note--3 { left: 55%; font-size: 1.8rem;  animation-duration: 10s; animation-delay: 4s;   }
+.welcome-note--4 { left: 75%; font-size: 1.2rem;  animation-duration: 14s; animation-delay: 1s;   }
+.welcome-note--5 { left: 88%; font-size: 2.2rem;  animation-duration: 11s; animation-delay: 6s;   }
+
+@keyframes floatNote {
+  0%   { transform: translateY(100vh) rotate(-10deg); opacity: 0;    }
+  10%  { opacity: 0.12; }
+  90%  { opacity: 0.12; }
+  100% { transform: translateY(-10vh) rotate(10deg);  opacity: 0;    }
 }
 
 .welcome-hero {
@@ -27,7 +65,7 @@
 .welcome-title {
   font-size: 3rem;
   font-weight: 800;
-  background: linear-gradient(135deg, #e94560, #f5a623);
+  background: linear-gradient(135deg, var(--primary), var(--accent));
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;

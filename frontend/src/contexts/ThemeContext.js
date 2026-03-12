@@ -103,6 +103,23 @@ export const themes = {
       '--shadow': '0 4px 20px rgba(100,80,0,0.5)',
     },
   },
+  dark: {
+    label: 'Dark',
+    swatch: '#888899',
+    vars: {
+      '--primary': '#c0c0d8',
+      '--primary-dark': '#9090b0',
+      '--secondary': '#1e1e2a',
+      '--accent': '#7878f0',
+      '--bg-dark': '#0a0a0d',
+      '--bg-card': '#14141c',
+      '--bg-surface': '#1e1e2a',
+      '--text-primary': '#e8e8f0',
+      '--text-secondary': '#8080a0',
+      '--border': 'rgba(255,255,255,0.07)',
+      '--shadow': '0 4px 24px rgba(0,0,0,0.8)',
+    },
+  },
 };
 
 const ThemeContext = createContext(null);
