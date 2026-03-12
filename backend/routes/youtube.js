@@ -74,9 +74,9 @@ router.get('/video', async (req, res) => {
   }
 });
 
-// GET /api/youtube/search?q=<query> - Search YouTube videos
+// GET /api/youtube/search?q=<query>&karaoke=true - Search YouTube videos
 router.get('/search', async (req, res) => {
-  const { q } = req.query;
+  const { q, karaoke } = req.query;
   if (!q) {
     return res.status(400).json({ error: 'Query parameter q is required' });
   }
@@ -86,11 +86,13 @@ router.get('/search', async (req, res) => {
     return res.status(503).json({ error: 'YouTube API key not configured' });
   }
 
+  const searchQuery = karaoke === 'true' ? `${q} karaoke` : q;
+
   try {
     const response = await axios.get('https://www.googleapis.com/youtube/v3/search', {
       params: {
         part: 'snippet',
-        q: `${q} karaoke`,
+        q: searchQuery,
         type: 'video',
         maxResults: 20,
         key: apiKey,

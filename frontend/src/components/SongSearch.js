@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { searchYouTube, getYouTubeVideoByUrl, addToQueue } from '../services/api';
 import './SongSearch.css';
 
@@ -7,6 +7,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
 
   // Search tab state
   const [query, setQuery] = useState('');
+  const [karaokeOnly, setKaraokeOnly] = useState(false);
   const [results, setResults] = useState([]);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(null);
@@ -21,14 +22,14 @@ export default function SongSearch({ partyId, member, onAdded }) {
   const [urlError, setUrlError] = useState('');
   const [urlSuccess, setUrlSuccess] = useState(false);
 
-  const handleSearch = async (e) => {
-    e.preventDefault();
-    if (!query.trim()) return;
+  const hasSearched = useRef(false);
+
+  const runSearch = async (q, karaoke) => {
     setLoading(true);
     setError('');
     setResults([]);
     try {
-      const res = await searchYouTube(query.trim());
+      const res = await searchYouTube(q, karaoke);
       setResults(res.data);
     } catch (err) {
       setError(err.response?.data?.error || 'Search failed. Make sure the YouTube API key is configured.');
@@ -36,6 +37,21 @@ export default function SongSearch({ partyId, member, onAdded }) {
       setLoading(false);
     }
   };
+
+  const handleSearch = async (e) => {
+    e.preventDefault();
+    if (!query.trim()) return;
+    hasSearched.current = true;
+    runSearch(query.trim(), karaokeOnly);
+  };
+
+  // Re-run search when karaoke toggle changes, but only if a search has been performed
+  useEffect(() => {
+    if (hasSearched.current && query.trim()) {
+      runSearch(query.trim(), karaokeOnly);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [karaokeOnly]);
 
   const handleAdd = async (video) => {
     setAdding(video.video_id);
@@ -136,6 +152,15 @@ export default function SongSearch({ partyId, member, onAdded }) {
               {loading ? '…' : '🔍'}
             </button>
           </form>
+
+          <label className="karaoke-toggle">
+            <input
+              type="checkbox"
+              checked={karaokeOnly}
+              onChange={(e) => setKaraokeOnly(e.target.checked)}
+            />
+            🎤 Karaoke versions only
+          </label>
 
           {error && <div className="error-msg">{error}</div>}
 
