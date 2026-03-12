@@ -23,4 +23,7 @@ export const updateQueueItemStatus = (partyId, itemId, status) =>
 // YouTube search
 export const searchYouTube = (query) => api.get(`/youtube/search?q=${encodeURIComponent(query)}`);
 
+// YouTube video lookup by URL
+export const getYouTubeVideoByUrl = (url) => api.get(`/youtube/video?url=${encodeURIComponent(url)}`);
+
 export default api;
