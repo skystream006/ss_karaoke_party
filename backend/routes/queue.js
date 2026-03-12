@@ -49,10 +49,14 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
     await client.query('COMMIT');
 
     const newItem = result.rows[0];
-    // Emit socket event
+    // Emit socket event with full updated queue so all clients refresh their list
     const io = req.app.get('io');
     if (io) {
-      io.to(req.params.partyId).emit('queue:update', { action: 'add', item: newItem });
+      const updatedQueue = await pool.query(
+        `SELECT * FROM queue WHERE party_id = $1 AND status != 'played' ORDER BY position ASC`,
+        [req.params.partyId]
+      );
+      io.to(req.params.partyId).emit('queue:update', { action: 'add', queue: updatedQueue.rows });
     }
 
     res.status(201).json(newItem);
