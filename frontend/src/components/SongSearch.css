@@ -4,6 +4,35 @@
   gap: 1rem;
 }
 
+.search-tabs {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.search-tab {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.search-tab:hover {
+  border-color: var(--primary);
+  color: var(--text-primary);
+}
+
+.search-tab.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: white;
+}
+
 .search-form {
   display: flex;
   gap: 0.5rem;
@@ -150,4 +179,23 @@
   padding: 0.75rem 1rem;
   color: #ff6b6b;
   font-size: 0.9rem;
+}
+
+.success-msg {
+  background: rgba(46, 204, 113, 0.15);
+  border: 1px solid #2ecc71;
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  color: #2ecc71;
+  font-size: 0.9rem;
+}
+
+.url-preview {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: var(--bg-surface);
+  border-radius: 10px;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
 }
