@@ -3,8 +3,8 @@ const router = express.Router();
 const pool = require('../db/db');
 const { writeLimiter } = require('../middleware/rateLimiter');
 
-// Order: active songs (queued/playing) first by position, then played songs by position
-const QUEUE_ORDER_BY = `CASE WHEN status = 'played' THEN 1 ELSE 0 END ASC, position ASC`;
+// Order all songs by position so completed songs remain in their original place
+const QUEUE_ORDER_BY = `position ASC`;
 
 // GET /api/queue/:partyId - Get the queue for a party
 router.get('/:partyId', async (req, res) => {
