@@ -109,3 +109,32 @@
 .copy-btn:hover {
   background: var(--primary-dark);
 }
+
+.qr-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.qr-toggle-btn {
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.qr-toggle-btn.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.qr-toggle-btn:not(.active):hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}

@@ -6,6 +6,7 @@ import './QRCodeModal.css';
 export default function QRCodeModal({ party }) {
   const joinUrl = `${window.location.origin}/join/${party.join_code}`;
   const [ipJoinUrl, setIpJoinUrl] = useState(null);
+  const [activeQr, setActiveQr] = useState('hostname');
 
   useEffect(() => {
     getServerInfo()
@@ -20,8 +21,10 @@ export default function QRCodeModal({ party }) {
           setIpJoinUrl(`${protocol}//${data.ip}${portSuffix}/join/${party.join_code}`);
         }
       })
-      .catch(() => {});
+      .catch(() => { console.warn('Could not retrieve server IP address'); });
   }, [party.join_code]);
+
+  const activeUrl = activeQr === 'ip' && ipJoinUrl ? ipJoinUrl : joinUrl;
 
   return (
     <div className="qr-panel">
@@ -30,10 +33,27 @@ export default function QRCodeModal({ party }) {
           <h2>Join "{party.name}"</h2>
         </div>
 
+        {ipJoinUrl && (
+          <div className="qr-toggle">
+            <button
+              className={`qr-toggle-btn${activeQr === 'hostname' ? ' active' : ''}`}
+              onClick={() => setActiveQr('hostname')}
+            >
+              Hostname
+            </button>
+            <button
+              className={`qr-toggle-btn${activeQr === 'ip' ? ' active' : ''}`}
+              onClick={() => setActiveQr('ip')}
+            >
+              IP Address
+            </button>
+          </div>
+        )}
+
         <div className="qr-section">
           <div className="qr-wrapper">
             <QRCodeSVG
-              value={joinUrl}
+              value={activeUrl}
               size={220}
               bgColor="#ffffff"
               fgColor="#1a1a2e"
@@ -41,24 +61,10 @@ export default function QRCodeModal({ party }) {
               includeMargin={true}
             />
           </div>
-          <p className="qr-hint">Scan to join the party</p>
+          <p className="qr-hint">
+            {activeQr === 'ip' ? 'Scan to join via IP address' : 'Scan to join the party'}
+          </p>
         </div>
-
-        {ipJoinUrl && (
-          <div className="qr-section">
-            <div className="qr-wrapper">
-              <QRCodeSVG
-                value={ipJoinUrl}
-                size={220}
-                bgColor="#ffffff"
-                fgColor="#1a1a2e"
-                level="M"
-                includeMargin={true}
-              />
-            </div>
-            <p className="qr-hint">Scan to join via IP address</p>
-          </div>
-        )}
 
         <div className="code-section">
           <p className="code-label">Party Code</p>
@@ -66,34 +72,20 @@ export default function QRCodeModal({ party }) {
         </div>
 
         <div className="url-section">
-          <p className="url-label">Direct Link</p>
+          <p className="url-label">
+            {activeQr === 'ip' ? 'IP Address Link' : 'Direct Link'}
+          </p>
           <div className="url-box">
-            <span className="url-text">{joinUrl}</span>
+            <span className="url-text">{activeUrl}</span>
             <button
               className="copy-btn"
-              onClick={() => navigator.clipboard.writeText(joinUrl)}
+              onClick={() => navigator.clipboard.writeText(activeUrl)}
               title="Copy link"
             >
               📋 Copy
             </button>
           </div>
         </div>
-
-        {ipJoinUrl && (
-          <div className="url-section" style={{ marginTop: '1rem' }}>
-            <p className="url-label">IP Address Link</p>
-            <div className="url-box">
-              <span className="url-text">{ipJoinUrl}</span>
-              <button
-                className="copy-btn"
-                onClick={() => navigator.clipboard.writeText(ipJoinUrl)}
-                title="Copy IP link"
-              >
-                📋 Copy
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
