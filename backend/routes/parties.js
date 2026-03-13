@@ -84,6 +84,29 @@ router.post('/', writeLimiter, async (req, res) => {
   }
 });
 
+// GET /api/parties/members/search - Search members by name across all parties
+router.get('/members/search', async (req, res) => {
+  const { name } = req.query;
+  if (!name || !name.trim() || name.trim().length < 2) {
+    return res.json([]);
+  }
+  try {
+    const result = await pool.query(
+      `SELECT pm.id, pm.name, pm.party_id, pm.role, pm.joined_at, p.name AS party_name
+       FROM party_members pm
+       JOIN parties p ON pm.party_id = p.id
+       WHERE pm.name ILIKE $1
+       ORDER BY pm.joined_at DESC
+       LIMIT 10`,
+      [`%${name.trim()}%`]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to search members' });
+  }
+});
+
 // GET /api/parties/:id - Get party details
 router.get('/:id', async (req, res) => {
   try {
