@@ -7,6 +7,7 @@ import {
   removeFromQueue,
   reorderQueue,
   updateQueueItemStatus,
+  resetQueue,
   endParty,
   deleteParty,
   reactivateParty,
@@ -225,6 +226,16 @@ export default function OrganizerPage() {
     videoPlayerRef.current?.seekTo(seekTime);
   }, []);
 
+  const handleResetQueue = useCallback(async () => {
+    if (!window.confirm('Reset all songs (except the currently playing one) back to queued?')) return;
+    try {
+      await resetQueue(partyId);
+      // Queue will update via socket
+    } catch {
+      setError('Failed to reset queue.');
+    }
+  }, [partyId]);
+
   const handleEndParty = async () => {
     if (!window.confirm('End this party? All guests will be disconnected.')) return;
     try {
@@ -293,6 +304,17 @@ export default function OrganizerPage() {
           <span className="header-icon">🎤</span>
           <h1>{party.name}</h1>
         </div>
+
+        {/* Now Playing in navbar – shown when a video is active */}
+        {currentVideoId && activeQueueItem && (
+          <div className="header-now-playing">
+            <span className="hnp-label">
+              {activeQueueItem.status === 'paused' ? '⏸' : '♪'}
+            </span>
+            <span className="hnp-title">{activeQueueItem.video_title}</span>
+            <span className="hnp-singer">🎤 {activeQueueItem.singer_name}</span>
+          </div>
+        )}
         <div className="header-right">
           <span className="member-name-badge">👤 {memberName}</span>
           <ThemePicker />
@@ -348,8 +370,17 @@ export default function OrganizerPage() {
           <div className="sidebar-body">
             {sidebarTab === 'playlist' && (
               <>
-                <div className="queue-count">
-                  {upcomingCount} song{upcomingCount !== 1 ? 's' : ''} in queue
+                <div className="queue-count-row">
+                  <span className="queue-count">
+                    {upcomingCount} song{upcomingCount !== 1 ? 's' : ''} in queue
+                  </span>
+                  <button
+                    className="btn-reset-queue"
+                    onClick={handleResetQueue}
+                    title="Reset all songs (except currently playing) back to queued"
+                  >
+                    ↺ Reset All
+                  </button>
                 </div>
                 <Playlist
                   queue={queue}
@@ -383,16 +414,7 @@ export default function OrganizerPage() {
               onTimeUpdate={handleTimeUpdate}
             />
 
-            {/* Now playing info */}
-            {currentVideoId && activeQueueItem && (
-              <div className="now-playing">
-                <span className="np-label">
-                  {activeQueueItem.status === 'paused' ? 'Paused' : 'Now Playing'}
-                </span>
-                <span className="np-title">{activeQueueItem.video_title}</span>
-                <span className="np-singer">🎤 {activeQueueItem.singer_name}</span>
-              </div>
-            )}
+            {/* Now playing info is shown in the header nav bar */}
 
             <div className="next-up-hint">
               <span>Guests can join at: <strong>{party.join_code}</strong></span>

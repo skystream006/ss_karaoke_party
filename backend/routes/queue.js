@@ -166,6 +166,40 @@ router.put('/:partyId/reorder', writeLimiter, async (req, res) => {
   }
 });
 
+// PATCH /api/queue/:partyId/reset - Reset all non-playing songs back to queued status
+router.patch('/:partyId/reset', writeLimiter, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    // Reset all songs that are not currently playing back to queued
+    await client.query(
+      `UPDATE queue SET status = 'queued' WHERE party_id = $1 AND status != 'playing'`,
+      [req.params.partyId]
+    );
+
+    await client.query('COMMIT');
+
+    const io = req.app.get('io');
+    if (io) {
+      const updatedQueue = await pool.query(
+        `SELECT * FROM queue WHERE party_id = $1
+         ORDER BY ${QUEUE_ORDER_BY}`,
+        [req.params.partyId]
+      );
+      io.to(req.params.partyId).emit('queue:update', { action: 'status', queue: updatedQueue.rows });
+    }
+
+    res.json({ success: true });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to reset queue' });
+  } finally {
+    client.release();
+  }
+});
+
 // PATCH /api/queue/:partyId/:itemId/status - Update item status (e.g., mark as playing/queued)
 router.patch('/:partyId/:itemId/status', writeLimiter, async (req, res) => {
   const { status } = req.body;
