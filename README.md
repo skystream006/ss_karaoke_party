@@ -12,7 +12,7 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 - 📊 **Song Progress** — Real-time progress bar shared between the organizer player and all guests; guests can seek to any position
 - 🔄 **Queue Reset** — One-click reset returns all non-playing songs to `queued`
 - 🎛️ **Customization** — Organizer can adjust key, tempo, and vocal level in real time
-- 🖱️ **Drag & Drop Reordering** — Organizer can rearrange the playlist; played songs are locked in place
+- 🖱️ **Drag & Drop Reordering** — Organizer can rearrange the playlist
 - 👥 **Member Management** — View, rename, change the role of, or remove any party member; secondary organizers are supported
 - 🔁 **Party Reactivation** — Ended parties can be reactivated without losing the member list or queue history
 - 🎨 **Themes** — Multiple colour themes selectable across the app
