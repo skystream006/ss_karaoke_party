@@ -119,6 +119,32 @@ export default function JoinPage() {
     }
   };
 
+  const handleMemberJoin = async (member) => {
+    if (!selectedParty) {
+      setError('Please select a party first.');
+      return;
+    }
+    setLoading(true);
+    setError('');
+    try {
+      const res = await joinParty(selectedParty.id, { name: member.name, role: member.role });
+      const joined = res.data;
+      sessionStorage.setItem('memberName', joined.name);
+      sessionStorage.setItem('memberId', joined.id);
+      sessionStorage.setItem('memberRole', joined.role);
+
+      if (joined.role === 'organizer') {
+        navigate(`/organizer/${selectedParty.id}`);
+      } else {
+        navigate(`/guest/${selectedParty.id}`);
+      }
+    } catch (err) {
+      setError(err.response?.data?.error || 'Failed to join party.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleJoin = async (e) => {
     e.preventDefault();
     if (joinRole !== 'organizer' && !memberName.trim()) {
@@ -253,7 +279,8 @@ export default function JoinPage() {
                       <button
                         type="button"
                         className="btn btn-sm btn-primary"
-                        onClick={() => { setMemberName(m.name); setJoinRole(m.role); }}
+                        disabled={loading}
+                        onClick={() => handleMemberJoin(m)}
                       >
                         Join
                       </button>
