@@ -246,8 +246,17 @@ export default function JoinPage() {
                 <ul className="party-members-list">
                   {partyMembers.map((m) => (
                     <li key={m.id} className="party-member-item">
-                      <span className="member-name">{m.name}</span>
-                      <span className="member-role">{m.role === 'organizer' ? '🎤' : '🎵'}</span>
+                      <div className="member-info">
+                        <span className="member-name">{m.name}</span>
+                        <span className="member-role">{m.role === 'organizer' ? '🎤' : '🎵'}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={() => { setMemberName(m.name); setJoinRole(m.role); }}
+                      >
+                        Join
+                      </button>
                     </li>
                   ))}
                 </ul>
