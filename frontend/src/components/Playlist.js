@@ -75,7 +75,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                 key={item.id}
                 draggableId={item.id}
                 index={index}
-                isDragDisabled={!allowReorder || item.status === 'played'}
+                isDragDisabled={!allowReorder}
               >
                 {(dragProvided, snapshot) => (
                   <li
