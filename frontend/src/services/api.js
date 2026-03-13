@@ -26,6 +26,7 @@ export const removeFromQueue = (partyId, itemId) => api.delete(`/queue/${partyId
 export const reorderQueue = (partyId, order) => api.put(`/queue/${partyId}/reorder`, { order });
 export const updateQueueItemStatus = (partyId, itemId, status) =>
   api.patch(`/queue/${partyId}/${itemId}/status`, { status });
+export const resetQueue = (partyId) => api.patch(`/queue/${partyId}/reset`);
 
 // YouTube search
 export const searchYouTube = (query, karaoke = false) =>
