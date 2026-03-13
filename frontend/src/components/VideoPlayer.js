@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import './VideoPlayer.css';
 
-const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings, onNext, hasNext, onTimeUpdate }, ref) {
+const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings, onPrev, hasPrev, onNext, hasNext, onTimeUpdate }, ref) {
   const playerRef = useRef(null);
   const containerRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -207,14 +207,24 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
       {/* Fullscreen overlay nav buttons */}
       {isFullscreen && (
         <>
-          <button
-            className={`fullscreen-nav-btn fullscreen-next-btn${controlsVisible ? ' visible' : ''}`}
-            onClick={onNext}
-            disabled={!hasNext}
-            aria-label="Next song"
-          >
-            &#9654;
-          </button>
+          {hasPrev && (
+            <button
+              className={`fullscreen-nav-btn fullscreen-prev-btn${controlsVisible ? ' visible' : ''}`}
+              onClick={onPrev}
+              aria-label="Previous song"
+            >
+              &#9664;
+            </button>
+          )}
+          {hasNext && (
+            <button
+              className={`fullscreen-nav-btn fullscreen-next-btn${controlsVisible ? ' visible' : ''}`}
+              onClick={onNext}
+              aria-label="Next song"
+            >
+              &#9654;
+            </button>
+          )}
         </>
       )}
 
@@ -228,14 +238,24 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
           >
             ⛶ Fullscreen
           </button>
-          <button
-            className="nav-btn"
-            onClick={onNext}
-            disabled={!hasNext}
-            aria-label="Next song"
-          >
-            Next ⏭
-          </button>
+          {hasPrev && (
+            <button
+              className="nav-btn"
+              onClick={onPrev}
+              aria-label="Previous song"
+            >
+              ⏮ Previous
+            </button>
+          )}
+          {hasNext && (
+            <button
+              className="nav-btn"
+              onClick={onNext}
+              aria-label="Next song"
+            >
+              Next ⏭
+            </button>
+          )}
         </div>
       )}
     </div>

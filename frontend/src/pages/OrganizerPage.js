@@ -193,21 +193,31 @@ export default function OrganizerPage() {
     }
   }, [partyId, queue]);
 
+  const handlePrevious = useCallback(async () => {
+    try {
+      const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
+      if (!active) return;
+      // Find the song with the highest position that is still lower than the current
+      const prevSongs = queue.filter((i) => i.position < active.position);
+      if (prevSongs.length === 0) return;
+      const prev = prevSongs.reduce((a, b) => (a.position > b.position ? a : b));
+      await updateQueueItemStatus(partyId, prev.id, 'playing');
+      setCurrentVideoId(prev.video_id);
+    } catch {
+      setError('Failed to go to previous song.');
+    }
+  }, [partyId, queue]);
+
   const handleNext = useCallback(async () => {
     try {
-      // Find the next song that hasn't been played yet
-      const next = queue.find((i) => i.status === 'queued');
-      if (next) {
-        await updateQueueItemStatus(partyId, next.id, 'playing');
-        setCurrentVideoId(next.video_id);
-      } else {
-        // No more upcoming songs – mark the current song as played and stop
-        const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
-        if (active) {
-          await updateQueueItemStatus(partyId, active.id, 'played');
-        }
-        setCurrentVideoId(null);
-      }
+      const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
+      if (!active) return;
+      // Find the song with the lowest position that is higher than the current
+      const nextSongs = queue.filter((i) => i.position > active.position);
+      if (nextSongs.length === 0) return;
+      const next = nextSongs.reduce((a, b) => (a.position < b.position ? a : b));
+      await updateQueueItemStatus(partyId, next.id, 'playing');
+      setCurrentVideoId(next.video_id);
     } catch {
       setError('Failed to skip to next song.');
     }
@@ -378,8 +388,10 @@ export default function OrganizerPage() {
               videoId={currentVideoId}
               onEnded={handleVideoEnded}
               settings={settings}
+              onPrev={handlePrevious}
+              hasPrev={activeQueueItem ? queue.some((i) => i.position < activeQueueItem.position) : false}
               onNext={handleNext}
-              hasNext={queue.some((i) => i.status === 'queued')}
+              hasNext={activeQueueItem ? queue.some((i) => i.position > activeQueueItem.position) : false}
               onTimeUpdate={handleTimeUpdate}
             />
 
