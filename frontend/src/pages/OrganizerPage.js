@@ -68,9 +68,13 @@ export default function OrganizerPage() {
     socket.on('connect', () => {
       socket.emit('join:party', partyId);
     });
-    socket.on('queue:update', ({ queue: updatedQueue }) => {
+    socket.on('queue:update', ({ action, queue: updatedQueue }) => {
       if (updatedQueue) {
         setQueue(updatedQueue);
+        if (action === 'status') {
+          const playing = updatedQueue.find((i) => i.status === 'playing');
+          setCurrentVideoId(playing ? playing.video_id : null);
+        }
       }
     });
     return () => {
