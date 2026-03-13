@@ -72,6 +72,25 @@ io.on('connection', (socket) => {
     console.log(`Socket ${socket.id} left party room: ${partyId}`);
   });
 
+  // Organizer broadcasts current playback position to guests
+  socket.on('video:progress', ({ partyId, currentTime, duration }) => {
+    if (
+      typeof partyId !== 'string' ||
+      typeof currentTime !== 'number' || !isFinite(currentTime) || currentTime < 0 ||
+      typeof duration !== 'number' || !isFinite(duration) || duration < 0
+    ) return;
+    socket.to(partyId).emit('video:progress', { currentTime, duration });
+  });
+
+  // Guest requests a seek; organizer receives and seeks the player
+  socket.on('video:seek', ({ partyId, seekTime }) => {
+    if (
+      typeof partyId !== 'string' ||
+      typeof seekTime !== 'number' || !isFinite(seekTime) || seekTime < 0
+    ) return;
+    socket.to(partyId).emit('video:seek', { seekTime });
+  });
+
   socket.on('disconnect', () => {
     console.log(`Socket disconnected: ${socket.id}`);
   });

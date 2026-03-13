@@ -1,13 +1,25 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import './VideoPlayer.css';
 
-export default function VideoPlayer({ videoId, onEnded, settings, onNext, hasNext }) {
+const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings, onNext, hasNext, onTimeUpdate }, ref) {
   const playerRef = useRef(null);
   const containerRef = useRef(null);
   const wrapperRef = useRef(null);
   const mouseTimerRef = useRef(null);
+  const progressIntervalRef = useRef(null);
   const onEndedRef = useRef(onEnded);
+  const onTimeUpdateRef = useRef(onTimeUpdate);
   useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
+  useEffect(() => { onTimeUpdateRef.current = onTimeUpdate; }, [onTimeUpdate]);
+
+  // Expose seekTo so parent pages can programmatically seek the player
+  useImperativeHandle(ref, () => ({
+    seekTo: (seconds) => {
+      if (playerRef.current?.seekTo) {
+        playerRef.current.seekTo(seconds, true);
+      }
+    },
+  }), []);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
 
@@ -49,6 +61,19 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, hasNex
             applySettings(event.target);
           },
           onStateChange: (event) => {
+            if (event.data === window.YT.PlayerState.PLAYING) {
+              // Poll playback position every second while playing
+              clearInterval(progressIntervalRef.current);
+              progressIntervalRef.current = setInterval(() => {
+                if (playerRef.current?.getCurrentTime) {
+                  const ct = playerRef.current.getCurrentTime();
+                  const dur = playerRef.current.getDuration();
+                  onTimeUpdateRef.current?.(ct, dur);
+                }
+              }, 1000);
+            } else {
+              clearInterval(progressIntervalRef.current);
+            }
             if (event.data === window.YT.PlayerState.ENDED && onEndedRef.current) {
               onEndedRef.current();
             }
@@ -63,15 +88,19 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, hasNex
       window.onYouTubeIframeAPIReady = initPlayer;
     }
 
+    // Capture ref here so the cleanup closure sees the same node
+    const container = containerRef.current;
     return () => {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;
       }
       // Remove the child element YouTube replaced so it doesn't accumulate
       // across video changes.
-      if (containerRef.current) {
-        containerRef.current.innerHTML = '';
+      if (container) {
+        container.innerHTML = '';
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-creating the player on each render would be disruptive; onEnded is kept current via onEndedRef
@@ -205,4 +234,6 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, hasNex
       )}
     </div>
   );
-}
+});
+
+export default VideoPlayer;

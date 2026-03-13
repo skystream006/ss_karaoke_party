@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import {
@@ -36,8 +36,19 @@ export default function OrganizerPage() {
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
+  const [videoDuration, setVideoDuration] = useState(0);
+
+  const socketRef = useRef(null);
+  const videoPlayerRef = useRef(null);
 
   const memberName = sessionStorage.getItem('memberName') || 'Organizer';
+
+  // Reset video progress when the playing song changes
+  useEffect(() => {
+    setVideoCurrentTime(0);
+    setVideoDuration(0);
+  }, [currentVideoId]);
 
   // Load party data
   useEffect(() => {
@@ -65,6 +76,7 @@ export default function OrganizerPage() {
   // Socket connection
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    socketRef.current = socket;
     socket.on('connect', () => {
       socket.emit('join:party', partyId);
     });
@@ -77,9 +89,14 @@ export default function OrganizerPage() {
         }
       }
     });
+    // A guest requested a seek – apply it to the local YouTube player
+    socket.on('video:seek', ({ seekTime }) => {
+      videoPlayerRef.current?.seekTo(seekTime);
+    });
     return () => {
       socket.emit('leave:party', partyId);
       socket.disconnect();
+      socketRef.current = null;
     };
   }, [partyId]);
 
@@ -171,6 +188,18 @@ export default function OrganizerPage() {
       setError('Failed to skip to next song.');
     }
   }, [partyId, queue]);
+
+  // Emit playback progress to guests and update local display
+  const handleTimeUpdate = useCallback((currentTime, duration) => {
+    setVideoCurrentTime(currentTime);
+    setVideoDuration(duration);
+    socketRef.current?.emit('video:progress', { partyId, currentTime, duration });
+  }, [partyId]);
+
+  // Seek the local YouTube player (triggered by the organizer dragging the slider)
+  const handleSeek = useCallback((seekTime) => {
+    videoPlayerRef.current?.seekTo(seekTime);
+  }, []);
 
   const handleEndParty = async () => {
     if (!window.confirm('End this party? All guests will be disconnected.')) return;
@@ -302,6 +331,9 @@ export default function OrganizerPage() {
                   onPlay={handlePlay}
                   onPause={handlePause}
                   isOrganizer={true}
+                  currentTime={videoCurrentTime}
+                  duration={videoDuration}
+                  onSeek={handleSeek}
                 />
               </>
             )}
@@ -315,11 +347,13 @@ export default function OrganizerPage() {
         <main className="organizer-main">
           <div className="main-video-section">
             <VideoPlayer
+              ref={videoPlayerRef}
               videoId={currentVideoId}
               onEnded={handleVideoEnded}
               settings={settings}
               onNext={handleNext}
               hasNext={queue.some((i) => i.status === 'queued')}
+              onTimeUpdate={handleTimeUpdate}
             />
 
             {/* Now playing info */}
