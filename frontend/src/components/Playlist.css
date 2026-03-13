@@ -111,6 +111,16 @@
   color: #1a1a2e;
 }
 
+.btn-pause {
+  color: var(--primary);
+  border-color: var(--primary);
+}
+
+.btn-pause:hover {
+  background: var(--primary);
+  color: white;
+}
+
 .btn-remove {
   color: var(--primary);
   border-color: var(--primary);

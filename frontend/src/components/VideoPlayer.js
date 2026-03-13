@@ -6,6 +6,8 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrev
   const containerRef = useRef(null);
   const wrapperRef = useRef(null);
   const mouseTimerRef = useRef(null);
+  const onEndedRef = useRef(onEnded);
+  useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [controlsVisible, setControlsVisible] = useState(true);
 
@@ -40,8 +42,8 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrev
             applySettings(event.target);
           },
           onStateChange: (event) => {
-            if (event.data === window.YT.PlayerState.ENDED && onEnded) {
-              onEnded();
+            if (event.data === window.YT.PlayerState.ENDED && onEndedRef.current) {
+              onEndedRef.current();
             }
           },
         },
@@ -60,7 +62,7 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrev
         playerRef.current = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onEnded is a callback prop; re-creating the player on each render would be disruptive
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-creating the player on each render would be disruptive; onEnded is kept current via onEndedRef
   }, [videoId]);
 
   const applySettings = (player) => {
