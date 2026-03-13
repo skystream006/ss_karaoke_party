@@ -247,7 +247,6 @@ export default function JoinPage() {
                         >
                           <span className="suggestion-name">{suggestion.name}</span>
                           <span className="suggestion-meta">
-                            <span className="suggestion-id">ID: {suggestion.id ? suggestion.id.slice(0, 8) : 'unknown'}</span>
                             <span className="suggestion-party">{suggestion.party_name}</span>
                           </span>
                         </li>

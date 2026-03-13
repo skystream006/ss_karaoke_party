@@ -334,11 +334,7 @@
   flex-shrink: 0;
 }
 
-.suggestion-id {
-  font-size: 0.75rem;
-  color: var(--primary);
-  font-family: monospace;
-}
+
 
 .suggestion-party {
   font-size: 0.75rem;
