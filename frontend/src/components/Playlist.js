@@ -88,8 +88,6 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                     <div className="playlist-pos">
                       {item.status === 'playing' ? (
                         <span className="playing-indicator">♪</span>
-                      ) : item.status === 'played' ? (
-                        <span className="played-indicator">✓</span>
                       ) : (
                         <span>{item.position}</span>
                       )}
