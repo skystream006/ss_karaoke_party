@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getParties, getPartyByCode, joinParty } from '../services/api';
+import { getParties, getPartyByCode, joinParty, searchMembers } from '../services/api';
 import './JoinPage.css';
 
 export default function JoinPage() {
@@ -15,6 +15,11 @@ export default function JoinPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [codeInput, setCodeInput] = useState(codeFromUrl || '');
+  const [nameSuggestions, setNameSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const nameInputRef = useRef(null);
+  const suggestionsRef = useRef(null);
+  const searchTimeoutRef = useRef(null);
 
   useEffect(() => {
     fetchParties();
@@ -22,6 +27,45 @@ export default function JoinPage() {
       handleCodeLookup(codeFromUrl);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCodeLookup is stable; we only want this effect to run once on mount
+  }, []);
+
+  // Close suggestions when clicking outside the name input / dropdown
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (
+        nameInputRef.current && !nameInputRef.current.contains(e.target) &&
+        suggestionsRef.current && !suggestionsRef.current.contains(e.target)
+      ) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Clear debounce timeout on unmount
+  useEffect(() => {
+    return () => clearTimeout(searchTimeoutRef.current);
+  }, []);
+
+  const handleNameChange = useCallback((value) => {
+    setMemberName(value);
+    clearTimeout(searchTimeoutRef.current);
+    if (value.trim().length >= 2) {
+      searchTimeoutRef.current = setTimeout(async () => {
+        try {
+          const res = await searchMembers(value.trim());
+          setNameSuggestions(res.data);
+          setShowSuggestions(res.data.length > 0);
+        } catch {
+          setNameSuggestions([]);
+          setShowSuggestions(false);
+        }
+      }, 300);
+    } else {
+      setNameSuggestions([]);
+      setShowSuggestions(false);
+    }
   }, []);
 
   const fetchParties = async () => {
@@ -175,14 +219,41 @@ export default function JoinPage() {
             <form onSubmit={handleJoin}>
               <div className="form-group">
                 <label>Your Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g. Jordan"
-                  value={memberName}
-                  onChange={(e) => setMemberName(e.target.value)}
-                  autoFocus
-                  maxLength={60}
-                />
+                <div className="name-autocomplete-wrapper">
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    placeholder="e.g. Jordan"
+                    value={memberName}
+                    onChange={(e) => handleNameChange(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Escape' && setShowSuggestions(false)}
+                    autoFocus
+                    maxLength={60}
+                    autoComplete="off"
+                  />
+                  {showSuggestions && (
+                    <ul className="name-suggestions" ref={suggestionsRef} role="listbox">
+                      {nameSuggestions.map((suggestion) => (
+                        <li
+                          key={suggestion.id}
+                          role="option"
+                          aria-selected={false}
+                          className="name-suggestion-item"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setMemberName(suggestion.name);
+                            setShowSuggestions(false);
+                          }}
+                        >
+                          <span className="suggestion-name">{suggestion.name}</span>
+                          <span className="suggestion-meta">
+                            <span className="suggestion-party">{suggestion.party_name}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               </div>
 
               <div className="form-group">
