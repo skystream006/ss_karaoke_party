@@ -106,7 +106,7 @@ Ensure a PostgreSQL server is running locally. The backend will automatically ru
 |----------|---------|-------------|
 | `PORT` | `6000` | Backend port |
 | `DB_HOST` | `localhost` | PostgreSQL host |
-| `DB_PORT` | `5432` | PostgreSQL port |
+| `DB_PORT` | `5433` | PostgreSQL port |
 | `DB_NAME` | `karaoke_party` | Database name |
 | `DB_USER` | `postgres` | DB username |
 | `DB_PASSWORD` | `postgres` | DB password |
