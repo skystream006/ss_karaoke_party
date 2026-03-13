@@ -15,6 +15,7 @@
   position: sticky;
   top: 0;
   z-index: 50;
+  gap: 0.5rem;
 }
 
 .guest-header-info {
@@ -95,7 +96,7 @@
   overflow-y: auto;
 }
 
-@media (max-width: 700px) {
+@media (max-width: 768px) {
   .guest-columns {
     flex-direction: column;
   }
@@ -104,6 +105,69 @@
     position: static;
     max-height: none;
     overflow-y: visible;
+  }
+}
+
+/* Mobile tab switcher (only visible on small screens) */
+.mobile-tabs {
+  display: none;
+}
+
+.mobile-tab {
+  flex: 1;
+  padding: 0.65rem 0.5rem;
+  background: var(--bg-surface);
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+}
+
+.mobile-tab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  background: var(--bg-card);
+}
+
+@media (max-width: 768px) {
+  .guest-header {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .party-badge {
+    font-size: 0.95rem;
+  }
+
+  .member-badge {
+    font-size: 0.75rem;
+  }
+
+  .guest-main {
+    padding: 0.75rem;
+  }
+
+  .mobile-tabs {
+    display: flex;
+    background: var(--bg-surface);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 53px;
+    z-index: 40;
+  }
+
+  .mobile-hidden {
+    display: none !important;
+  }
+
+  .section-heading {
+    display: none;
   }
 }
 
