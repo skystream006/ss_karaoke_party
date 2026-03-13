@@ -75,19 +75,21 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                 key={item.id}
                 draggableId={item.id}
                 index={index}
-                isDragDisabled={!allowReorder}
+                isDragDisabled={!allowReorder || item.status === 'played'}
               >
                 {(dragProvided, snapshot) => (
                   <li
                     ref={dragProvided.innerRef}
                     {...dragProvided.draggableProps}
-                    className={`playlist-item ${item.status === 'playing' ? 'playing' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
+                    className={`playlist-item ${item.status === 'playing' ? 'playing' : ''} ${item.status === 'played' ? 'played' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
                   >
                     <div className="playlist-item-row">
                     {/* Position number */}
                     <div className="playlist-pos">
                       {item.status === 'playing' ? (
                         <span className="playing-indicator">♪</span>
+                      ) : item.status === 'played' ? (
+                        <span className="played-indicator">✓</span>
                       ) : (
                         <span>{item.position}</span>
                       )}

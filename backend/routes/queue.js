@@ -169,7 +169,7 @@ router.put('/:partyId/reorder', writeLimiter, async (req, res) => {
 // PATCH /api/queue/:partyId/:itemId/status - Update item status (e.g., mark as playing/queued)
 router.patch('/:partyId/:itemId/status', writeLimiter, async (req, res) => {
   const { status } = req.body;
-  if (!['queued', 'playing'].includes(status)) {
+  if (!['queued', 'playing', 'played'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
 
@@ -177,10 +177,11 @@ router.patch('/:partyId/:itemId/status', writeLimiter, async (req, res) => {
   try {
     await client.query('BEGIN');
 
-    // If setting to playing, set all others to queued first
+    // If setting to playing, mark all currently-playing songs as played
+    // so they don't re-appear at the front of the queue on the next skip
     if (status === 'playing') {
       await client.query(
-        `UPDATE queue SET status = 'queued' WHERE party_id = $1 AND status = 'playing'`,
+        `UPDATE queue SET status = 'played' WHERE party_id = $1 AND status = 'playing'`,
         [req.params.partyId]
       );
     }

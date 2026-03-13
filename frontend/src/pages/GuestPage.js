@@ -155,6 +155,8 @@ export default function GuestPage() {
     );
   }
 
+  const upcomingCount = queue.filter((i) => i.status !== 'played').length;
+
   return (
     <div className="guest-layout">
       {/* Header */}
@@ -182,7 +184,7 @@ export default function GuestPage() {
           onClick={() => setActiveTab('queue')}
         >
           🎵 Queue
-          {queue.length > 0 && <span className="badge">{queue.length}</span>}
+          {upcomingCount > 0 && <span className="badge">{upcomingCount}</span>}
         </button>
       </nav>
 
@@ -205,7 +207,7 @@ export default function GuestPage() {
           <div className={`queue-section${activeTab !== 'queue' ? ' mobile-hidden' : ''}`}>
             <div className="section-heading">
               🎵 Queue
-              {queue.length > 0 && <span className="badge">{queue.length}</span>}
+              {upcomingCount > 0 && <span className="badge">{upcomingCount}</span>}
             </div>
             {queue.length === 0 ? (
               <div className="empty-state">
