@@ -318,11 +318,20 @@ export default function OrganizerPage() {
         {/* Now Playing in navbar – shown when a video is active */}
         {currentVideoId && activeQueueItem && (
           <div className="header-now-playing">
+            {activeQueueItem.video_thumbnail && (
+              <img
+                src={activeQueueItem.video_thumbnail}
+                alt={activeQueueItem.video_title}
+                className="hnp-thumb"
+              />
+            )}
             <span className="hnp-label">
               {activeQueueItem.status === 'paused' ? '⏸' : '♪'}
             </span>
-            <span className="hnp-title">{activeQueueItem.video_title}</span>
-            <span className="hnp-singer">🎤 {activeQueueItem.singer_name}</span>
+            <div className="hnp-text">
+              <span className="hnp-title">{activeQueueItem.video_title}</span>
+              <span className="hnp-singer">🎤 {activeQueueItem.singer_name}</span>
+            </div>
           </div>
         )}
         <div className="header-right">

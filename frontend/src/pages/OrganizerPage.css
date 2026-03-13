@@ -42,7 +42,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex: 1;
+  flex-shrink: 0;
   min-width: 0;
 }
 
@@ -221,44 +221,57 @@
 .header-now-playing {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  justify-content: center;
+  gap: 0.6rem;
   flex: 1;
   min-width: 0;
   overflow: hidden;
   background: rgba(233, 69, 96, 0.08);
   border: 1px solid rgba(233, 69, 96, 0.25);
   border-radius: 8px;
-  padding: 0.3rem 0.65rem;
+  padding: 0.4rem 0.75rem;
+}
+
+.hnp-thumb {
+  width: 64px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 6px;
+  flex-shrink: 0;
 }
 
 .hnp-label {
-  font-size: 0.85rem;
+  font-size: 1.1rem;
   color: var(--primary);
   flex-shrink: 0;
 }
 
+.hnp-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  max-width: min(400px, 50%);
+}
+
 .hnp-title {
-  font-size: 0.85rem;
-  font-weight: 600;
+  font-size: 1.05rem;
+  font-weight: 700;
   color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
 }
 
 .hnp-singer {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--text-secondary);
   white-space: nowrap;
-  flex-shrink: 0;
   display: none;
 }
 
 @media (min-width: 640px) {
   .hnp-singer {
-    display: inline;
+    display: block;
   }
 }
 
