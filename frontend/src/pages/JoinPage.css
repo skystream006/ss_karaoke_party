@@ -258,6 +258,21 @@
   cursor: not-allowed;
 }
 
+.btn-join {
+  background: #22c55e;
+  color: white;
+}
+
+.btn-join:hover:not(:disabled) {
+  background: #16a34a;
+  transform: translateY(-1px);
+}
+
+.btn-join:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .btn-secondary {
   background: var(--secondary);
   color: white;

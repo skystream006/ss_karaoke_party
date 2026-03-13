@@ -276,7 +276,7 @@ export default function JoinPage() {
                 </div>
               </div>
 
-              <button type="submit" className="btn btn-primary btn-large" disabled={loading}>
+              <button type="submit" className="btn btn-join btn-large" disabled={loading}>
                 {loading ? 'Joining…' : `Join as ${joinRole === 'organizer' ? 'Organizer' : 'Guest'}`}
               </button>
             </form>
