@@ -19,6 +19,7 @@ export default function GuestPage() {
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [activeTab, setActiveTab] = useState('search');
 
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = sessionStorage.getItem('memberId');
@@ -134,13 +135,30 @@ export default function GuestPage() {
         </div>
       </header>
 
+      {/* Mobile tab switcher */}
+      <nav className="mobile-tabs">
+        <button
+          className={`mobile-tab ${activeTab === 'search' ? 'active' : ''}`}
+          onClick={() => setActiveTab('search')}
+        >
+          🔍 Search
+        </button>
+        <button
+          className={`mobile-tab ${activeTab === 'queue' ? 'active' : ''}`}
+          onClick={() => setActiveTab('queue')}
+        >
+          🎵 Queue
+          {queue.length > 0 && <span className="badge">{queue.length}</span>}
+        </button>
+      </nav>
+
       {/* Content */}
       <main className="guest-main">
         {error && <div className="error-msg">{error}</div>}
 
         <div className="guest-columns">
           {/* Search section */}
-          <div className="search-section">
+          <div className={`search-section${activeTab !== 'search' ? ' mobile-hidden' : ''}`}>
             <div className="section-heading">Search for songs to add</div>
             <SongSearch
               partyId={partyId}
@@ -150,7 +168,7 @@ export default function GuestPage() {
           </div>
 
           {/* Queue section */}
-          <div className="queue-section">
+          <div className={`queue-section${activeTab !== 'queue' ? ' mobile-hidden' : ''}`}>
             <div className="section-heading">
               🎵 Queue
               {queue.length > 0 && <span className="badge">{queue.length}</span>}
