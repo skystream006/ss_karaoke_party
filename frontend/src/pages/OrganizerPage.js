@@ -41,8 +41,14 @@ export default function OrganizerPage() {
 
   const socketRef = useRef(null);
   const videoPlayerRef = useRef(null);
+  const currentVideoIdRef = useRef(null);
 
   const memberName = sessionStorage.getItem('memberName') || 'Organizer';
+
+  // Keep currentVideoIdRef in sync so callbacks can read it without stale closures
+  useEffect(() => {
+    currentVideoIdRef.current = currentVideoId;
+  }, [currentVideoId]);
 
   // Reset video progress when the playing song changes
   useEffect(() => {
@@ -85,7 +91,17 @@ export default function OrganizerPage() {
         setQueue(updatedQueue);
         if (action === 'status') {
           const playing = updatedQueue.find((i) => i.status === 'playing');
-          setCurrentVideoId(playing ? playing.video_id : null);
+          const paused = updatedQueue.find((i) => i.status === 'paused');
+          const active = playing || paused;
+          setCurrentVideoId(active ? active.video_id : null);
+          // Handle player state changes triggered by another client (e.g. a guest)
+          if (paused) {
+            videoPlayerRef.current?.pauseVideo();
+          } else if (playing) {
+            // If the same video is already loaded, resume it; otherwise VideoPlayer
+            // will create a fresh player that auto-plays via onReady.
+            videoPlayerRef.current?.playVideo();
+          }
         }
       }
     });
@@ -135,7 +151,12 @@ export default function OrganizerPage() {
     async (item) => {
       try {
         await updateQueueItemStatus(partyId, item.id, 'playing');
-        setCurrentVideoId(item.video_id);
+        if (currentVideoIdRef.current === item.video_id) {
+          // Same video is already loaded – resume from current position
+          videoPlayerRef.current?.playVideo();
+        } else {
+          setCurrentVideoId(item.video_id);
+        }
       } catch {
         setError('Failed to start song.');
       }
@@ -146,8 +167,9 @@ export default function OrganizerPage() {
   const handlePause = useCallback(
     async (item) => {
       try {
-        await updateQueueItemStatus(partyId, item.id, 'queued');
-        setCurrentVideoId(null);
+        await updateQueueItemStatus(partyId, item.id, 'paused');
+        // Pause the player in place – do NOT unload the video so position is preserved
+        videoPlayerRef.current?.pauseVideo();
       } catch {
         setError('Failed to pause song.');
       }
@@ -156,16 +178,16 @@ export default function OrganizerPage() {
   );
 
   const handleVideoEnded = useCallback(async () => {
-    // Find currently playing item
-    const playing = queue.find((i) => i.status === 'playing');
+    // Find currently playing or paused item
+    const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
     // Auto-advance to next queued song (skip already-played songs)
     const next = queue.find((i) => i.status === 'queued');
     if (next) {
       await updateQueueItemStatus(partyId, next.id, 'playing');
       setCurrentVideoId(next.video_id);
     } else {
-      if (playing) {
-        await updateQueueItemStatus(partyId, playing.id, 'played');
+      if (active) {
+        await updateQueueItemStatus(partyId, active.id, 'played');
       }
       setCurrentVideoId(null);
     }
@@ -180,9 +202,9 @@ export default function OrganizerPage() {
         setCurrentVideoId(next.video_id);
       } else {
         // No more upcoming songs – mark the current song as played and stop
-        const playing = queue.find((i) => i.status === 'playing');
-        if (playing) {
-          await updateQueueItemStatus(partyId, playing.id, 'played');
+        const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
+        if (active) {
+          await updateQueueItemStatus(partyId, active.id, 'played');
         }
         setCurrentVideoId(null);
       }
@@ -254,6 +276,7 @@ export default function OrganizerPage() {
   }
 
   const upcomingCount = queue.filter((i) => i.status !== 'played').length;
+  const activeQueueItem = queue.find((i) => i.status === 'playing' || i.status === 'paused');
 
   return (
     <div className={`organizer-layout ${sidebarOpen ? 'sidebar-open' : ''}`}>
@@ -361,15 +384,13 @@ export default function OrganizerPage() {
             />
 
             {/* Now playing info */}
-            {currentVideoId && queue.find((i) => i.status === 'playing') && (
+            {currentVideoId && activeQueueItem && (
               <div className="now-playing">
-                <span className="np-label">Now Playing</span>
-                <span className="np-title">
-                  {queue.find((i) => i.status === 'playing')?.video_title}
+                <span className="np-label">
+                  {activeQueueItem.status === 'paused' ? 'Paused' : 'Now Playing'}
                 </span>
-                <span className="np-singer">
-                  🎤 {queue.find((i) => i.status === 'playing')?.singer_name}
-                </span>
+                <span className="np-title">{activeQueueItem.video_title}</span>
+                <span className="np-singer">🎤 {activeQueueItem.singer_name}</span>
               </div>
             )}
 
