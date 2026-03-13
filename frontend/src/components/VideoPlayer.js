@@ -26,8 +26,15 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrev
     const initPlayer = () => {
       if (playerRef.current) {
         playerRef.current.destroy();
+        playerRef.current = null;
       }
-      playerRef.current = new window.YT.Player(containerRef.current, {
+      // Create a nested element for YouTube to replace so that containerRef.current
+      // (React's tracked node) is never removed from the DOM by the YouTube API.
+      // This prevents React's removeChild from failing when reconciling after a
+      // videoId change (e.g. pausing a song).
+      const playerTarget = document.createElement('div');
+      containerRef.current.appendChild(playerTarget);
+      playerRef.current = new window.YT.Player(playerTarget, {
         videoId,
         playerVars: {
           autoplay: 1,
@@ -60,6 +67,11 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrev
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;
+      }
+      // Remove the child element YouTube replaced so it doesn't accumulate
+      // across video changes.
+      if (containerRef.current) {
+        containerRef.current.innerHTML = '';
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-creating the player on each render would be disruptive; onEnded is kept current via onEndedRef
