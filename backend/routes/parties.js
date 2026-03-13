@@ -4,6 +4,7 @@ const pool = require('../db/db');
 const { v4: uuidv4 } = require('uuid');
 const { writeLimiter } = require('../middleware/rateLimiter');
 
+const DEFAULT_ORGANIZER_NAME = 'Organizer';
 // Generate a short join code
 function generateJoinCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -120,10 +121,11 @@ router.get('/join/:code', async (req, res) => {
 // POST /api/parties/:id/join - Join a party
 router.post('/:id/join', writeLimiter, async (req, res) => {
   const { name, role } = req.body;
-  if (!name) {
+  const memberRole = role === 'organizer' ? 'organizer' : 'guest';
+  if (!name && memberRole !== 'organizer') {
     return res.status(400).json({ error: 'Name is required' });
   }
-  const memberRole = role === 'organizer' ? 'organizer' : 'guest';
+  const memberName = name || DEFAULT_ORGANIZER_NAME;
 
   try {
     const partyResult = await pool.query(
@@ -136,7 +138,7 @@ router.post('/:id/join', writeLimiter, async (req, res) => {
 
     const memberResult = await pool.query(
       'INSERT INTO party_members (party_id, name, role) VALUES ($1, $2, $3) RETURNING *',
-      [req.params.id, name, memberRole]
+      [req.params.id, memberName, memberRole]
     );
     res.status(201).json(memberResult.rows[0]);
   } catch (err) {

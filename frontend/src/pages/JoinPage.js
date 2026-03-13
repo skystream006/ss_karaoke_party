@@ -48,7 +48,7 @@ export default function JoinPage() {
 
   const handleJoin = async (e) => {
     e.preventDefault();
-    if (!memberName.trim()) {
+    if (joinRole !== 'organizer' && !memberName.trim()) {
       setError('Please enter your name.');
       return;
     }
