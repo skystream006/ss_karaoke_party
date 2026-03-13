@@ -22,7 +22,7 @@ import './OrganizerPage.css';
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL ||
   (window.location.hostname === 'localhost'
-    ? 'http://localhost:5000'
+    ? 'http://localhost:6000'
     : window.location.origin);
 
 export default function OrganizerPage() {

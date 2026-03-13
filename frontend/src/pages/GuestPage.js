@@ -9,7 +9,7 @@ import './GuestPage.css';
 
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL ||
-  `${window.location.protocol}//${window.location.hostname}:5000`;
+  `${window.location.protocol}//${window.location.hostname}:6000`;
 
 export default function GuestPage() {
   const { partyId } = useParams();

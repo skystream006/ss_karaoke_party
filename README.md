@@ -59,7 +59,7 @@ docker-compose up --build
 ```
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+- Backend API: http://localhost:6000
 
 ### 3. Open on your phone
 
@@ -82,14 +82,14 @@ npm install
 npm run dev            # nodemon watches for changes
 ```
 
-The backend runs on **port 5000**.
+The backend runs on **port 6000**.
 
 ### Frontend
 
 ```bash
 cd frontend
 npm install
-npm start              # runs on port 3000, proxies /api to :5000
+npm start              # runs on port 3000, proxies /api to :6000
 ```
 
 ### Database
@@ -104,7 +104,7 @@ Ensure a PostgreSQL server is running locally. The backend will automatically ru
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `PORT` | `5000` | Backend port |
+| `PORT` | `6000` | Backend port |
 | `DB_HOST` | `localhost` | PostgreSQL host |
 | `DB_PORT` | `5432` | PostgreSQL port |
 | `DB_NAME` | `karaoke_party` | Database name |
