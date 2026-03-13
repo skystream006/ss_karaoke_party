@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import './VideoPlayer.css';
 
-export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrevious, hasPrevious, hasNext }) {
+export default function VideoPlayer({ videoId, onEnded, settings, onNext, hasNext }) {
   const playerRef = useRef(null);
   const containerRef = useRef(null);
   const wrapperRef = useRef(null);
@@ -173,14 +173,6 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrev
       {isFullscreen && (
         <>
           <button
-            className={`fullscreen-nav-btn fullscreen-prev-btn${controlsVisible ? ' visible' : ''}`}
-            onClick={onPrevious}
-            disabled={!hasPrevious}
-            aria-label="Previous song"
-          >
-            &#9664;
-          </button>
-          <button
             className={`fullscreen-nav-btn fullscreen-next-btn${controlsVisible ? ' visible' : ''}`}
             onClick={onNext}
             disabled={!hasNext}
@@ -194,14 +186,6 @@ export default function VideoPlayer({ videoId, onEnded, settings, onNext, onPrev
       {/* Below-video nav controls (hidden in fullscreen) */}
       {!isFullscreen && (
         <div className="video-nav-controls">
-          <button
-            className="nav-btn"
-            onClick={onPrevious}
-            disabled={!hasPrevious}
-            aria-label="Previous song"
-          >
-            ⏮ Previous
-          </button>
           <button
             className="nav-btn nav-btn-fullscreen"
             onClick={toggleFullscreen}
