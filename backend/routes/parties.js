@@ -272,18 +272,39 @@ router.patch('/:id/members/:memberId', writeLimiter, async (req, res) => {
     return res.status(400).json({ error: 'Member name is required' });
   }
   const memberRole = role === 'organizer' ? 'organizer' : 'guest';
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query('BEGIN');
+    const result = await client.query(
       'UPDATE party_members SET name = $1, role = $2 WHERE id = $3 AND party_id = $4 RETURNING id, party_id, name, role, joined_at',
       [name.trim(), memberRole, req.params.memberId, req.params.id]
     );
     if (result.rows.length === 0) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Member not found' });
     }
+    await client.query(
+      'UPDATE queue SET singer_name = $1 WHERE member_id = $2 AND party_id = $3',
+      [name.trim(), req.params.memberId, req.params.id]
+    );
+    const updatedQueue = await client.query(
+      'SELECT * FROM queue WHERE party_id = $1 ORDER BY position ASC',
+      [req.params.id]
+    );
+    await client.query('COMMIT');
+
+    const io = req.app.get('io');
+    if (io) {
+      io.to(req.params.id).emit('queue:update', { action: 'update', queue: updatedQueue.rows });
+    }
+
     res.json(result.rows[0]);
   } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
     console.error(err);
     res.status(500).json({ error: 'Failed to update member' });
+  } finally {
+    client.release();
   }
 });
 
