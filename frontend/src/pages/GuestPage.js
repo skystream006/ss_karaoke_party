@@ -57,6 +57,17 @@ export default function GuestPage() {
     [partyId]
   );
 
+  const handlePause = useCallback(
+    async (item) => {
+      try {
+        await updateQueueItemStatus(partyId, item.id, 'queued');
+      } catch {
+        setError('Failed to pause song.');
+      }
+    },
+    [partyId]
+  );
+
   const handleReorder = async (reordered) => {
     const previous = queue;
     setQueue(reordered);
@@ -185,6 +196,7 @@ export default function GuestPage() {
                 onRemove={handleRemove}
                 onReorder={handleReorder}
                 onPlay={handlePlay}
+                onPause={handlePause}
                 isOrganizer={false}
                 canReorder={true}
                 canRemove={true}
