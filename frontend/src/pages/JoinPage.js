@@ -217,7 +217,7 @@ export default function JoinPage() {
             {error && <div className="error-msg">{error}</div>}
 
             <form onSubmit={handleJoin}>
-              <div className="form-group">
+              {joinRole !== 'organizer' && <div className="form-group">
                 <label>Your Name</label>
                 <div className="name-autocomplete-wrapper">
                   <input
@@ -254,7 +254,7 @@ export default function JoinPage() {
                     </ul>
                   )}
                 </div>
-              </div>
+              </div>}
 
               <div className="form-group">
                 <label>Join as</label>
@@ -276,7 +276,7 @@ export default function JoinPage() {
                 </div>
               </div>
 
-              <button type="submit" className="btn btn-primary btn-large" disabled={loading}>
+              <button type="submit" className="btn btn-join btn-large" disabled={loading}>
                 {loading ? 'Joining…' : `Join as ${joinRole === 'organizer' ? 'Organizer' : 'Guest'}`}
               </button>
             </form>
