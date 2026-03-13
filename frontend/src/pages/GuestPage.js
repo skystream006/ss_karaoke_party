@@ -7,9 +7,7 @@ import SongSearch from '../components/SongSearch';
 import ThemePicker from '../components/ThemePicker';
 import './GuestPage.css';
 
-const SOCKET_URL =
-  process.env.REACT_APP_SOCKET_URL ||
-  `${window.location.protocol}//${window.location.hostname}:6000`;
+import { SOCKET_URL } from '../utils/socketUrl';
 
 export default function GuestPage() {
   const { partyId } = useParams();

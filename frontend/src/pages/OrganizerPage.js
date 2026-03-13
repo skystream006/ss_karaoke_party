@@ -19,11 +19,7 @@ import CustomizationPanel from '../components/CustomizationPanel';
 import ThemePicker from '../components/ThemePicker';
 import './OrganizerPage.css';
 
-const SOCKET_URL =
-  process.env.REACT_APP_SOCKET_URL ||
-  (window.location.hostname === 'localhost'
-    ? 'http://localhost:6000'
-    : window.location.origin);
+import { SOCKET_URL } from '../utils/socketUrl';
 
 export default function OrganizerPage() {
   const { partyId } = useParams();

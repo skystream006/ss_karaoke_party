@@ -113,15 +113,92 @@ Ensure a PostgreSQL server is running locally. The backend will automatically ru
 | `YOUTUBE_API_KEY` | — | **Required** for song search |
 | `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
 
-### Frontend (`frontend/.env`)
+### Frontend (build-time, set in root `.env`)
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `REACT_APP_API_URL` | `/api` (proxied) | Backend API base URL |
-| `REACT_APP_SOCKET_URL` | auto-detected | Socket.IO server URL |
+These variables are **baked into the JavaScript bundle at build time** (`npm run build`).
+Leave them unset for localhost or LAN IP access — the app auto-detects the backend.
+Set them when deploying behind a reverse proxy (e.g. Nginx Proxy Manager).
+
+| Variable | Default (auto-detected) | Description |
+|----------|------------------------|-------------|
+| `REACT_APP_API_URL` | `http://<hostname>:6000/api` | Backend API base URL |
+| `REACT_APP_SOCKET_URL` | `http://<hostname>:6000` | Socket.IO server URL |
+
+**Auto-detection logic:**
+- `localhost` / `127.0.0.1` / LAN IP address → connects directly to `hostname:6000`
+- Domain name (e.g. `yourdomain.com`) → uses `window.location.origin`, expecting the reverse proxy to route `/socket.io/` and `/api/` to the backend
 
 ---
 
+## Reverse Proxy (Nginx Proxy Manager)
+
+### Same host as the karaoke stack
+
+Point the proxy host at `localhost:3000` and add this **Advanced** configuration:
+
+```nginx
+location /socket.io/ {
+    proxy_pass http://localhost:6000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location /api/ {
+    proxy_pass http://localhost:6000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+No extra `.env` settings needed — the auto-detection handles it.
+
+### NPM on a different host from the karaoke stack
+
+Replace `192.168.1.100` with the karaoke server's LAN IP.  
+Point the proxy host at `192.168.1.100:3000` and add this **Advanced** configuration:
+
+```nginx
+location /socket.io/ {
+    proxy_pass http://192.168.1.100:6000;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+
+location /api/ {
+    proxy_pass http://192.168.1.100:6000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+Also enable **Websockets Support** on the proxy host Details tab.
+
+Set the following in your root `.env` **before** running `docker-compose up --build`:
+
+```
+FRONTEND_URL=https://yourdomain.com
+REACT_APP_API_URL=https://yourdomain.com/api
+REACT_APP_SOCKET_URL=https://yourdomain.com
+```
+
+These values are baked into the frontend build so the browser connects through NPM
+rather than trying to reach port 6000 directly.
+
+---
 ## Application Flow
 
 ```
