@@ -159,6 +159,14 @@ router.post('/:id/join', writeLimiter, async (req, res) => {
       return res.status(404).json({ error: 'Party not found or not active' });
     }
 
+    const existingMember = await pool.query(
+      'SELECT * FROM party_members WHERE party_id = $1 AND LOWER(name) = LOWER($2)',
+      [req.params.id, memberName]
+    );
+    if (existingMember.rows.length > 0) {
+      return res.status(200).json(existingMember.rows[0]);
+    }
+
     const memberResult = await pool.query(
       'INSERT INTO party_members (party_id, name, role) VALUES ($1, $2, $3) RETURNING *',
       [req.params.id, memberName, memberRole]
