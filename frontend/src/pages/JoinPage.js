@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { getParties, getPartyByCode, joinParty, searchMembers } from '../services/api';
+import { getParties, getPartyByCode, joinParty, searchMembers, getPartyMembers } from '../services/api';
 import './JoinPage.css';
 
 export default function JoinPage() {
@@ -17,6 +17,9 @@ export default function JoinPage() {
   const [codeInput, setCodeInput] = useState(codeFromUrl || '');
   const [nameSuggestions, setNameSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [partyMembers, setPartyMembers] = useState([]);
+  const [loadingMembers, setLoadingMembers] = useState(false);
+  const [membersError, setMembersError] = useState(false);
   const nameInputRef = useRef(null);
   const suggestionsRef = useRef(null);
   const searchTimeoutRef = useRef(null);
@@ -67,6 +70,32 @@ export default function JoinPage() {
       setShowSuggestions(false);
     }
   }, []);
+
+  useEffect(() => {
+    if (!selectedParty) {
+      setPartyMembers([]);
+      setMembersError(false);
+      return;
+    }
+    let cancelled = false;
+    const load = async () => {
+      setLoadingMembers(true);
+      setMembersError(false);
+      try {
+        const res = await getPartyMembers(selectedParty.id);
+        if (!cancelled) setPartyMembers(res.data);
+      } catch {
+        if (!cancelled) {
+          setPartyMembers([]);
+          setMembersError(true);
+        }
+      } finally {
+        if (!cancelled) setLoadingMembers(false);
+      }
+    };
+    load();
+    return () => { cancelled = true; };
+  }, [selectedParty]);
 
   const fetchParties = async () => {
     try {
@@ -182,18 +211,7 @@ export default function JoinPage() {
                           setError('');
                         }}
                       >
-                        Guest
-                      </button>
-                      <button
-                        className="btn btn-sm btn-secondary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedParty(party);
-                          setJoinRole('organizer');
-                          setError('');
-                        }}
-                      >
-                        Organizer
+                        Join
                       </button>
                     </div>
                   </li>
@@ -215,6 +233,26 @@ export default function JoinPage() {
             </div>
 
             {error && <div className="error-msg">{error}</div>}
+
+            <div className="party-members-section">
+              <h3>Current Members</h3>
+              {loadingMembers ? (
+                <p className="muted">Loading members…</p>
+              ) : membersError ? (
+                <p className="muted">Could not load members.</p>
+              ) : partyMembers.length === 0 ? (
+                <p className="muted">No members yet — be the first!</p>
+              ) : (
+                <ul className="party-members-list">
+                  {partyMembers.map((m) => (
+                    <li key={m.id} className="party-member-item">
+                      <span className="member-name">{m.name}</span>
+                      <span className="member-role">{m.role === 'organizer' ? '🎤' : '🎵'}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
 
             <form onSubmit={handleJoin}>
               {joinRole !== 'organizer' && <div className="form-group">
