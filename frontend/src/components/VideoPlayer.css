@@ -121,6 +121,10 @@
   right: 2rem;
 }
 
+.fullscreen-prev-btn {
+  left: 2rem;
+}
+
 .video-placeholder {
   width: 100%;
   padding-bottom: 56.25%;
