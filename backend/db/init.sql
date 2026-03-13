@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS queue (
   video_title VARCHAR(500) NOT NULL,
   video_thumbnail VARCHAR(500),
   position INTEGER NOT NULL,
-  status VARCHAR(20) DEFAULT 'queued', -- 'queued', 'playing', 'played'
+  status VARCHAR(20) DEFAULT 'queued', -- 'queued', 'playing'
   added_at TIMESTAMP DEFAULT NOW()
 );
 

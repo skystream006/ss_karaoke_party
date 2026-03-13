@@ -166,10 +166,10 @@ router.put('/:partyId/reorder', writeLimiter, async (req, res) => {
   }
 });
 
-// PATCH /api/queue/:partyId/:itemId/status - Update item status (e.g., mark as playing/played)
+// PATCH /api/queue/:partyId/:itemId/status - Update item status (e.g., mark as playing/queued)
 router.patch('/:partyId/:itemId/status', writeLimiter, async (req, res) => {
   const { status } = req.body;
-  if (!['queued', 'playing', 'played'].includes(status)) {
+  if (!['queued', 'playing'].includes(status)) {
     return res.status(400).json({ error: 'Invalid status' });
   }
 

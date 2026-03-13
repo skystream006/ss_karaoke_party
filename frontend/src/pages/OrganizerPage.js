@@ -141,51 +141,34 @@ export default function OrganizerPage() {
   const handleVideoEnded = useCallback(async () => {
     // Find currently playing item
     const playing = queue.find((i) => i.status === 'playing');
-    if (playing) {
-      await updateQueueItemStatus(partyId, playing.id, 'played');
-    }
     // Auto-advance to next
-    const next = queue.find((i) => i.status === 'queued' && i.id !== playing?.id);
+    const next = queue.find((i) => i.status === 'queued');
     if (next) {
       await updateQueueItemStatus(partyId, next.id, 'playing');
       setCurrentVideoId(next.video_id);
     } else {
+      if (playing) {
+        await updateQueueItemStatus(partyId, playing.id, 'queued');
+      }
       setCurrentVideoId(null);
     }
   }, [partyId, queue]);
 
   const handleNext = useCallback(async () => {
     try {
-      const playing = queue.find((i) => i.status === 'playing');
-      if (playing) {
-        await updateQueueItemStatus(partyId, playing.id, 'played');
-      }
       const next = queue.find((i) => i.status === 'queued');
       if (next) {
         await updateQueueItemStatus(partyId, next.id, 'playing');
         setCurrentVideoId(next.video_id);
       } else {
+        const playing = queue.find((i) => i.status === 'playing');
+        if (playing) {
+          await updateQueueItemStatus(partyId, playing.id, 'queued');
+        }
         setCurrentVideoId(null);
       }
     } catch {
       setError('Failed to skip to next song.');
-    }
-  }, [partyId, queue]);
-
-  const handlePrevious = useCallback(async () => {
-    try {
-      const playedItems = queue.filter((i) => i.status === 'played');
-      if (playedItems.length === 0) return;
-      // The most recently played song has the highest position among played items
-      const lastPlayed = playedItems.reduce((a, b) => (a.position > b.position ? a : b));
-      const playing = queue.find((i) => i.status === 'playing');
-      if (playing) {
-        await updateQueueItemStatus(partyId, playing.id, 'queued');
-      }
-      await updateQueueItemStatus(partyId, lastPlayed.id, 'playing');
-      setCurrentVideoId(lastPlayed.video_id);
-    } catch {
-      setError('Failed to go to previous song.');
     }
   }, [partyId, queue]);
 
@@ -336,9 +319,7 @@ export default function OrganizerPage() {
               onEnded={handleVideoEnded}
               settings={settings}
               onNext={handleNext}
-              onPrevious={handlePrevious}
               hasNext={queue.some((i) => i.status === 'queued')}
-              hasPrevious={queue.some((i) => i.status === 'played')}
             />
 
             {/* Now playing info */}

@@ -53,7 +53,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                   <li
                     ref={dragProvided.innerRef}
                     {...dragProvided.draggableProps}
-                    className={`playlist-item ${item.status === 'playing' ? 'playing' : ''} ${item.status === 'played' ? 'played' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
+                    className={`playlist-item ${item.status === 'playing' ? 'playing' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
                   >
                     {/* Position number */}
                     <div className="playlist-pos">
