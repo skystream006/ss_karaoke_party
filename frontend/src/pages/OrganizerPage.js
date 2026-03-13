@@ -158,14 +158,14 @@ export default function OrganizerPage() {
   const handleVideoEnded = useCallback(async () => {
     // Find currently playing item
     const playing = queue.find((i) => i.status === 'playing');
-    // Auto-advance to next
+    // Auto-advance to next queued song (skip already-played songs)
     const next = queue.find((i) => i.status === 'queued');
     if (next) {
       await updateQueueItemStatus(partyId, next.id, 'playing');
       setCurrentVideoId(next.video_id);
     } else {
       if (playing) {
-        await updateQueueItemStatus(partyId, playing.id, 'queued');
+        await updateQueueItemStatus(partyId, playing.id, 'played');
       }
       setCurrentVideoId(null);
     }
@@ -173,14 +173,16 @@ export default function OrganizerPage() {
 
   const handleNext = useCallback(async () => {
     try {
+      // Find the next song that hasn't been played yet
       const next = queue.find((i) => i.status === 'queued');
       if (next) {
         await updateQueueItemStatus(partyId, next.id, 'playing');
         setCurrentVideoId(next.video_id);
       } else {
+        // No more upcoming songs – mark the current song as played and stop
         const playing = queue.find((i) => i.status === 'playing');
         if (playing) {
-          await updateQueueItemStatus(partyId, playing.id, 'queued');
+          await updateQueueItemStatus(partyId, playing.id, 'played');
         }
         setCurrentVideoId(null);
       }
@@ -250,6 +252,8 @@ export default function OrganizerPage() {
       </div>
     );
   }
+
+  const upcomingCount = queue.filter((i) => i.status !== 'played').length;
 
   return (
     <div className={`organizer-layout ${sidebarOpen ? 'sidebar-open' : ''}`}>
@@ -322,7 +326,7 @@ export default function OrganizerPage() {
             {sidebarTab === 'playlist' && (
               <>
                 <div className="queue-count">
-                  {queue.length} song{queue.length !== 1 ? 's' : ''} in queue
+                  {upcomingCount} song{upcomingCount !== 1 ? 's' : ''} in queue
                 </div>
                 <Playlist
                   queue={queue}

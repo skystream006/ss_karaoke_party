@@ -26,6 +26,10 @@
   background: rgba(233, 69, 96, 0.1);
 }
 
+.playlist-item.played {
+  opacity: 0.45;
+}
+
 .playlist-item.dragging {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   background: var(--bg-card);
@@ -43,6 +47,11 @@
   color: var(--primary);
   font-size: 1.1rem;
   animation: pulse 1s infinite;
+}
+
+.played-indicator {
+  color: var(--text-secondary);
+  font-size: 1rem;
 }
 
 @keyframes pulse {
