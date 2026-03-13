@@ -92,10 +92,10 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganiz
 
                     {/* Actions */}
                     <div className="playlist-actions">
-                      {isOrganizer && item.status !== 'playing' && (
+                      {onPlay && item.status !== 'playing' && (
                         <button
                           className="btn-icon-action btn-play"
-                          onClick={() => onPlay && onPlay(item)}
+                          onClick={() => onPlay(item)}
                           title="Play now"
                         >
                           ▶

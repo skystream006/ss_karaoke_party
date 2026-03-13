@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getParty, getQueue, removeFromQueue, reorderQueue } from '../services/api';
+import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import ThemePicker from '../components/ThemePicker';
@@ -44,6 +44,17 @@ export default function GuestPage() {
       // socket will handle the update if this fails
     }
   }, [partyId]);
+
+  const handlePlay = useCallback(
+    async (item) => {
+      try {
+        await updateQueueItemStatus(partyId, item.id, 'playing');
+      } catch {
+        setError('Failed to start song.');
+      }
+    },
+    [partyId]
+  );
 
   const handleReorder = async (reordered) => {
     const previous = queue;
@@ -155,6 +166,7 @@ export default function GuestPage() {
                 queue={queue}
                 onRemove={handleRemove}
                 onReorder={handleReorder}
+                onPlay={handlePlay}
                 isOrganizer={false}
                 canReorder={true}
                 canRemove={true}
