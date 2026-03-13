@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus } from '../services/api';
@@ -20,6 +20,9 @@ export default function GuestPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState('search');
+  const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
+
+  const socketRef = useRef(null);
 
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = sessionStorage.getItem('memberId');
@@ -79,6 +82,20 @@ export default function GuestPage() {
     }
   };
 
+  // Reset video progress when the playing song changes
+  const currentPlayingVideoId = queue.find((i) => i.status === 'playing')?.video_id;
+  useEffect(() => {
+    setVideoProgress({ currentTime: 0, duration: 0 });
+  }, [currentPlayingVideoId]);
+
+  // Send a seek request to the organizer's player
+  const handleSeek = useCallback(
+    (seekTime) => {
+      socketRef.current?.emit('video:seek', { partyId, seekTime });
+    },
+    [partyId]
+  );
+
   useEffect(() => {
     const loadData = async () => {
       try {
@@ -100,6 +117,7 @@ export default function GuestPage() {
   // Socket for real-time updates
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    socketRef.current = socket;
     socket.on('connect', () => {
       socket.emit('join:party', partyId);
     });
@@ -108,9 +126,14 @@ export default function GuestPage() {
         setQueue(updatedQueue);
       }
     });
+    // Receive real-time playback position broadcast by the organizer's player
+    socket.on('video:progress', ({ currentTime, duration }) => {
+      setVideoProgress({ currentTime, duration });
+    });
     return () => {
       socket.emit('leave:party', partyId);
       socket.disconnect();
+      socketRef.current = null;
     };
   }, [partyId]);
 
@@ -200,6 +223,9 @@ export default function GuestPage() {
                 isOrganizer={false}
                 canReorder={true}
                 canRemove={true}
+                currentTime={videoProgress.currentTime}
+                duration={videoProgress.duration}
+                onSeek={handleSeek}
               />
             )}
           </div>

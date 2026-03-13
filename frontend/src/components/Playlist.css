@@ -7,13 +7,18 @@
 
 .playlist-item {
   display: flex;
-  align-items: center;
-  gap: 0.6rem;
+  flex-direction: column;
   background: var(--bg-surface);
   border-radius: 10px;
   padding: 0.6rem 0.75rem;
   border: 1px solid var(--border);
   transition: background 0.2s, border-color 0.2s;
+}
+
+.playlist-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
 }
 
 .playlist-item.playing {
@@ -105,9 +110,11 @@
 @media (max-width: 768px) {
   .playlist-item {
     padding: 0.35rem 0.4rem;
-    gap: 0.35rem;
     min-height: 76px;
-    align-items: center;
+  }
+
+  .playlist-item-row {
+    gap: 0.35rem;
   }
 
   .playlist-thumb {
@@ -194,5 +201,57 @@
 
 .playlist-empty .muted {
   font-size: 0.85rem;
+}
+
+/* Progress slider shown below the playing song */
+.playlist-progress {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  padding: 0 0.1rem;
+}
+
+.progress-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  height: 4px;
+  background: var(--bg-surface);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.progress-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  transition: background 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4);
+}
+
+.progress-slider::-webkit-slider-thumb:hover {
+  background: var(--accent);
+}
+
+.progress-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--primary);
+  cursor: pointer;
+  border: none;
+}
+
+.progress-time {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  font-family: monospace;
+  white-space: nowrap;
+  min-width: 30px;
+  text-align: center;
 }
 
