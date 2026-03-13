@@ -63,7 +63,7 @@ export default function GuestPage() {
   const handlePause = useCallback(
     async (item) => {
       try {
-        await updateQueueItemStatus(partyId, item.id, 'queued');
+        await updateQueueItemStatus(partyId, item.id, 'paused');
       } catch {
         setError('Failed to pause song.');
       }
@@ -82,11 +82,11 @@ export default function GuestPage() {
     }
   };
 
-  // Reset video progress when the playing song changes
-  const currentPlayingVideoId = queue.find((i) => i.status === 'playing')?.video_id;
+  // Reset video progress when the active song changes (playing or paused)
+  const activeVideoId = queue.find((i) => i.status === 'playing' || i.status === 'paused')?.video_id;
   useEffect(() => {
     setVideoProgress({ currentTime: 0, duration: 0 });
-  }, [currentPlayingVideoId]);
+  }, [activeVideoId]);
 
   // Send a seek request to the organizer's player
   const handleSeek = useCallback(

@@ -127,7 +127,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                         <button
                           className="btn-icon-action btn-play"
                           onClick={() => onPlay(item)}
-                          title="Play now"
+                          title={item.status === 'paused' ? 'Resume' : 'Play now'}
                         >
                           ▶
                         </button>
@@ -153,8 +153,8 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                     </div>
                     </div>
 
-                    {/* Progress slider – only shown for the currently playing item */}
-                    {item.status === 'playing' && showSlider && (
+                    {/* Progress slider – shown for the currently playing or paused item */}
+                    {(item.status === 'playing' || item.status === 'paused') && showSlider && (
                       <div className="playlist-progress">
                         <span className="progress-time">{formatTime(sliderValue)}</span>
                         <input

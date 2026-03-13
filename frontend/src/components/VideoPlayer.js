@@ -12,12 +12,18 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
   useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
   useEffect(() => { onTimeUpdateRef.current = onTimeUpdate; }, [onTimeUpdate]);
 
-  // Expose seekTo so parent pages can programmatically seek the player
+  // Expose seekTo/pauseVideo/playVideo so parent pages can programmatically control the player
   useImperativeHandle(ref, () => ({
     seekTo: (seconds) => {
       if (playerRef.current?.seekTo) {
         playerRef.current.seekTo(seconds, true);
       }
+    },
+    pauseVideo: () => {
+      playerRef.current?.pauseVideo?.();
+    },
+    playVideo: () => {
+      playerRef.current?.playVideo?.();
     },
   }), []);
   const [isFullscreen, setIsFullscreen] = useState(false);
