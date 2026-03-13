@@ -5,17 +5,18 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 ## Features
 
 - 🎉 **Create a Party** — Organizer starts a named session and receives a QR code / join link for guests
-- 🎵 **Join a Party** — Guests join via QR code, join code, or browsing active parties; can join as Guest or Organizer
+- 🎵 **Join a Party** — Browse active parties, enter a join code, or scan a QR code; choose a Guest or Organizer role; name autocomplete suggests previous participants
 - 📋 **Party Queue** — Real-time playlist visible to all participants with full song-status lifecycle (`queued → playing ↔ paused → played`)
 - 🔍 **YouTube Search** — Search for songs with an optional **karaoke-only** filter, or add a song by pasting a YouTube URL directly
 - ⏯️ **Playback Controls** — Play, pause, resume, skip to next or go back to previous song; guests can also control playback from their device
+- 🖥️ **Fullscreen Playback** — Organizer can enter fullscreen mode with auto-hiding controls and previous/next navigation overlaid on the video
 - 📊 **Song Progress** — Real-time progress bar shared between the organizer player and all guests; guests can seek to any position
 - 🔄 **Queue Reset** — One-click reset returns all non-playing songs back to "queued"
 - 🎛️ **Customization** — Organizer can adjust key, tempo, and vocal level in real time
 - 🖱️ **Drag & Drop Reordering** — Organizer can rearrange the playlist; played songs are locked in place
 - 👥 **Member Management** — View, rename, change the role of, or remove any party member; secondary organizers are supported
 - 🔁 **Party Reactivation** — Ended parties can be reactivated without losing the member list or queue history
-- 🎨 **Themes** — Multiple colour themes selectable across the app
+- 🎨 **Themes** — 7 colour themes selectable across the app (Classic, Neon Purple, Ocean, Forest, Sunset, Midnight Gold, Dark); preference saved locally
 - ⚙️ **Admin / Settings Panel** — Dedicated settings page to manage all parties and their members; supports permanent party deletion
 - 📱 **Mobile-first** — Designed to be used on phones
 - ⚡ **Real-time Updates** — Queue updates pushed to all connected clients via Socket.IO
