@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import {
@@ -43,6 +43,19 @@ export default function OrganizerPage() {
   const videoPlayerRef = useRef(null);
 
   const memberName = sessionStorage.getItem('memberName') || 'Organizer';
+
+  // Memoized sorted queue and position-based navigation state
+  const { sortedQueue, currentIdx, hasPrev, hasNext } = useMemo(() => {
+    const sorted = [...queue].sort((a, b) => a.position - b.position);
+    const playingItem = queue.find((i) => i.status === 'playing');
+    const idx = playingItem ? sorted.findIndex((i) => i.id === playingItem.id) : -1;
+    return {
+      sortedQueue: sorted,
+      currentIdx: idx,
+      hasPrev: idx > 0,
+      hasNext: idx !== -1 && idx < sorted.length - 1,
+    };
+  }, [queue]);
 
   // Reset video progress when the playing song changes
   useEffect(() => {
@@ -171,25 +184,29 @@ export default function OrganizerPage() {
     }
   }, [partyId, queue]);
 
+  const handlePrev = useCallback(async () => {
+    try {
+      if (currentIdx > 0) {
+        const prev = sortedQueue[currentIdx - 1];
+        await updateQueueItemStatus(partyId, prev.id, 'playing');
+        setCurrentVideoId(prev.video_id);
+      }
+    } catch {
+      setError('Failed to go to previous song.');
+    }
+  }, [partyId, sortedQueue, currentIdx]);
+
   const handleNext = useCallback(async () => {
     try {
-      // Find the next song that hasn't been played yet
-      const next = queue.find((i) => i.status === 'queued');
-      if (next) {
+      if (currentIdx !== -1 && currentIdx < sortedQueue.length - 1) {
+        const next = sortedQueue[currentIdx + 1];
         await updateQueueItemStatus(partyId, next.id, 'playing');
         setCurrentVideoId(next.video_id);
-      } else {
-        // No more upcoming songs – mark the current song as played and stop
-        const playing = queue.find((i) => i.status === 'playing');
-        if (playing) {
-          await updateQueueItemStatus(partyId, playing.id, 'played');
-        }
-        setCurrentVideoId(null);
       }
     } catch {
       setError('Failed to skip to next song.');
     }
-  }, [partyId, queue]);
+  }, [partyId, sortedQueue, currentIdx]);
 
   // Emit playback progress to guests and update local display
   const handleTimeUpdate = useCallback((currentTime, duration) => {
@@ -355,8 +372,10 @@ export default function OrganizerPage() {
               videoId={currentVideoId}
               onEnded={handleVideoEnded}
               settings={settings}
+              onPrev={handlePrev}
+              hasPrev={hasPrev}
               onNext={handleNext}
-              hasNext={queue.some((i) => i.status === 'queued')}
+              hasNext={hasNext}
               onTimeUpdate={handleTimeUpdate}
             />
 
