@@ -122,6 +122,18 @@ export default function OrganizerPage() {
     [partyId]
   );
 
+  const handlePause = useCallback(
+    async (item) => {
+      try {
+        await updateQueueItemStatus(partyId, item.id, 'queued');
+        setCurrentVideoId(null);
+      } catch {
+        setError('Failed to pause song.');
+      }
+    },
+    [partyId]
+  );
+
   const handleVideoEnded = useCallback(async () => {
     // Find currently playing item
     const playing = queue.find((i) => i.status === 'playing');
@@ -301,6 +313,7 @@ export default function OrganizerPage() {
                   onRemove={handleRemove}
                   onReorder={handleReorder}
                   onPlay={handlePlay}
+                  onPause={handlePause}
                   isOrganizer={true}
                 />
               </>

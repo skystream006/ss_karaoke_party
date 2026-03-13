@@ -2,7 +2,7 @@ import React from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import './Playlist.css';
 
-export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganizer, canReorder, canRemove }) {
+export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, isOrganizer, canReorder, canRemove }) {
   // canReorder/canRemove default to isOrganizer when not explicitly provided
   const allowReorder = canReorder !== undefined ? canReorder : isOrganizer;
   const allowRemove = canRemove !== undefined ? canRemove : isOrganizer;
@@ -99,6 +99,15 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, isOrganiz
                           title="Play now"
                         >
                           ▶
+                        </button>
+                      )}
+                      {onPause && item.status === 'playing' && (
+                        <button
+                          className="btn-icon-action btn-pause"
+                          onClick={() => onPause(item)}
+                          title="Pause"
+                        >
+                          ⏸
                         </button>
                       )}
                       {allowRemove && (
