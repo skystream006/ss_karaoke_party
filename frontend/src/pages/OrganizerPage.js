@@ -8,7 +8,6 @@ import {
   reorderQueue,
   updateQueueItemStatus,
   resetQueue,
-  endParty,
   deleteParty,
   reactivateParty,
 } from '../services/api';
@@ -249,21 +248,8 @@ export default function OrganizerPage() {
     }
   }, [partyId]);
 
-  const handleEndParty = async () => {
-    if (!window.confirm('End this party? All guests will be disconnected.')) return;
-    try {
-      await endParty(partyId);
-      navigate('/');
-    } catch {
-      setError('Failed to end party.');
-    }
-  };
-
   const handleDeleteParty = async () => {
-    const input = window.prompt(
-      'This will permanently delete the party and all its data.\nType DELETE to confirm.'
-    );
-    if (input !== 'DELETE') return;
+    if (!window.confirm('Permanently delete this party and all its data? This cannot be undone.')) return;
     try {
       await deleteParty(partyId);
       navigate('/');
@@ -340,9 +326,6 @@ export default function OrganizerPage() {
         <div className="header-right">
           <span className="member-name-badge">👤 {memberName}</span>
           <ThemePicker />
-          <button className="btn btn-danger-sm" onClick={handleEndParty}>
-            End Party
-          </button>
           <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party">
             Delete Party
           </button>
