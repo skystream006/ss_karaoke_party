@@ -33,6 +33,8 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:-postgres}
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      API_ADMIN_PW: ${API_ADMIN_PW}
+      API_MEMBER_PW: ${API_MEMBER_PW}
     ports:
       - "6000:5000"
     restart: unless-stopped
