@@ -7,6 +7,7 @@ import JoinPage from './pages/JoinPage';
 import SettingsPage from './pages/SettingsPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import PasswordModal from './components/PasswordModal';
+import { version } from '../package.json';
 import './App.css';
 
 /** Detects QR-code access (/join/:code) and auto-grants member auth. */
@@ -70,6 +71,7 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <AppRoutes />
+        <div className="version-watermark">v{version}</div>
       </BrowserRouter>
     </AuthProvider>
   );
