@@ -79,7 +79,7 @@ export default function GuestPage() {
     const previous = queue;
     setQueue(reordered);
     try {
-      await reorderQueue(partyId, reordered.map((item) => item.id));
+      await reorderQueue(partyId, reordered.map((item) => ({ id: item.id, position: item.position })));
     } catch {
       setQueue(previous);
       setError('Failed to reorder queue.');
