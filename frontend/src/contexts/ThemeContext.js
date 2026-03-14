@@ -1,24 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
 export const themes = {
-  classic: {
-    label: 'Classic',
-    swatch: '#e94560',
-    vars: {
-      '--primary': '#e94560',
-      '--primary-dark': '#c23152',
-      '--secondary': '#0f3460',
-      '--accent': '#f5a623',
-      '--accent-dark': '#d4891a',
-      '--bg-dark': '#1a1a2e',
-      '--bg-card': '#16213e',
-      '--bg-surface': '#0f3460',
-      '--text-primary': '#e0e0e0',
-      '--text-secondary': '#a0a0b0',
-      '--border': 'rgba(255,255,255,0.1)',
-      '--shadow': '0 4px 20px rgba(0,0,0,0.4)',
-    },
-  },
   neonPurple: {
     label: 'Neon Purple',
     swatch: '#b44fff',
