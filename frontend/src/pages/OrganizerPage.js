@@ -338,13 +338,6 @@ export default function OrganizerPage() {
           </div>
         )}
         <div className="header-right">
-          <button
-            className="qr-panel-toggle"
-            onClick={() => setQrPanelOpen(!qrPanelOpen)}
-            aria-label="Toggle QR code"
-          >
-            {qrPanelOpen ? '✕' : '📱'}
-          </button>
           <span className="member-name-badge">👤 {memberName}</span>
           <ThemePicker />
           <button className="btn btn-danger-sm" onClick={handleEndParty}>
@@ -352,6 +345,13 @@ export default function OrganizerPage() {
           </button>
           <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party">
             Delete Party
+          </button>
+          <button
+            className="qr-panel-toggle"
+            onClick={() => setQrPanelOpen(!qrPanelOpen)}
+            aria-label="Toggle QR code"
+          >
+            {qrPanelOpen ? '✕' : '📱'}
           </button>
         </div>
       </header>
