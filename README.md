@@ -6,16 +6,19 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 
 - 🎉 **Create a Party** — Organizer starts a named session and receives a QR code / join link for guests
 - 🎵 **Join a Party** — Guests join via QR code, join code, or browsing active parties; can join as Guest or Organizer
+- 👋 **Returning Member Quick-Join** — Join page shows current party members to click and rejoin instantly; name field autocompletes from past parties
 - 📋 **Party Queue** — Real-time playlist visible to all participants with full song-status lifecycle (`queued → playing ↔ paused → played`)
-- 🔍 **YouTube Search** — Search for songs with an optional **karaoke-only** filter, or add a song by pasting a YouTube URL directly
+- 🔍 **YouTube Search** — Both organizer and guests can search for songs with an optional **karaoke-only** filter, or add a song by pasting a YouTube URL directly
 - ⏯️ **Playback Controls** — Play, pause, resume, skip to next or go back to previous song; guests can also control playback from their device
+- ⏭️ **Auto-advance** — Player automatically moves to the next queued song when the current one ends
 - 📊 **Song Progress** — Real-time progress bar shared between the organizer player and all guests; guests can seek to any position
 - 🔄 **Queue Reset** — One-click reset returns all non-playing songs to `queued`
 - 🎛️ **Customization** — Organizer can adjust key, tempo, and vocal level in real time
-- 🖱️ **Drag & Drop Reordering** — Organizer can rearrange the playlist
+- 🖱️ **Drag & Drop Reordering** — Organizer and guests can rearrange and remove songs from the playlist
 - 👥 **Member Management** — View, rename, change the role of, or remove any party member; secondary organizers are supported
 - 🔁 **Party Reactivation** — Ended parties can be reactivated without losing the member list or queue history
 - 🎨 **Themes** — Multiple colour themes selectable across the app
+- 🔐 **Password Protection** — Two-tier access control (member / admin); QR-code join links auto-grant member access without a password prompt
 - ⚙️ **Admin / Settings Panel** — Dedicated settings page to manage all parties and their members; supports permanent party deletion
 - 📱 **Mobile-first** — Designed to be used on phones
 - ⚡ **Real-time Updates** — Queue and playback state pushed to all connected clients via Socket.IO
@@ -50,6 +53,8 @@ Edit `.env` and fill in:
 
 ```
 YOUTUBE_API_KEY=your_key_here
+API_ADMIN_PW=choose_a_strong_admin_password
+API_MEMBER_PW=choose_a_member_password
 ```
 
 ### 2. Start with Docker Compose
@@ -63,7 +68,7 @@ cd /to/folder && git pull && docker compose up --build -d
 ```
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+- Backend API: http://localhost:6000
 
 ### 3. Open on your phone
 
@@ -116,6 +121,8 @@ Ensure a PostgreSQL server is running locally. The backend will automatically ru
 | `DB_PASSWORD` | `postgres` | DB password |
 | `YOUTUBE_API_KEY` | — | **Required** for song search |
 | `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
+| `API_ADMIN_PW` | — | **Required** password for admin access (settings page, management APIs) |
+| `API_MEMBER_PW` | — | **Required** password for member access (join, guest, organizer pages) |
 
 ### Frontend (`frontend/.env`)
 
@@ -123,6 +130,19 @@ Ensure a PostgreSQL server is running locally. The backend will automatically ru
 |----------|---------|-------------|
 | `REACT_APP_API_URL` | `/api` (proxied) | Backend API base URL |
 | `REACT_APP_SOCKET_URL` | auto-detected | Socket.IO server URL |
+
+---
+
+## Authentication
+
+The app uses a simple password-based session system. Two password tiers are configured via environment variables:
+
+| Level | Env var | Access |
+|-------|---------|--------|
+| **member** | `API_MEMBER_PW` | Join parties, use guest and organizer pages, and their APIs |
+| **admin** | `API_ADMIN_PW` | Everything above **plus** the settings page and all party/member management APIs |
+
+On first visit the app prompts for a password. A session token (valid for 24 hours) is issued and sent with every subsequent API request as a `Bearer` token. QR-code join links automatically obtain a member-level session without a password prompt.
 
 ---
 
