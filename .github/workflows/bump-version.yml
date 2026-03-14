@@ -1,0 +1,37 @@
+name: Bump Patch Version on PR Merge
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+jobs:
+  bump-version:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump patch version (frontend)
+        working-directory: frontend
+        run: npm version patch --no-git-tag-version
+
+      - name: Bump patch version (backend)
+        working-directory: backend
+        run: npm version patch --no-git-tag-version
+
+      - name: Commit and push version bump
+        run: |
+          NEW_VERSION=$(node -p "require('./frontend/package.json').version")
+          git add frontend/package.json backend/package.json
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git push origin main
