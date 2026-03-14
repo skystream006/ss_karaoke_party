@@ -35,6 +35,7 @@ export default function OrganizerPage() {
   const [currentVideoId, setCurrentVideoId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'search' | 'settings'
+  const [qrPanelOpen, setQrPanelOpen] = useState(true);
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -337,6 +338,13 @@ export default function OrganizerPage() {
           </div>
         )}
         <div className="header-right">
+          <button
+            className="qr-panel-toggle"
+            onClick={() => setQrPanelOpen(!qrPanelOpen)}
+            aria-label="Toggle QR code"
+          >
+            {qrPanelOpen ? '✕' : '📱'}
+          </button>
           <span className="member-name-badge">👤 {memberName}</span>
           <ThemePicker />
           <button className="btn btn-danger-sm" onClick={handleEndParty}>
@@ -455,11 +463,17 @@ export default function OrganizerPage() {
               <span>Guests can join at: <strong>{party.join_code}</strong></span>
             </div>
           </div>
+        </main>
 
-          <div className="main-qr-section">
+        {/* Slide-out QR Panel (right) */}
+        <aside className={`qr-panel ${qrPanelOpen ? 'open' : ''}`}>
+          <div className="qr-panel-header">
+            <span className="qr-panel-title">📱 Join Party</span>
+          </div>
+          <div className="qr-panel-body">
             <QRCodeModal party={party} />
           </div>
-        </main>
+        </aside>
       </div>
 
     </div>
