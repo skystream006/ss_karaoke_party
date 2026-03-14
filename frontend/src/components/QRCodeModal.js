@@ -27,7 +27,7 @@ export default function QRCodeModal({ party }) {
   const activeUrl = activeQr === 'ip' && ipJoinUrl ? ipJoinUrl : joinUrl;
 
   return (
-    <div className="qr-panel">
+    <div>
       <div className="modal-content">
         <div className="modal-header">
           <h2>Join "{party.name}"</h2>
