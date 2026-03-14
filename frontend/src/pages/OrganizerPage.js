@@ -181,8 +181,9 @@ export default function OrganizerPage() {
   const handleVideoEnded = useCallback(async () => {
     // Find currently playing or paused item
     const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
-    // Auto-advance to next queued song (skip already-played songs)
-    const next = queue.find((i) => i.status === 'queued');
+    // Auto-advance to the next song by position, regardless of its played status
+    const nextSongs = active ? queue.filter((i) => i.position > active.position) : [];
+    const next = nextSongs.length > 0 ? nextSongs.reduce((a, b) => (a.position < b.position ? a : b)) : null;
     if (next) {
       await updateQueueItemStatus(partyId, next.id, 'playing');
       setCurrentVideoId(next.video_id);
