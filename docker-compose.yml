@@ -45,6 +45,8 @@ services:
     environment:
       REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5000/api}
       REACT_APP_SOCKET_URL: ${REACT_APP_SOCKET_URL:-http://localhost:5000}
+      REACT_APP_ADMIN_PW: ${REACT_APP_ADMIN_PW}
+      REACT_APP_MEMBER_PW: ${REACT_APP_MEMBER_PW}
     ports:
       - "3000:80"
     restart: unless-stopped
