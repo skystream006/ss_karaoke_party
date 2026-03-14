@@ -6,16 +6,19 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 
 - 🎉 **Create a Party** — Organizer starts a named session and receives a QR code / join link for guests
 - 🎵 **Join a Party** — Guests join via QR code, join code, or browsing active parties; can join as Guest or Organizer
+- 👋 **Returning Member Quick-Join** — Join page shows current party members to click and rejoin instantly; name field autocompletes from past parties
 - 📋 **Party Queue** — Real-time playlist visible to all participants with full song-status lifecycle (`queued → playing ↔ paused → played`)
-- 🔍 **YouTube Search** — Search for songs with an optional **karaoke-only** filter, or add a song by pasting a YouTube URL directly
+- 🔍 **YouTube Search** — Both organizer and guests can search for songs with an optional **karaoke-only** filter, or add a song by pasting a YouTube URL directly
 - ⏯️ **Playback Controls** — Play, pause, resume, skip to next or go back to previous song; guests can also control playback from their device
+- ⏭️ **Auto-advance** — Player automatically moves to the next queued song when the current one ends
 - 📊 **Song Progress** — Real-time progress bar shared between the organizer player and all guests; guests can seek to any position
 - 🔄 **Queue Reset** — One-click reset returns all non-playing songs to `queued`
 - 🎛️ **Customization** — Organizer can adjust key, tempo, and vocal level in real time
-- 🖱️ **Drag & Drop Reordering** — Organizer can rearrange the playlist
+- 🖱️ **Drag & Drop Reordering** — Organizer and guests can rearrange and remove songs from the playlist
 - 👥 **Member Management** — View, rename, change the role of, or remove any party member; secondary organizers are supported
 - 🔁 **Party Reactivation** — Ended parties can be reactivated without losing the member list or queue history
 - 🎨 **Themes** — Multiple colour themes selectable across the app
+- 🔐 **Password Protection** — Two-tier access control (member / admin); QR-code join links auto-grant member access without a password prompt
 - ⚙️ **Admin / Settings Panel** — Dedicated settings page to manage all parties and their members; supports permanent party deletion
 - 📱 **Mobile-first** — Designed to be used on phones
 - ⚡ **Real-time Updates** — Queue and playback state pushed to all connected clients via Socket.IO
