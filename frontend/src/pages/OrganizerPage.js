@@ -16,6 +16,7 @@ import VideoPlayer from '../components/VideoPlayer';
 import Playlist from '../components/Playlist';
 import QRCodeModal from '../components/QRCodeModal';
 import CustomizationPanel from '../components/CustomizationPanel';
+import SongSearch from '../components/SongSearch';
 import ThemePicker from '../components/ThemePicker';
 import './OrganizerPage.css';
 
@@ -33,7 +34,7 @@ export default function OrganizerPage() {
   const [queue, setQueue] = useState([]);
   const [currentVideoId, setCurrentVideoId] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'settings'
+  const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'search' | 'settings'
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -378,6 +379,12 @@ export default function OrganizerPage() {
                 🎵 Playlist
               </button>
               <button
+                className={`sidebar-tab ${sidebarTab === 'search' ? 'active' : ''}`}
+                onClick={() => setSidebarTab('search')}
+              >
+                🔍 Search
+              </button>
+              <button
                 className={`sidebar-tab ${sidebarTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setSidebarTab('settings')}
               >
@@ -414,6 +421,12 @@ export default function OrganizerPage() {
                   onSeek={handleSeek}
                 />
               </>
+            )}
+            {sidebarTab === 'search' && (
+              <SongSearch
+                partyId={partyId}
+                member={{ name: memberName }}
+              />
             )}
             {sidebarTab === 'settings' && (
               <CustomizationPanel settings={settings} onChange={setSettings} />
