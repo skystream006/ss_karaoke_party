@@ -230,8 +230,19 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.src = '';
-        clearInterval(progressIntervalRef.current);
-        progressIntervalRef.current = null;
+      }
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+      // If YouTube is currently playing, restart the progress polling interval
+      // (it was suspended while audio mode was active)
+      if (playerRef.current?.getPlayerState?.() === window.YT?.PlayerState?.PLAYING) {
+        progressIntervalRef.current = setInterval(() => {
+          if (playerRef.current?.getCurrentTime) {
+            const ct = playerRef.current.getCurrentTime();
+            const dur = playerRef.current.getDuration();
+            onTimeUpdateRef.current?.(ct, dur);
+          }
+        }, 1000);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed only on settings.key; current values read via refs

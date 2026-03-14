@@ -85,6 +85,9 @@ router.get('/:videoId', (req, res) => {
   res.setHeader('Content-Type', 'audio/ogg');
   res.setHeader('Cache-Control', 'no-cache');
 
+  // Build the ffmpeg command and store it so we can kill it on disconnect.
+  // Note: .pipe() returns the destination stream, not the FfmpegCommand, so we
+  // must store the command before calling pipe().
   const command = ffmpeg(audioStream)
     .audioFilters([`asetrate=${shiftedRate}`, `aresample=${SAMPLE_RATE}`])
     .format('ogg')
@@ -98,15 +101,16 @@ router.get('/:videoId', (req, res) => {
       } else {
         res.end();
       }
-    })
-    .pipe(res, { end: true });
+    });
 
-  // When the client disconnects, destroy the ffmpeg command to free resources
+  command.pipe(res, { end: true });
+
+  // When the client disconnects, kill the ffmpeg process to free resources
   req.on('close', () => {
     try {
-      command.destroy?.();
+      command.kill('SIGKILL');
     } catch {
-      // ignore
+      // ignore – command may have already finished
     }
   });
 });
