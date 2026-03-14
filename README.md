@@ -50,6 +50,8 @@ Edit `.env` and fill in:
 
 ```
 YOUTUBE_API_KEY=your_key_here
+API_ADMIN_PW=choose_a_strong_admin_password
+API_MEMBER_PW=choose_a_member_password
 ```
 
 ### 2. Start with Docker Compose
@@ -63,7 +65,7 @@ cd /to/folder && git pull && docker compose up --build -d
 ```
 
 - Frontend: http://localhost:3000
-- Backend API: http://localhost:5000
+- Backend API: http://localhost:6000
 
 ### 3. Open on your phone
 
@@ -116,6 +118,8 @@ Ensure a PostgreSQL server is running locally. The backend will automatically ru
 | `DB_PASSWORD` | `postgres` | DB password |
 | `YOUTUBE_API_KEY` | — | **Required** for song search |
 | `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
+| `API_ADMIN_PW` | — | **Required** password for admin access (settings page, management APIs) |
+| `API_MEMBER_PW` | — | **Required** password for member access (join, guest, organizer pages) |
 
 ### Frontend (`frontend/.env`)
 
@@ -123,6 +127,19 @@ Ensure a PostgreSQL server is running locally. The backend will automatically ru
 |----------|---------|-------------|
 | `REACT_APP_API_URL` | `/api` (proxied) | Backend API base URL |
 | `REACT_APP_SOCKET_URL` | auto-detected | Socket.IO server URL |
+
+---
+
+## Authentication
+
+The app uses a simple password-based session system. Two password tiers are configured via environment variables:
+
+| Level | Env var | Access |
+|-------|---------|--------|
+| **member** | `API_MEMBER_PW` | Join parties, use guest and organizer pages, and their APIs |
+| **admin** | `API_ADMIN_PW` | Everything above **plus** the settings page and all party/member management APIs |
+
+On first visit the app prompts for a password. A session token (valid for 24 hours) is issued and sent with every subsequent API request as a `Bearer` token. QR-code join links automatically obtain a member-level session without a password prompt.
 
 ---
 
