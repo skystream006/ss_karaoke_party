@@ -274,7 +274,7 @@ export default function JoinPage() {
                     <li key={m.id} className="party-member-item">
                       <div className="member-info">
                         <span className="member-name">{m.name}</span>
-                        <span className="member-role">{m.role === 'organizer' ? '🎤' : '🎵'}</span>
+                        <span className="member-role">{m.role === 'organizer' ? '👑' : '🎤'}</span>
                       </div>
                       <button
                         type="button"
