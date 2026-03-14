@@ -8,6 +8,7 @@ const os = require('os');
 const path = require('path');
 const pool = require('./db/db');
 const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
+const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 const server = http.createServer(app);
@@ -32,15 +33,21 @@ app.use(express.json());
 // Apply general rate limiter to all API routes
 app.use('/api', generalLimiter);
 
+// Auth routes (no authentication required)
+app.use('/api/auth', require('./routes/auth'));
+
+// Health check (public — no auth required for monitoring)
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// Apply authentication to all remaining API routes
+app.use('/api', requireAuth);
+
 // Routes (more specific limiters are applied per-route inside route files)
 app.use('/api/parties', require('./routes/parties'));
 app.use('/api/queue', require('./routes/queue'));
 app.use('/api/youtube', searchLimiter, require('./routes/youtube'));
-
-// Health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
 
 // Server info (local IP address)
 app.get('/api/server-info', (req, res) => {

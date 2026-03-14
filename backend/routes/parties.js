@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db/db');
 const { v4: uuidv4 } = require('uuid');
 const { writeLimiter } = require('../middleware/rateLimiter');
+const { requireAdmin } = require('../middleware/auth');
 
 const DEFAULT_ORGANIZER_NAME = 'Organizer';
 // Generate a short join code
@@ -28,8 +29,8 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET /api/parties/all - List all parties (active and inactive)
-router.get('/all', async (req, res) => {
+// GET /api/parties/all - List all parties (active and inactive) — admin only
+router.get('/all', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT id, name, join_code, is_active, created_at FROM parties ORDER BY created_at DESC'
@@ -178,8 +179,8 @@ router.post('/:id/join', writeLimiter, async (req, res) => {
   }
 });
 
-// PATCH /api/parties/:id - Update party details (e.g. name)
-router.patch('/:id', writeLimiter, async (req, res) => {
+// PATCH /api/parties/:id - Update party details (e.g. name) — admin only
+router.patch('/:id', writeLimiter, requireAdmin, async (req, res) => {
   const { name } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Party name is required' });
@@ -265,8 +266,8 @@ router.get('/:id/members', async (req, res) => {
   }
 });
 
-// PATCH /api/parties/:id/members/:memberId - Update a party member
-router.patch('/:id/members/:memberId', writeLimiter, async (req, res) => {
+// PATCH /api/parties/:id/members/:memberId - Update a party member — admin only
+router.patch('/:id/members/:memberId', writeLimiter, requireAdmin, async (req, res) => {
   const { name, role } = req.body;
   if (!name || !name.trim()) {
     return res.status(400).json({ error: 'Member name is required' });
@@ -308,8 +309,8 @@ router.patch('/:id/members/:memberId', writeLimiter, async (req, res) => {
   }
 });
 
-// DELETE /api/parties/:id/members/:memberId - Remove a party member
-router.delete('/:id/members/:memberId', writeLimiter, async (req, res) => {
+// DELETE /api/parties/:id/members/:memberId - Remove a party member — admin only
+router.delete('/:id/members/:memberId', writeLimiter, requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       'DELETE FROM party_members WHERE id = $1 AND party_id = $2 RETURNING id',

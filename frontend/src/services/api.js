@@ -4,6 +4,15 @@ const api = axios.create({
   baseURL: process.env.REACT_APP_API_URL || '/api',
 });
 
+// Attach auth token to every request
+api.interceptors.request.use((config) => {
+  const token = sessionStorage.getItem('authToken');
+  if (token) {
+    config.headers['Authorization'] = `Bearer ${token}`;
+  }
+  return config;
+});
+
 // Parties
 export const getParties = () => api.get('/parties');
 export const getAllParties = () => api.get('/parties/all');
