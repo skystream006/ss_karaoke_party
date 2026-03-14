@@ -13,8 +13,6 @@ const SOCKET_URL =
     ? 'http://localhost:5000'
     : window.location.origin.replace(':3000', ':5000'));
 
-console.info("XXXXXX SOCKET_URL: " + SOCKET_URL)
-
 export default function GuestPage() {
   const { partyId } = useParams();
   const navigate = useNavigate();
