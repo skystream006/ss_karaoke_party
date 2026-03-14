@@ -13,10 +13,29 @@ const { requireAuth } = require('./middleware/auth');
 const app = express();
 const server = http.createServer(app);
 
-// CORS configuration
+// CORS configuration: when FRONTEND_URL is set restrict to that origin;
+// otherwise allow requests from localhost and RFC-1918 private-network
+// addresses so QR-code access from any LAN device works without extra
+// configuration, while still blocking requests from the public internet.
+const localOriginCheck = (origin, callback) => {
+  if (!origin) return callback(null, true); // same-origin / server-to-server
+  try {
+    const { hostname } = new URL(origin);
+    const allowed =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      /^192\.168\./.test(hostname) ||
+      /^10\./.test(hostname) ||
+      /^172\.(1[6-9]|2[0-9]|3[01])\./.test(hostname);
+    callback(null, allowed);
+  } catch {
+    callback(null, false);
+  }
+};
+
 const allowedOrigins = process.env.FRONTEND_URL
-  ? [process.env.FRONTEND_URL]
-  : ['http://localhost:3000', 'http://localhost:3001'];
+  ? process.env.FRONTEND_URL
+  : localOriginCheck;
 
 const io = new Server(server, {
   cors: {

@@ -3,7 +3,11 @@ import { io } from 'socket.io-client';
 
 const SocketContext = createContext(null);
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || window.location.origin.replace(':3000', ':5000');
+const SOCKET_URL =
+  process.env.REACT_APP_SOCKET_URL ||
+  (window.location.hostname === 'localhost'
+    ? 'http://localhost:5000'
+    : window.location.origin);
 
 export function SocketProvider({ children, partyId }) {
   const socketRef = useRef(null);
