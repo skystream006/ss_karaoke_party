@@ -98,4 +98,4 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { requireAuth, requireAdmin, createSession, validatePassword };
+module.exports = { requireAuth, requireAdmin, createSession, validatePassword, resolveAuthLevel };

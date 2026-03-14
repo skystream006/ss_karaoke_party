@@ -10,7 +10,8 @@ export function SocketProvider({ children, partyId }) {
   const [connected, setConnected] = useState(false);
 
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    const token = sessionStorage.getItem('authToken');
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'], auth: { token } });
     socketRef.current = socket;
 
     socket.on('connect', () => {

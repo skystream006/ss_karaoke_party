@@ -9,9 +9,7 @@ import './GuestPage.css';
 
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL ||
-  (window.location.hostname === 'localhost'
-    ? 'http://localhost:5000'
-    : window.location.origin);
+  window.location.origin.replace(':3000', ':5000');
 
 export default function GuestPage() {
   const { partyId } = useParams();
@@ -118,7 +116,8 @@ export default function GuestPage() {
 
   // Socket for real-time updates
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    const token = sessionStorage.getItem('authToken');
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'], auth: { token } });
     socketRef.current = socket;
     socket.on('connect', () => {
       socket.emit('join:party', partyId);

@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const pool = require('./db/db');
 const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
-const { requireAuth } = require('./middleware/auth');
+const { requireAuth, resolveAuthLevel } = require('./middleware/auth');
 
 const app = express();
 const server = http.createServer(app);
@@ -66,6 +66,16 @@ app.get('/api/server-info', (req, res) => {
 });
 
 // Socket.IO
+io.use((socket, next) => {
+  const token = socket.handshake.auth?.token;
+  const level = resolveAuthLevel(token);
+  if (!level) {
+    return next(new Error('Authentication token missing or invalid'));
+  }
+  socket.authLevel = level;
+  next();
+});
+
 io.on('connection', (socket) => {
   console.log(`Socket connected: ${socket.id}`);
 
