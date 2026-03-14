@@ -41,6 +41,10 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Audio route: registered before the global requireAuth because it handles its own
+// authentication (accepts the token via query param ?t= for use as an <audio> src).
+app.use('/api/audio', require('./routes/audio'));
+
 // Apply authentication to all remaining API routes
 app.use('/api', requireAuth);
 

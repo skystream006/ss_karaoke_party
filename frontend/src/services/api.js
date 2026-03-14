@@ -45,6 +45,27 @@ export const searchYouTube = (query, karaoke = false) =>
 // YouTube video lookup by URL
 export const getYouTubeVideoByUrl = (url) => api.get(`/youtube/video?url=${encodeURIComponent(url)}`);
 
+/**
+ * Build a URL for the server-side pitch-shifted audio stream.
+ * The ?t= query parameter carries the auth token so the URL can be used
+ * directly as an <audio> element's src attribute (which cannot set headers).
+ *
+ * @param {string} videoId  YouTube video ID
+ * @param {number} key      Semitone shift (non-zero integer, -6 to +6)
+ * @param {number} startSec Start offset in seconds (for seeking)
+ * @returns {string} Full URL for the audio stream
+ */
+export function buildAudioUrl(videoId, key, startSec = 0) {
+  const token = sessionStorage.getItem('authToken') || '';
+  const base = process.env.REACT_APP_API_URL || '/api';
+  const params = new URLSearchParams({
+    key: String(key),
+    start: String(Math.floor(Math.max(0, startSec))),
+  });
+  if (token) params.set('t', token);
+  return `${base}/audio/${videoId}?${params}`;
+}
+
 // Server info
 export const getServerInfo = () => api.get('/server-info');
 

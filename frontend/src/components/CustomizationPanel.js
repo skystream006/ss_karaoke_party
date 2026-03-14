@@ -31,7 +31,6 @@ export default function CustomizationPanel({ settings, onChange }) {
           <span>0</span>
           <span>+6</span>
         </div>
-        <p className="control-note">Note: Key adjustment requires audio processing support</p>
       </div>
 
       <div className="control-group">
