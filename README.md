@@ -57,6 +57,10 @@ YOUTUBE_API_KEY=your_key_here
 ```bash
 docker-compose up --build
 ```
+#### 2.a Updating
+```bash
+cd /to/folder && git pull && docker compose up --build -d
+```
 
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:5000
