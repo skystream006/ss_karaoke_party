@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../db/db');
 const { v4: uuidv4 } = require('uuid');
 const { writeLimiter } = require('../middleware/rateLimiter');
-const { requireAdmin } = require('../middleware/auth');
+const { requireAdmin, requireAuth } = require('../middleware/auth');
 
 const DEFAULT_ORGANIZER_NAME = 'Organizer';
 // Generate a short join code
@@ -217,12 +217,32 @@ router.patch('/:id/reactivate', async (req, res) => {
   }
 });
 
-// PATCH /api/parties/:id/lock - Lock or unlock a party — admin only
-router.patch('/:id/lock', writeLimiter, requireAdmin, async (req, res) => {
-  const { is_locked } = req.body;
+// PATCH /api/parties/:id/lock - Lock or unlock a party — admin or organizer
+router.patch('/:id/lock', writeLimiter, requireAuth, async (req, res) => {
+  const { is_locked, member_id } = req.body;
   if (typeof is_locked !== 'boolean') {
     return res.status(400).json({ error: 'is_locked must be a boolean' });
   }
+
+  // Non-admin callers must supply a member_id that belongs to an organizer of this party
+  if (req.authLevel !== 'admin') {
+    if (!member_id) {
+      return res.status(403).json({ error: 'Only organizers can lock the party' });
+    }
+    try {
+      const memberResult = await pool.query(
+        'SELECT role FROM party_members WHERE id = $1 AND party_id = $2',
+        [member_id, req.params.id]
+      );
+      if (memberResult.rows.length === 0 || memberResult.rows[0].role !== 'organizer') {
+        return res.status(403).json({ error: 'Only organizers can lock the party' });
+      }
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to verify organizer status' });
+    }
+  }
+
   try {
     const result = await pool.query(
       'UPDATE parties SET is_locked = $1 WHERE id = $2 RETURNING id, name, join_code, is_active, is_locked, created_at',
