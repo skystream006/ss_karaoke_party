@@ -103,7 +103,33 @@ npm start              # runs on port 3000, proxies /api to :5000
 
 ### Database
 
-Ensure a PostgreSQL server is running locally. The backend will automatically run `db/init.sql` on startup to create the required tables.
+Ensure a PostgreSQL server is running locally. Schema migrations are managed by **Flyway**.
+
+When running via Docker Compose, Flyway runs automatically before the backend starts. For local development without Docker, run Flyway manually:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/backend/db/migrations:/flyway/sql" \
+  flyway/flyway:10-alpine \
+  -url=jdbc:postgresql://localhost:5432/karaoke_party \
+  -user=postgres \
+  -password=postgres \
+  migrate
+```
+
+#### Adding a new migration
+
+Create a new file in `backend/db/migrations/` following the naming convention:
+
+```
+V<version>__<description>.sql
+```
+
+Examples:
+- `V2__Add_played_at_to_queue.sql`
+- `V3__Add_party_settings_table.sql`
+
+Flyway applies migrations in version order and tracks which have already run in the `flyway_schema_history` table — each migration is applied exactly once.
 
 ---
 

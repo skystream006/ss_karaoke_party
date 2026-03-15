@@ -18,12 +18,30 @@ services:
       timeout: 5s
       retries: 5
 
+  flyway:
+    image: flyway/flyway:10-alpine
+    container_name: karaoke_flyway
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - ./backend/db/migrations:/flyway/sql
+    environment:
+      FLYWAY_URL: jdbc:postgresql://db:5432/${DB_NAME:-karaoke_party}
+      FLYWAY_USER: ${DB_USER:-postgres}
+      FLYWAY_PASSWORD: ${DB_PASSWORD:-postgres}
+      FLYWAY_CONNECT_RETRIES: 5
+    command: migrate
+    restart: "no"
+
   backend:
     build: ./backend
     container_name: karaoke_backend
     depends_on:
       db:
         condition: service_healthy
+      flyway:
+        condition: service_completed_successfully
     environment:
       PORT: 5000
       DB_HOST: db

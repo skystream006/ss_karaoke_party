@@ -3,15 +3,15 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
-const fs = require('fs');
 const os = require('os');
-const path = require('path');
 const pool = require('./db/db');
 const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
 const { requireAuth } = require('./middleware/auth');
 
 const app = express();
 const server = http.createServer(app);
+
+// Database schema is managed by Flyway (see backend/db/migrations/).
 
 // CORS configuration
 const allowedOrigins = process.env.FRONTEND_URL
@@ -103,22 +103,8 @@ io.on('connection', (socket) => {
   });
 });
 
-// Initialize database schema then start server
-async function initDb() {
-  try {
-    const sqlPath = path.join(__dirname, 'db', 'init.sql');
-    const sql = fs.readFileSync(sqlPath, 'utf8');
-    await pool.query(sql);
-    console.log('Database schema initialized');
-  } catch (err) {
-    console.error('Failed to initialize database schema:', err.message);
-  }
-}
-
 const PORT = process.env.PORT || 5000;
 
-initDb().then(() => {
-  server.listen(PORT, () => {
-    console.log(`Karaoke Party backend listening on port ${PORT}`);
-  });
+server.listen(PORT, () => {
+  console.log(`Karaoke Party backend listening on port ${PORT}`);
 });
