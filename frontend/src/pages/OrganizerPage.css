@@ -114,6 +114,41 @@
   color: white;
 }
 
+.btn-lock,
+.btn-lock-active {
+  padding: 0.25rem 0.45rem;
+  border-radius: 6px;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-lock {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.btn-lock:hover {
+  background: rgba(245, 166, 35, 0.15);
+  border-color: rgba(245, 166, 35, 0.5);
+  color: var(--accent);
+}
+
+.btn-lock-active {
+  background: rgba(245, 166, 35, 0.15);
+  border: 1px solid rgba(245, 166, 35, 0.5);
+  color: var(--accent);
+}
+
+.btn-lock-active:hover {
+  background: rgba(245, 166, 35, 0.3);
+}
+
 /* Inactive party banner */
 .inactive-banner {
   background: rgba(234, 179, 8, 0.15);

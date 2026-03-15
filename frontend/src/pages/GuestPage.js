@@ -21,6 +21,7 @@ export default function GuestPage() {
   const [queue, setQueue] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isLocked, setIsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState('search');
   const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
 
@@ -107,6 +108,10 @@ export default function GuestPage() {
         ]);
         setParty(partyRes.data);
         setQueue(queueRes.data);
+        setIsLocked(partyRes.data.is_locked || false);
+        if (partyRes.data.is_locked) {
+          setActiveTab('queue');
+        }
       } catch {
         setError('Failed to load party. It may have ended.');
       } finally {
@@ -126,6 +131,12 @@ export default function GuestPage() {
     socket.on('queue:update', ({ queue: updatedQueue }) => {
       if (updatedQueue) {
         setQueue(updatedQueue);
+      }
+    });
+    socket.on('party:lock', ({ is_locked }) => {
+      setIsLocked(is_locked);
+      if (is_locked) {
+        setActiveTab('queue');
       }
     });
     // Receive real-time playback position broadcast by the organizer's player
@@ -165,6 +176,7 @@ export default function GuestPage() {
       <header className="guest-header">
         <div className="guest-header-info">
           <span className="party-badge">🎉 {party.name}</span>
+          {isLocked && <span className="locked-badge">🔒 Locked</span>}
           <span className="member-badge">👤 {memberName}</span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -175,12 +187,14 @@ export default function GuestPage() {
 
       {/* Mobile tab switcher */}
       <nav className="mobile-tabs">
-        <button
-          className={`mobile-tab ${activeTab === 'search' ? 'active' : ''}`}
-          onClick={() => setActiveTab('search')}
-        >
-          🔍 Search
-        </button>
+        {!isLocked && (
+          <button
+            className={`mobile-tab ${activeTab === 'search' ? 'active' : ''}`}
+            onClick={() => setActiveTab('search')}
+          >
+            🔍 Search
+          </button>
+        )}
         <button
           className={`mobile-tab ${activeTab === 'queue' ? 'active' : ''}`}
           onClick={() => setActiveTab('queue')}
@@ -196,6 +210,7 @@ export default function GuestPage() {
 
         <div className="guest-columns">
           {/* Search section */}
+          {!isLocked && (
           <div className={`search-section${activeTab !== 'search' ? ' mobile-hidden' : ''}`}>
             <div className="section-heading">Search for songs to add</div>
             <SongSearch
@@ -204,6 +219,7 @@ export default function GuestPage() {
               onAdded={handleSongAdded}
             />
           </div>
+          )}
 
           {/* Queue section */}
           <div className={`queue-section${activeTab !== 'queue' ? ' mobile-hidden' : ''}`}>
@@ -215,7 +231,7 @@ export default function GuestPage() {
               <div className="empty-state">
                 <span>🎵</span>
                 <p>No songs yet!</p>
-                <p className="muted">Use the search panel to find and add songs.</p>
+                {!isLocked && <p className="muted">Use the search panel to find and add songs.</p>}
               </div>
             ) : (
               <Playlist

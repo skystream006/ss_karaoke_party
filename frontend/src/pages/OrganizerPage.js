@@ -10,6 +10,7 @@ import {
   resetQueue,
   deleteParty,
   reactivateParty,
+  lockParty,
 } from '../services/api';
 import VideoPlayer from '../components/VideoPlayer';
 import Playlist from '../components/Playlist';
@@ -38,6 +39,7 @@ export default function OrganizerPage() {
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [isLocked, setIsLocked] = useState(false);
   const [videoCurrentTime, setVideoCurrentTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
 
@@ -46,6 +48,7 @@ export default function OrganizerPage() {
   const currentVideoIdRef = useRef(null);
 
   const memberName = sessionStorage.getItem('memberName') || 'Organizer';
+  const memberId = sessionStorage.getItem('memberId');
 
   // Keep currentVideoIdRef in sync so callbacks can read it without stale closures
   useEffect(() => {
@@ -68,6 +71,7 @@ export default function OrganizerPage() {
         ]);
         setParty(partyRes.data);
         setQueue(queueRes.data);
+        setIsLocked(partyRes.data.is_locked || false);
 
         // Auto-play first queued song
         const playing = queueRes.data.find((i) => i.status === 'playing');
@@ -110,6 +114,9 @@ export default function OrganizerPage() {
     // A guest requested a seek – apply it to the local YouTube player
     socket.on('video:seek', ({ seekTime }) => {
       videoPlayerRef.current?.seekTo(seekTime);
+    });
+    socket.on('party:lock', ({ is_locked }) => {
+      setIsLocked(is_locked);
     });
     return () => {
       socket.emit('leave:party', partyId);
@@ -248,6 +255,16 @@ export default function OrganizerPage() {
     }
   }, [partyId]);
 
+  const handleToggleLock = async () => {
+    try {
+      const res = await lockParty(partyId, !isLocked, memberId);
+      setIsLocked(res.data.is_locked);
+    } catch (err) {
+      console.error('Failed to toggle party lock:', err);
+      setError('Failed to update party lock.');
+    }
+  };
+
   const handleDeleteParty = async () => {
     if (!window.confirm('Permanently delete this party and all its data? This cannot be undone.')) return;
     try {
@@ -326,6 +343,14 @@ export default function OrganizerPage() {
         <div className="header-right">
           <span className="member-name-badge">👤 {memberName}</span>
           <ThemePicker />
+          <button
+            className={`btn btn-sm ${isLocked ? 'btn-lock-active' : 'btn-lock'}`}
+            onClick={handleToggleLock}
+            aria-label={isLocked ? 'Unlock party queue' : 'Lock party queue'}
+            title={isLocked ? 'Unlock party queue' : 'Lock party queue'}
+          >
+            {isLocked ? '🔓' : '🔒'}
+          </button>
           <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party" title="Permanently delete party">
             🗑️
           </button>

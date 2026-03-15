@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS parties (
   name VARCHAR(255) NOT NULL,
   join_code VARCHAR(8) UNIQUE NOT NULL,
   is_active BOOLEAN DEFAULT true,
+  is_locked BOOLEAN DEFAULT false,
   created_at TIMESTAMP DEFAULT NOW()
 );
 

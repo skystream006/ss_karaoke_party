@@ -24,6 +24,11 @@ export const getPartyByCode = (code) => api.get(`/parties/join/${code}`);
 export const endParty = (partyId) => api.delete(`/parties/${partyId}`);
 export const deleteParty = (partyId) => api.delete(`/parties/${partyId}/remove`);
 export const reactivateParty = (partyId) => api.patch(`/parties/${partyId}/reactivate`);
+export const lockParty = (partyId, isLocked, memberId) => {
+  const body = { is_locked: isLocked };
+  if (memberId) body.member_id = memberId;
+  return api.patch(`/parties/${partyId}/lock`, body);
+};
 export const getPartyMembers = (partyId) => api.get(`/parties/${partyId}/members`);
 export const searchMembers = (name) => api.get(`/parties/members/search?name=${encodeURIComponent(name)}`);
 export const updateMember = (partyId, memberId, data) => api.patch(`/parties/${partyId}/members/${memberId}`, data);

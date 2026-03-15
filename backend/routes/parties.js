@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../db/db');
 const { v4: uuidv4 } = require('uuid');
 const { writeLimiter } = require('../middleware/rateLimiter');
-const { requireAdmin } = require('../middleware/auth');
+const { requireAdmin, requireAuth } = require('../middleware/auth');
 
 const DEFAULT_ORGANIZER_NAME = 'Organizer';
 // Generate a short join code
@@ -20,7 +20,7 @@ function generateJoinCode() {
 router.get('/', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, join_code, created_at FROM parties WHERE is_active = true ORDER BY created_at DESC'
+      'SELECT id, name, join_code, is_locked, created_at FROM parties WHERE is_active = true ORDER BY created_at DESC'
     );
     res.json(result.rows);
   } catch (err) {
@@ -33,7 +33,7 @@ router.get('/', async (req, res) => {
 router.get('/all', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, join_code, is_active, created_at FROM parties ORDER BY created_at DESC'
+      'SELECT id, name, join_code, is_active, is_locked, created_at FROM parties ORDER BY created_at DESC'
     );
     res.json(result.rows);
   } catch (err) {
@@ -112,7 +112,7 @@ router.get('/members/search', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const result = await pool.query(
-      'SELECT id, name, join_code, is_active, created_at FROM parties WHERE id = $1',
+      'SELECT id, name, join_code, is_active, is_locked, created_at FROM parties WHERE id = $1',
       [req.params.id]
     );
     if (result.rows.length === 0) {
@@ -187,7 +187,7 @@ router.patch('/:id', writeLimiter, requireAdmin, async (req, res) => {
   }
   try {
     const result = await pool.query(
-      'UPDATE parties SET name = $1 WHERE id = $2 RETURNING id, name, join_code, is_active, created_at',
+      'UPDATE parties SET name = $1 WHERE id = $2 RETURNING id, name, join_code, is_active, is_locked, created_at',
       [name.trim(), req.params.id]
     );
     if (result.rows.length === 0) {
@@ -204,7 +204,7 @@ router.patch('/:id', writeLimiter, requireAdmin, async (req, res) => {
 router.patch('/:id/reactivate', async (req, res) => {
   try {
     const result = await pool.query(
-      'UPDATE parties SET is_active = true WHERE id = $1 RETURNING id, name, join_code, is_active, created_at',
+      'UPDATE parties SET is_active = true WHERE id = $1 RETURNING id, name, join_code, is_active, is_locked, created_at',
       [req.params.id]
     );
     if (result.rows.length === 0) {
@@ -214,6 +214,51 @@ router.patch('/:id/reactivate', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to reactivate party' });
+  }
+});
+
+// PATCH /api/parties/:id/lock - Lock or unlock a party — admin or organizer
+router.patch('/:id/lock', writeLimiter, requireAuth, async (req, res) => {
+  const { is_locked, member_id } = req.body;
+  if (typeof is_locked !== 'boolean') {
+    return res.status(400).json({ error: 'is_locked must be a boolean' });
+  }
+
+  // Non-admin callers must supply a member_id that belongs to an organizer of this party
+  if (req.authLevel !== 'admin') {
+    if (!member_id) {
+      return res.status(403).json({ error: 'Only organizers can lock the party' });
+    }
+    try {
+      const memberResult = await pool.query(
+        'SELECT role FROM party_members WHERE id = $1 AND party_id = $2',
+        [member_id, req.params.id]
+      );
+      if (memberResult.rows.length === 0 || memberResult.rows[0].role !== 'organizer') {
+        return res.status(403).json({ error: 'Only organizers can lock the party' });
+      }
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({ error: 'Failed to verify organizer status' });
+    }
+  }
+
+  try {
+    const result = await pool.query(
+      'UPDATE parties SET is_locked = $1 WHERE id = $2 RETURNING id, name, join_code, is_active, is_locked, created_at',
+      [is_locked, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+    const io = req.app.get('io');
+    if (io) {
+      io.to(req.params.id).emit('party:lock', { is_locked });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update party lock' });
   }
 });
 
