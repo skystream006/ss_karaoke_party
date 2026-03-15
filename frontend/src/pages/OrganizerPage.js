@@ -326,8 +326,8 @@ export default function OrganizerPage() {
         <div className="header-right">
           <span className="member-name-badge">👤 {memberName}</span>
           <ThemePicker />
-          <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party">
-            Delete Party
+          <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party" title="Permanently delete party">
+            🗑️
           </button>
           <button
             className="qr-panel-toggle"
