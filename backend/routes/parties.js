@@ -200,6 +200,59 @@ router.patch('/:id', writeLimiter, requireAdmin, async (req, res) => {
   }
 });
 
+// POST /api/parties/:id/duplicate - Duplicate a party (admin only)
+router.post('/:id/duplicate', writeLimiter, requireAdmin, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const sourceResult = await client.query(
+      'SELECT name FROM parties WHERE id = $1',
+      [req.params.id]
+    );
+    if (sourceResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Party not found' });
+    }
+
+    const sourceName = sourceResult.rows[0].name;
+
+    await client.query('BEGIN');
+
+    let joinCode;
+    let attempts = 0;
+    while (attempts < 10) {
+      joinCode = generateJoinCode();
+      const existing = await client.query('SELECT id FROM parties WHERE join_code = $1', [joinCode]);
+      if (existing.rows.length === 0) break;
+      attempts++;
+      joinCode = null;
+    }
+
+    if (!joinCode) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ error: 'Failed to generate a unique join code' });
+    }
+
+    const partyResult = await client.query(
+      'INSERT INTO parties (name, join_code) VALUES ($1, $2) RETURNING *',
+      [`Copy of ${sourceName}`, joinCode]
+    );
+    const party = partyResult.rows[0];
+
+    const memberResult = await client.query(
+      'INSERT INTO party_members (party_id, name, role) VALUES ($1, $2, $3) RETURNING *',
+      [party.id, DEFAULT_ORGANIZER_NAME, 'organizer']
+    );
+
+    await client.query('COMMIT');
+    res.status(201).json({ party, member: memberResult.rows[0] });
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch (_) {}
+    console.error(err);
+    res.status(500).json({ error: 'Failed to duplicate party' });
+  } finally {
+    client.release();
+  }
+});
+
 // PATCH /api/parties/:id/reactivate - Reactivate an ended party
 router.patch('/:id/reactivate', async (req, res) => {
   try {

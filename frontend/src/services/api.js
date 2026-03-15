@@ -24,6 +24,7 @@ export const getPartyByCode = (code) => api.get(`/parties/join/${code}`);
 export const endParty = (partyId) => api.delete(`/parties/${partyId}`);
 export const deleteParty = (partyId) => api.delete(`/parties/${partyId}/remove`);
 export const reactivateParty = (partyId) => api.patch(`/parties/${partyId}/reactivate`);
+export const duplicateParty = (partyId) => api.post(`/parties/${partyId}/duplicate`);
 export const lockParty = (partyId, isLocked, memberId) => {
   const body = { is_locked: isLocked };
   if (memberId) body.member_id = memberId;
