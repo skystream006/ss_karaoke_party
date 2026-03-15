@@ -1,6 +1,6 @@
 {
   "name": "karaoke-party-backend",
-  "version": "1.0.14",
+  "version": "1.0.15",
   "description": "Karaoke Party backend API",
   "main": "server.js",
   "scripts": {
