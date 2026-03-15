@@ -5,6 +5,7 @@ import {
   updateParty,
   endParty,
   reactivateParty,
+  duplicateParty,
   deleteParty,
   lockParty,
   getPartyMembers,
@@ -143,6 +144,16 @@ export default function SettingsPage() {
       }
     } catch (err) {
       setPartiesError(err.response?.data?.error || 'Failed to update party lock.');
+    }
+  };
+
+  // Party duplicate
+  const handleDuplicateParty = async (party) => {
+    try {
+      const res = await duplicateParty(party.id);
+      setParties((prev) => [res.data.party, ...prev]);
+    } catch (err) {
+      setPartiesError(err.response?.data?.error || 'Failed to duplicate party.');
     }
   };
 
@@ -343,6 +354,13 @@ export default function SettingsPage() {
                         title={party.is_active ? 'End party' : 'Reactivate party'}
                       >
                         {party.is_active ? '⏹ End' : '▶ Reactivate'}
+                      </button>
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => handleDuplicateParty(party)}
+                        title="Duplicate party"
+                      >
+                        📋 Duplicate
                       </button>
                       <button
                         className="btn btn-danger btn-sm"
