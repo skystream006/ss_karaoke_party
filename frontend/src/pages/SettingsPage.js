@@ -6,6 +6,7 @@ import {
   endParty,
   reactivateParty,
   deleteParty,
+  lockParty,
   getPartyMembers,
   updateMember,
   removeMember,
@@ -129,6 +130,19 @@ export default function SettingsPage() {
       }
     } catch (err) {
       setPartiesError(err.response?.data?.error || 'Failed to update party status.');
+    }
+  };
+
+  // Party lock toggle
+  const handleTogglePartyLock = async (party) => {
+    try {
+      const res = await lockParty(party.id, !party.is_locked);
+      setParties((prev) => prev.map((p) => (p.id === party.id ? res.data : p)));
+      if (selectedParty?.id === party.id) {
+        setSelectedParty(res.data);
+      }
+    } catch (err) {
+      setPartiesError(err.response?.data?.error || 'Failed to update party lock.');
     }
   };
 
@@ -288,6 +302,9 @@ export default function SettingsPage() {
                           >
                             {party.is_active ? 'Active' : 'Ended'}
                           </span>
+                          {party.is_locked && (
+                            <span className="settings-badge settings-badge--locked">🔒 Locked</span>
+                          )}
                         </div>
                         <div className="settings-item-meta">
                           Code: <strong>{party.join_code}</strong> · Created{' '}
@@ -312,6 +329,13 @@ export default function SettingsPage() {
                         title="Rename party"
                       >
                         ✏️
+                      </button>
+                      <button
+                        className={`btn btn-sm ${party.is_locked ? 'btn-success' : 'btn-warning'}`}
+                        onClick={() => handleTogglePartyLock(party)}
+                        title={party.is_locked ? 'Unlock party queue' : 'Lock party queue'}
+                      >
+                        {party.is_locked ? '🔓 Unlock' : '🔒 Lock'}
                       </button>
                       <button
                         className={`btn btn-sm ${party.is_active ? 'btn-warning' : 'btn-success'}`}

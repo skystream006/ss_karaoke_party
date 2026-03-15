@@ -35,6 +35,15 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
   try {
     await client.query('BEGIN');
 
+    const partyResult = await client.query(
+      'SELECT is_locked FROM parties WHERE id = $1',
+      [req.params.partyId]
+    );
+    if (partyResult.rows[0]?.is_locked) {
+      await client.query('ROLLBACK');
+      return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
+    }
+
     // Get next position
     const posResult = await client.query(
       `SELECT COALESCE(MAX(position), 0) + 1 AS next_pos
@@ -78,6 +87,15 @@ router.delete('/:partyId/:itemId', writeLimiter, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const partyResult = await client.query(
+      'SELECT is_locked FROM parties WHERE id = $1',
+      [req.params.partyId]
+    );
+    if (partyResult.rows[0]?.is_locked) {
+      await client.query('ROLLBACK');
+      return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
+    }
 
     const deleted = await client.query(
       'DELETE FROM queue WHERE id = $1 AND party_id = $2 RETURNING *',
@@ -135,6 +153,15 @@ router.put('/:partyId/reorder', writeLimiter, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const partyResult = await client.query(
+      'SELECT is_locked FROM parties WHERE id = $1',
+      [req.params.partyId]
+    );
+    if (partyResult.rows[0]?.is_locked) {
+      await client.query('ROLLBACK');
+      return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
+    }
 
     for (const item of order) {
       await client.query(

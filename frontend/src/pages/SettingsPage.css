@@ -182,6 +182,12 @@
   border: 1px solid rgba(74, 144, 226, 0.4);
 }
 
+.settings-badge--locked {
+  background: rgba(245, 166, 35, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+}
+
 /* Item actions */
 .settings-item-actions {
   display: flex;
