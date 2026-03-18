@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import ClearableInput from './ClearableInput';
 import { searchYouTube, getYouTubeVideoByUrl, addToQueue, addNextToQueue } from '../services/api';
 import './SongSearch.css';
 
@@ -39,6 +40,15 @@ export default function SongSearch({ partyId, member, onAdded }) {
       setError(err.response?.data?.error || 'Search failed. Make sure the YouTube API key is configured.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQueryChange = (e) => {
+    setQuery(e.target.value);
+    if (!e.target.value) {
+      setResults([]);
+      setError('');
+      hasSearched.current = false;
     }
   };
 
@@ -188,11 +198,11 @@ export default function SongSearch({ partyId, member, onAdded }) {
       {tab === 'search' && (
         <>
           <form className="search-form" onSubmit={handleSearch}>
-            <input
+            <ClearableInput
               type="text"
               placeholder="Search for a song…"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={handleQueryChange}
               className="search-input"
             />
             <button type="submit" className="btn btn-primary search-btn" disabled={loading || !query.trim()}>
@@ -250,7 +260,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
       {tab === 'url' && (
         <>
           <form className="search-form" onSubmit={handleUrlLookup}>
-            <input
+            <ClearableInput
               type="text"
               placeholder="Paste a YouTube URL…"
               value={urlInput}

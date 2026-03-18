@@ -203,11 +203,11 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  max-width: 360px;
 }
 
 .settings-inline-input {
   width: 100%;
-  max-width: 360px;
   padding: 0.5rem 0.75rem;
   background: var(--bg-surface);
   border: 1px solid var(--primary);

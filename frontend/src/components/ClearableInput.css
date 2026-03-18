@@ -1,0 +1,36 @@
+.clearable-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.clearable-input-wrapper > input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.input-clear-btn {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #b89fd4);
+  cursor: pointer;
+  font-size: 0.75rem;
+  padding: 0.2rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+
+.input-clear-btn:hover {
+  color: var(--text-primary, #f0e6ff);
+  background: rgba(255, 255, 255, 0.1);
+}

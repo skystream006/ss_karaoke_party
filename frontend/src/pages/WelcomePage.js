@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createParty } from '../services/api';
 import ThemePicker from '../components/ThemePicker';
+import ClearableInput from '../components/ClearableInput';
 import './WelcomePage.css';
 
 export default function WelcomePage() {
@@ -76,7 +77,7 @@ export default function WelcomePage() {
           <form onSubmit={handleCreateParty}>
             <div className="form-group">
               <label htmlFor="partyName">Party Name</label>
-              <input
+              <ClearableInput
                 id="partyName"
                 type="text"
                 placeholder="e.g. Friday Night Karaoke"
@@ -88,7 +89,7 @@ export default function WelcomePage() {
             </div>
             <div className="form-group">
               <label htmlFor="organizerName">Your Name</label>
-              <input
+              <ClearableInput
                 id="organizerName"
                 type="text"
                 placeholder="e.g. Alex"
