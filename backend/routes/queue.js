@@ -82,6 +82,68 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
   }
 });
 
+// POST /api/queue/:partyId/play-next - Add a song to play right after the current song
+router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
+  const { member_id, singer_name, video_id, video_title, video_thumbnail } = req.body;
+  if (!singer_name || !video_id || !video_title) {
+    return res.status(400).json({ error: 'singer_name, video_id, and video_title are required' });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+
+    const partyResult = await client.query(
+      'SELECT is_locked FROM parties WHERE id = $1',
+      [req.params.partyId]
+    );
+    if (partyResult.rows[0]?.is_locked) {
+      await client.query('ROLLBACK');
+      return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
+    }
+
+    // Find the position after the current playing/paused song (or after the last played song)
+    const anchorResult = await client.query(
+      `SELECT COALESCE(MAX(position), 0) AS anchor_pos
+       FROM queue WHERE party_id = $1 AND status IN ('playing', 'paused', 'played')`,
+      [req.params.partyId]
+    );
+    const insertPosition = parseInt(anchorResult.rows[0].anchor_pos, 10) + 1;
+
+    // Shift all queued songs at or after insertPosition down by one
+    await client.query(
+      `UPDATE queue SET position = position + 1
+       WHERE party_id = $1 AND status = 'queued' AND position >= $2`,
+      [req.params.partyId, insertPosition]
+    );
+
+    const result = await client.query(
+      `INSERT INTO queue (party_id, member_id, singer_name, video_id, video_title, video_thumbnail, position)
+       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+      [req.params.partyId, member_id || null, singer_name, video_id, video_title, video_thumbnail || null, insertPosition]
+    );
+
+    await client.query('COMMIT');
+
+    const io = req.app.get('io');
+    if (io) {
+      const updatedQueue = await pool.query(
+        `SELECT * FROM queue WHERE party_id = $1 ORDER BY ${QUEUE_ORDER_BY}`,
+        [req.params.partyId]
+      );
+      io.to(req.params.partyId).emit('queue:update', { action: 'add', queue: updatedQueue.rows });
+    }
+
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error(err);
+    res.status(500).json({ error: 'Failed to add song to queue' });
+  } finally {
+    client.release();
+  }
+});
+
 // DELETE /api/queue/:partyId/:itemId - Remove a song from the queue
 router.delete('/:partyId/:itemId', writeLimiter, async (req, res) => {
   const client = await pool.connect();
