@@ -103,18 +103,26 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
       return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
     }
 
-    // Find the position after the current playing/paused song (or after the last played song)
+    // Find the insertion point:
+    //   1. Right after the currently playing/paused song (if any)
+    //   2. Right before the first queued song (if no active song)
+    //   3. After the last song in the queue (if no queued songs remain)
     const anchorResult = await client.query(
-      `SELECT COALESCE(MAX(position), 0) AS anchor_pos
-       FROM queue WHERE party_id = $1 AND status IN ('playing', 'paused', 'played')`,
+      `SELECT COALESCE(
+         (SELECT MAX(position) FROM queue WHERE party_id = $1 AND status IN ('playing', 'paused')),
+         (SELECT MIN(position) - 1 FROM queue WHERE party_id = $1 AND status = 'queued'),
+         (SELECT MAX(position) FROM queue WHERE party_id = $1),
+         0
+       ) AS anchor_pos`,
       [req.params.partyId]
     );
     const insertPosition = parseInt(anchorResult.rows[0].anchor_pos, 10) + 1;
 
-    // Shift all queued songs at or after insertPosition down by one
+    // Shift all songs (regardless of status) at or after insertPosition down by one
+    // to avoid position conflicts with played songs that may sit at unexpected positions
     await client.query(
       `UPDATE queue SET position = position + 1
-       WHERE party_id = $1 AND status = 'queued' AND position >= $2`,
+       WHERE party_id = $1 AND position >= $2`,
       [req.params.partyId, insertPosition]
     );
 
