@@ -1,6 +1,6 @@
 {
   "name": "karaoke-party-frontend",
-  "version": "1.0.19",
+  "version": "1.0.20",
   "private": true,
   "dependencies": {
     "@hello-pangea/dnd": "^16.5.0",
