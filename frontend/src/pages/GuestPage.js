@@ -25,6 +25,7 @@ export default function GuestPage() {
   const [isLocked, setIsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState('search');
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
+  const [audioPanelOpen, setAudioPanelOpen] = useState(false);
   const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
   const [connected, setConnected] = useState(false);
   const [socketId, setSocketId] = useState(null);
@@ -208,6 +209,13 @@ export default function GuestPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ThemePicker />
           <button
+            className="btn-audio-toggle"
+            onClick={() => setAudioPanelOpen((o) => !o)}
+            aria-label="Toggle audio settings"
+          >
+            🎛️ Audio
+          </button>
+          <button
             className="btn-status-toggle"
             onClick={() => setStatusPanelOpen((o) => !o)}
             aria-label="Toggle connection status"
@@ -235,12 +243,6 @@ export default function GuestPage() {
         >
           🎵 Queue
           {upcomingCount > 0 && <span className="badge">{upcomingCount}</span>}
-        </button>
-        <button
-          className={`mobile-tab ${activeTab === 'audio' ? 'active' : ''}`}
-          onClick={() => setActiveTab('audio')}
-        >
-          🎛️ Audio
         </button>
         <button
           className={`mobile-tab ${activeTab === 'status' ? 'active' : ''}`}
@@ -299,11 +301,32 @@ export default function GuestPage() {
         </div>
       </main>
 
-          {/* Audio settings section */}
-          <div className={`audio-section${activeTab !== 'audio' ? ' mobile-hidden' : ''}`}>
-            <div className="section-heading">🎛️ Audio Settings</div>
-            <CustomizationPanel settings={settings} onChange={handleSettingsChange} />
-          </div>
+      {/* Audio settings slideout */}
+      {audioPanelOpen && (
+        <div
+          className="audio-overlay"
+          onClick={() => setAudioPanelOpen(false)}
+          onKeyDown={(e) => e.key === 'Escape' && setAudioPanelOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close audio settings"
+        />
+      )}
+      <div className={`audio-panel${audioPanelOpen ? ' open' : ''}`}>
+        <div className="audio-panel-header">
+          <span className="audio-panel-title">🎛️ Audio Settings</span>
+          <button
+            className="audio-panel-close"
+            onClick={() => setAudioPanelOpen(false)}
+            aria-label="Close audio settings"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="audio-panel-body">
+          <CustomizationPanel settings={settings} onChange={handleSettingsChange} />
+        </div>
+      </div>
 
       {/* Connection status slideout */}
       {statusPanelOpen && (
