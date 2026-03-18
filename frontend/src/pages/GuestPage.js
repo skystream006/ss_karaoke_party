@@ -23,6 +23,7 @@ export default function GuestPage() {
   const [error, setError] = useState('');
   const [isLocked, setIsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState('search');
+  const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
   const [connected, setConnected] = useState(false);
   const [socketId, setSocketId] = useState(null);
@@ -195,6 +196,14 @@ export default function GuestPage() {
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <ThemePicker />
+          <button
+            className="btn-status-toggle"
+            onClick={() => setStatusPanelOpen((o) => !o)}
+            aria-label="Toggle connection status"
+          >
+            <span className={`connection-dot connection-dot--${connectionState}`} />
+            Status
+          </button>
           <button className="btn-leave" onClick={() => navigate('/')}>Leave</button>
         </div>
       </header>
@@ -215,13 +224,6 @@ export default function GuestPage() {
         >
           🎵 Queue
           {upcomingCount > 0 && <span className="badge">{upcomingCount}</span>}
-        </button>
-        <button
-          className={`mobile-tab ${activeTab === 'status' ? 'active' : ''}`}
-          onClick={() => setActiveTab('status')}
-        >
-          <span className={`connection-dot connection-dot--${connectionState}`} />
-          Status
         </button>
       </nav>
 
@@ -270,36 +272,57 @@ export default function GuestPage() {
               />
             )}
           </div>
+        </div>
+      </main>
 
-          {/* Connection status section */}
-          <div className={`status-section${activeTab !== 'status' ? ' mobile-hidden' : ''}`}>
-            <div className="section-heading">📶 Connection Status</div>
-            <div className="status-card">
+      {/* Connection status slideout */}
+      {statusPanelOpen && (
+        <div
+          className="status-overlay"
+          onClick={() => setStatusPanelOpen(false)}
+          onKeyDown={(e) => e.key === 'Escape' && setStatusPanelOpen(false)}
+          role="button"
+          tabIndex={0}
+          aria-label="Close connection status"
+        />
+      )}
+      <div className={`status-panel${statusPanelOpen ? ' open' : ''}`}>
+        <div className="status-panel-header">
+          <span className="status-panel-title">📶 Connection Status</span>
+          <button
+            className="status-panel-close"
+            onClick={() => setStatusPanelOpen(false)}
+            aria-label="Close connection status"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="status-panel-body">
+          <div className="status-card">
+            <div className="status-row">
+              <span className="status-label">State</span>
+              <span className={`status-value connection-status connection-status--${connectionState}`}>
+                <span className={`connection-dot connection-dot--${connectionState}`} />
+                {connected ? 'Connected' : reconnectAttempts > 0 ? `Reconnecting… (attempt ${reconnectAttempts})` : 'Disconnected'}
+              </span>
+            </div>
+            {socketId && (
               <div className="status-row">
-                <span className="status-label">State</span>
-                <span className={`status-value connection-status connection-status--${connectionState}`}>
-                  <span className={`connection-dot connection-dot--${connectionState}`} />
-                  {connected ? 'Connected' : reconnectAttempts > 0 ? `Reconnecting… (attempt ${reconnectAttempts})` : 'Disconnected'}
-                </span>
+                <span className="status-label">Socket ID</span>
+                <span className="status-value status-mono">{socketId}</span>
               </div>
-              {socketId && (
-                <div className="status-row">
-                  <span className="status-label">Socket ID</span>
-                  <span className="status-value status-mono">{socketId}</span>
-                </div>
-              )}
-              <div className="status-row">
-                <span className="status-label">Party</span>
-                <span className="status-value">{party.name}</span>
-              </div>
-              <div className="status-row">
-                <span className="status-label">Member</span>
-                <span className="status-value">{memberName}</span>
-              </div>
+            )}
+            <div className="status-row">
+              <span className="status-label">Party</span>
+              <span className="status-value">{party.name}</span>
+            </div>
+            <div className="status-row">
+              <span className="status-label">Member</span>
+              <span className="status-value">{memberName}</span>
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 }
