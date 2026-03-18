@@ -98,6 +98,19 @@ io.on('connection', (socket) => {
     socket.to(partyId).emit('video:seek', { seekTime });
   });
 
+  // Guest requests audio settings change; organizer receives and applies it
+  socket.on('audio:settings', ({ partyId, settings }) => {
+    if (
+      typeof partyId !== 'string' ||
+      !settings ||
+      typeof settings !== 'object' ||
+      typeof settings.key !== 'number' || !isFinite(settings.key) || settings.key < -12 || settings.key > 12 ||
+      typeof settings.tempo !== 'number' || !isFinite(settings.tempo) || settings.tempo < 0.5 || settings.tempo > 2.0 ||
+      typeof settings.vocalLevel !== 'number' || !isFinite(settings.vocalLevel) || settings.vocalLevel < 0 || settings.vocalLevel > 100
+    ) return;
+    socket.to(partyId).emit('audio:settings', { settings });
+  });
+
   socket.on('disconnect', () => {
     console.log(`Socket disconnected: ${socket.id}`);
   });

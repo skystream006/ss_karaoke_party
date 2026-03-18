@@ -115,6 +115,10 @@ export default function OrganizerPage() {
     socket.on('video:seek', ({ seekTime }) => {
       videoPlayerRef.current?.seekTo(seekTime);
     });
+    // A guest changed audio settings – apply them to the local player
+    socket.on('audio:settings', ({ settings: newSettings }) => {
+      setSettings(newSettings);
+    });
     socket.on('party:lock', ({ is_locked }) => {
       setIsLocked(is_locked);
     });

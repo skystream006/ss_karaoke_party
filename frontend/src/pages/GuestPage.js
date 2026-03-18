@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
+import CustomizationPanel from '../components/CustomizationPanel';
 import ThemePicker from '../components/ThemePicker';
 import './GuestPage.css';
 
@@ -27,6 +28,7 @@ export default function GuestPage() {
   const [connected, setConnected] = useState(false);
   const [socketId, setSocketId] = useState(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
+  const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
 
   const socketRef = useRef(null);
 
@@ -98,6 +100,15 @@ export default function GuestPage() {
   const handleSeek = useCallback(
     (seekTime) => {
       socketRef.current?.emit('video:seek', { partyId, seekTime });
+    },
+    [partyId]
+  );
+
+  // Send audio settings change to the organizer's player
+  const handleSettingsChange = useCallback(
+    (newSettings) => {
+      setSettings(newSettings);
+      socketRef.current?.emit('audio:settings', { partyId, settings: newSettings });
     },
     [partyId]
   );
@@ -217,6 +228,12 @@ export default function GuestPage() {
           {upcomingCount > 0 && <span className="badge">{upcomingCount}</span>}
         </button>
         <button
+          className={`mobile-tab ${activeTab === 'audio' ? 'active' : ''}`}
+          onClick={() => setActiveTab('audio')}
+        >
+          🎛️ Audio
+        </button>
+        <button
           className={`mobile-tab ${activeTab === 'status' ? 'active' : ''}`}
           onClick={() => setActiveTab('status')}
         >
@@ -269,6 +286,12 @@ export default function GuestPage() {
                 onSeek={handleSeek}
               />
             )}
+          </div>
+
+          {/* Audio settings section */}
+          <div className={`audio-section${activeTab !== 'audio' ? ' mobile-hidden' : ''}`}>
+            <div className="section-heading">🎛️ Audio Settings</div>
+            <CustomizationPanel settings={settings} onChange={handleSettingsChange} />
           </div>
 
           {/* Connection status section */}
