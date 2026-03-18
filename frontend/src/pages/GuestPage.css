@@ -262,3 +262,102 @@
 .muted {
   color: var(--text-secondary);
 }
+
+/* Connection status section */
+.status-section {
+  flex: 0 0 auto;
+  width: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  position: sticky;
+  top: 4.5rem;
+  align-self: flex-start;
+}
+
+.status-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.status-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.status-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.status-value {
+  font-size: 0.9rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.status-mono {
+  font-family: monospace;
+  font-size: 0.75rem;
+  word-break: break-all;
+  color: var(--text-secondary);
+}
+
+/* Coloured dot indicator */
+.connection-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.connection-dot--connected {
+  background: #4caf82;
+  box-shadow: 0 0 5px #4caf82;
+}
+
+.connection-dot--reconnecting {
+  background: var(--accent);
+  animation: pulse-dot 1s ease-in-out infinite;
+}
+
+.connection-dot--disconnected {
+  background: #e94560;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+/* Text colour variants */
+.connection-status--connected {
+  color: #4caf82;
+}
+
+.connection-status--reconnecting {
+  color: var(--accent);
+}
+
+.connection-status--disconnected {
+  color: #e94560;
+}
+
+@media (max-width: 768px) {
+  .status-section {
+    width: 100%;
+    position: static;
+  }
+}

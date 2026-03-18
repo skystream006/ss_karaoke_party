@@ -24,6 +24,9 @@ export default function GuestPage() {
   const [isLocked, setIsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState('search');
   const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
+  const [connected, setConnected] = useState(false);
+  const [socketId, setSocketId] = useState(null);
+  const [reconnectAttempts, setReconnectAttempts] = useState(0);
 
   const socketRef = useRef(null);
 
@@ -126,7 +129,17 @@ export default function GuestPage() {
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
     socket.on('connect', () => {
+      setConnected(true);
+      setSocketId(socket.id);
+      setReconnectAttempts(0);
       socket.emit('join:party', partyId);
+    });
+    socket.on('disconnect', () => {
+      setConnected(false);
+      setSocketId(null);
+    });
+    socket.on('reconnect_attempt', (attempt) => {
+      setReconnectAttempts(attempt);
     });
     socket.on('queue:update', ({ queue: updatedQueue }) => {
       if (updatedQueue) {
@@ -169,6 +182,7 @@ export default function GuestPage() {
   }
 
   const upcomingCount = queue.filter((i) => i.status !== 'played').length;
+  const connectionState = connected ? 'connected' : reconnectAttempts > 0 ? 'reconnecting' : 'disconnected';
 
   return (
     <div className="guest-layout">
@@ -201,6 +215,13 @@ export default function GuestPage() {
         >
           🎵 Queue
           {upcomingCount > 0 && <span className="badge">{upcomingCount}</span>}
+        </button>
+        <button
+          className={`mobile-tab ${activeTab === 'status' ? 'active' : ''}`}
+          onClick={() => setActiveTab('status')}
+        >
+          <span className={`connection-dot connection-dot--${connectionState}`} />
+          Status
         </button>
       </nav>
 
@@ -248,6 +269,34 @@ export default function GuestPage() {
                 onSeek={handleSeek}
               />
             )}
+          </div>
+
+          {/* Connection status section */}
+          <div className={`status-section${activeTab !== 'status' ? ' mobile-hidden' : ''}`}>
+            <div className="section-heading">📶 Connection Status</div>
+            <div className="status-card">
+              <div className="status-row">
+                <span className="status-label">State</span>
+                <span className={`status-value connection-status connection-status--${connectionState}`}>
+                  <span className={`connection-dot connection-dot--${connectionState}`} />
+                  {connected ? 'Connected' : reconnectAttempts > 0 ? `Reconnecting… (attempt ${reconnectAttempts})` : 'Disconnected'}
+                </span>
+              </div>
+              {socketId && (
+                <div className="status-row">
+                  <span className="status-label">Socket ID</span>
+                  <span className="status-value status-mono">{socketId}</span>
+                </div>
+              )}
+              <div className="status-row">
+                <span className="status-label">Party</span>
+                <span className="status-value">{party.name}</span>
+              </div>
+              <div className="status-row">
+                <span className="status-label">Member</span>
+                <span className="status-value">{memberName}</span>
+              </div>
+            </div>
           </div>
         </div>
       </main>
