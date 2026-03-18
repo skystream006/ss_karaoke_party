@@ -347,6 +347,114 @@
   font-style: italic;
 }
 
+/* Tabs */
+.settings-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 0.65rem 1rem;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.settings-tab:hover {
+  color: var(--text-primary);
+}
+
+.settings-tab--active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* Song list items */
+.settings-song-item {
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.settings-song-position {
+  flex-shrink: 0;
+  width: 1.6rem;
+  text-align: center;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  padding-top: 0.15rem;
+}
+
+.settings-song-thumbnail {
+  flex-shrink: 0;
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.settings-song-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.settings-song-singer-row {
+  margin-top: 0.25rem;
+}
+
+.settings-singer-btn {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px dashed var(--border);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.settings-singer-btn:hover {
+  background: rgba(233, 69, 96, 0.1);
+  color: var(--text-primary);
+  border-color: var(--primary);
+}
+
+/* Song status badges */
+.settings-badge--status-queued {
+  background: rgba(74, 144, 226, 0.15);
+  color: #7ab3f5;
+  border: 1px solid rgba(74, 144, 226, 0.3);
+}
+
+.settings-badge--status-playing {
+  background: rgba(80, 200, 120, 0.2);
+  color: #5ec87a;
+  border: 1px solid rgba(80, 200, 120, 0.4);
+}
+
+.settings-badge--status-paused {
+  background: rgba(245, 166, 35, 0.15);
+  color: var(--accent);
+  border: 1px solid rgba(245, 166, 35, 0.35);
+}
+
+.settings-badge--status-played {
+  background: rgba(160, 160, 176, 0.15);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .settings-content {

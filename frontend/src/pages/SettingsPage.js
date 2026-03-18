@@ -11,6 +11,8 @@ import {
   getPartyMembers,
   updateMember,
   removeMember,
+  getQueue,
+  updateQueueItemSinger,
 } from '../services/api';
 import ClearableInput from '../components/ClearableInput';
 import './SettingsPage.css';
@@ -28,6 +30,20 @@ export default function SettingsPage() {
   const [members, setMembers] = useState([]);
   const [membersLoading, setMembersLoading] = useState(false);
   const [membersError, setMembersError] = useState('');
+
+  // Right panel tab: 'members' | 'songs'
+  const [activeRightTab, setActiveRightTab] = useState('members');
+
+  // Songs state for selected party
+  const [songs, setSongs] = useState([]);
+  const [songsLoading, setSongsLoading] = useState(false);
+  const [songsError, setSongsError] = useState('');
+
+  // Singer edit state
+  const [editingSingerId, setEditingSingerId] = useState(null);
+  const [editingSingerMemberId, setEditingSingerMemberId] = useState('');
+  const [singerEditError, setSingerEditError] = useState('');
+  const [singerEditLoading, setSingerEditLoading] = useState(false);
 
   // Edit state for party name
   const [editingPartyId, setEditingPartyId] = useState(null);
@@ -68,13 +84,31 @@ export default function SettingsPage() {
     setMembersError('');
     setEditingMemberId(null);
     setMembersLoading(true);
+    setSongs([]);
+    setSongsError('');
+    setSongsLoading(true);
+    setEditingSingerId(null);
     try {
-      const res = await getPartyMembers(party.id);
-      setMembers(res.data);
+      const [membersResult, songsResult] = await Promise.allSettled([
+        getPartyMembers(party.id),
+        getQueue(party.id),
+      ]);
+      if (membersResult.status === 'fulfilled') {
+        setMembers(membersResult.value.data);
+      } else {
+        setMembersError(membersResult.reason?.response?.data?.error || 'Failed to load members.');
+      }
+      if (songsResult.status === 'fulfilled') {
+        setSongs(songsResult.value.data);
+      } else {
+        setSongsError(songsResult.reason?.response?.data?.error || 'Failed to load songs.');
+      }
     } catch (err) {
-      setMembersError(err.response?.data?.error || 'Failed to load members.');
+      setMembersError('Failed to load party data.');
+      setSongsError('Failed to load party data.');
     } finally {
       setMembersLoading(false);
+      setSongsLoading(false);
     }
   }, []);
 
@@ -231,6 +265,40 @@ export default function SettingsPage() {
     }
   };
 
+  // Singer editing (for song list)
+  const startEditSinger = (song) => {
+    setEditingSingerId(song.id);
+    setEditingSingerMemberId(song.member_id || '');
+    setSingerEditError('');
+  };
+
+  const cancelEditSinger = () => {
+    setEditingSingerId(null);
+    setEditingSingerMemberId('');
+    setSingerEditError('');
+  };
+
+  const saveEditSinger = async (song) => {
+    const selectedMember = members.find((m) => m.id === editingSingerMemberId);
+    const singerName = selectedMember ? selectedMember.name : song.singer_name;
+    const memberId = selectedMember ? selectedMember.id : null;
+
+    setSingerEditLoading(true);
+    setSingerEditError('');
+    try {
+      const res = await updateQueueItemSinger(selectedParty.id, song.id, {
+        singer_name: singerName,
+        member_id: memberId,
+      });
+      setSongs((prev) => prev.map((s) => (s.id === song.id ? res.data : s)));
+      setEditingSingerId(null);
+    } catch (err) {
+      setSingerEditError(err.response?.data?.error || 'Failed to update singer.');
+    } finally {
+      setSingerEditLoading(false);
+    }
+  };
+
   const formatDate = (dateStr) => {
     return new Date(dateStr).toLocaleDateString(undefined, {
       year: 'numeric',
@@ -330,7 +398,10 @@ export default function SettingsPage() {
                     <div className="settings-item-actions">
                       <button
                         className="btn btn-ghost btn-sm"
-                        onClick={() => loadMembers(party)}
+                        onClick={() => {
+                          setActiveRightTab('members');
+                          loadMembers(party);
+                        }}
                         title="Manage members"
                       >
                         👥 Members
@@ -380,11 +451,11 @@ export default function SettingsPage() {
           )}
         </section>
 
-        {/* Members Section (right column) */}
+        {/* Members / Songs Section (right column) */}
         <section className="settings-section">
           <div className="settings-section-header">
             <h2>
-              👥 Members
+              {activeRightTab === 'members' ? '👥 Members' : '🎵 Songs'}
               {selectedParty && (
                 <>
                   {' '}—{' '}
@@ -399,6 +470,9 @@ export default function SettingsPage() {
                   setSelectedParty(null);
                   setMembers([]);
                   setEditingMemberId(null);
+                  setSongs([]);
+                  setEditingSingerId(null);
+                  setActiveRightTab('members');
                 }}
               >
                 ✕ Close
@@ -406,11 +480,28 @@ export default function SettingsPage() {
             )}
           </div>
 
+          {selectedParty && (
+            <div className="settings-tabs">
+              <button
+                className={`settings-tab ${activeRightTab === 'members' ? 'settings-tab--active' : ''}`}
+                onClick={() => setActiveRightTab('members')}
+              >
+                👥 Members
+              </button>
+              <button
+                className={`settings-tab ${activeRightTab === 'songs' ? 'settings-tab--active' : ''}`}
+                onClick={() => setActiveRightTab('songs')}
+              >
+                🎵 Songs
+              </button>
+            </div>
+          )}
+
           {!selectedParty ? (
             <div className="settings-empty settings-members-placeholder">
-              Select a party to view its members.
+              Select a party to view its members and songs.
             </div>
-          ) : (
+          ) : activeRightTab === 'members' ? (
             <>
               {membersError && <div className="settings-error">{membersError}</div>}
 
@@ -502,6 +593,91 @@ export default function SettingsPage() {
                           </button>
                         </div>
                       )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            /* Songs tab */
+            <>
+              {songsError && <div className="settings-error">{songsError}</div>}
+
+              {songsLoading ? (
+                <div className="settings-loading">Loading songs…</div>
+              ) : songs.length === 0 ? (
+                <div className="settings-empty">No songs in this party's queue.</div>
+              ) : (
+                <div className="settings-list">
+                  {songs.map((song) => (
+                    <div key={song.id} className="settings-item settings-song-item">
+                      <div className="settings-song-position">{song.position}</div>
+                      {song.video_thumbnail && (
+                        <img
+                          className="settings-song-thumbnail"
+                          src={song.video_thumbnail}
+                          alt=""
+                        />
+                      )}
+                      <div className="settings-item-main">
+                        <div className="settings-item-info">
+                          <div className="settings-song-title" title={song.video_title}>
+                            {song.video_title}
+                          </div>
+                          <div className="settings-song-singer-row">
+                            {editingSingerId === song.id ? (
+                              <div className="settings-inline-edit">
+                                <select
+                                  value={editingSingerMemberId}
+                                  onChange={(e) => setEditingSingerMemberId(e.target.value)}
+                                  className="settings-inline-select"
+                                  autoFocus
+                                >
+                                  <option value="">— select a member —</option>
+                                  {members.map((m) => (
+                                    <option key={m.id} value={m.id}>
+                                      {m.name}
+                                    </option>
+                                  ))}
+                                </select>
+                                {singerEditError && (
+                                  <span className="settings-inline-error">{singerEditError}</span>
+                                )}
+                                <div className="settings-inline-actions">
+                                  <button
+                                    className="btn btn-primary btn-sm"
+                                    onClick={() => saveEditSinger(song)}
+                                    disabled={singerEditLoading || !editingSingerMemberId}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={cancelEditSinger}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button
+                                className="settings-singer-btn"
+                                onClick={() => startEditSinger(song)}
+                                title="Click to change singer"
+                              >
+                                🎤 {song.singer_name}
+                              </button>
+                            )}
+                          </div>
+                          <div className="settings-item-meta">
+                            <span
+                              className={`settings-badge settings-badge--status-${song.status}`}
+                            >
+                              {song.status}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   ))}
                 </div>
