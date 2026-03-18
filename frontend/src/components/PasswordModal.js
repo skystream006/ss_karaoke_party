@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import ClearableInput from './ClearableInput';
 import './PasswordModal.css';
 
 export default function PasswordModal() {
@@ -23,7 +24,7 @@ export default function PasswordModal() {
         <h1 className="password-modal__title">Karaoke Party</h1>
         <p className="password-modal__subtitle">Enter your access password to continue</p>
         <form className="password-modal__form" onSubmit={handleSubmit}>
-          <input
+          <ClearableInput
             className={`password-modal__input${error ? ' password-modal__input--error' : ''}`}
             type="password"
             placeholder="Password"

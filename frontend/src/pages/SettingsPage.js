@@ -12,6 +12,7 @@ import {
   updateMember,
   removeMember,
 } from '../services/api';
+import ClearableInput from '../components/ClearableInput';
 import './SettingsPage.css';
 
 export default function SettingsPage() {
@@ -276,7 +277,7 @@ export default function SettingsPage() {
                   <div className="settings-item-main">
                     {editingPartyId === party.id ? (
                       <div className="settings-inline-edit">
-                        <input
+                        <ClearableInput
                           type="text"
                           value={editingPartyName}
                           onChange={(e) => setEditingPartyName(e.target.value)}
@@ -424,7 +425,7 @@ export default function SettingsPage() {
                       <div className="settings-item-main">
                         {editingMemberId === member.id ? (
                           <div className="settings-inline-edit">
-                            <input
+                            <ClearableInput
                               type="text"
                               value={editingMemberName}
                               onChange={(e) => setEditingMemberName(e.target.value)}

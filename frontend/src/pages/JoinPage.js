@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getParties, getPartyByCode, joinParty, searchMembers, getPartyMembers } from '../services/api';
+import ClearableInput from '../components/ClearableInput';
 import './JoinPage.css';
 
 export default function JoinPage() {
@@ -189,7 +190,7 @@ export default function JoinPage() {
           <div className="join-card">
             <h3>Enter Party Code</h3>
             <div className="code-input-row">
-              <input
+              <ClearableInput
                 type="text"
                 placeholder="e.g. ABC123"
                 value={codeInput}
@@ -294,7 +295,7 @@ export default function JoinPage() {
               {joinRole !== 'organizer' && <div className="form-group">
                 <label>Your Name</label>
                 <div className="name-autocomplete-wrapper">
-                  <input
+                  <ClearableInput
                     ref={nameInputRef}
                     type="text"
                     placeholder="e.g. Jordan"
