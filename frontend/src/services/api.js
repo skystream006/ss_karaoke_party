@@ -38,6 +38,7 @@ export const removeMember = (partyId, memberId) => api.delete(`/parties/${partyI
 // Queue
 export const getQueue = (partyId) => api.get(`/queue/${partyId}`);
 export const addToQueue = (partyId, data) => api.post(`/queue/${partyId}`, data);
+export const addNextToQueue = (partyId, data) => api.post(`/queue/${partyId}/play-next`, data);
 export const removeFromQueue = (partyId, itemId) => api.delete(`/queue/${partyId}/${itemId}`);
 export const reorderQueue = (partyId, order) => api.put(`/queue/${partyId}/reorder`, { order });
 export const updateQueueItemStatus = (partyId, itemId, status) =>
