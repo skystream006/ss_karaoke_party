@@ -103,10 +103,12 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
       return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
     }
 
-    // Find the position after the current playing/paused song (or after the last played song)
+    // Find the position of the currently playing/paused song; fall back to the last played song
     const anchorResult = await client.query(
-      `SELECT COALESCE(MAX(position), 0) AS anchor_pos
-       FROM queue WHERE party_id = $1 AND status IN ('playing', 'paused', 'played')`,
+      `SELECT COALESCE(
+         (SELECT position FROM queue WHERE party_id = $1 AND status IN ('playing', 'paused') ORDER BY position LIMIT 1),
+         COALESCE((SELECT MAX(position) FROM queue WHERE party_id = $1 AND status = 'played'), 0)
+       ) AS anchor_pos`,
       [req.params.partyId]
     );
     const insertPosition = parseInt(anchorResult.rows[0].anchor_pos, 10) + 1;
