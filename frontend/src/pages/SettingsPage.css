@@ -1,5 +1,5 @@
 .settings-container {
-  min-height: 100vh;
+  height: 100vh;
   display: flex;
   flex-direction: column;
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
@@ -50,6 +50,7 @@
   grid-template-columns: 1fr 1fr;
   gap: 2rem;
   align-items: start;
+  overflow-y: auto;
 }
 
 /* Section */
