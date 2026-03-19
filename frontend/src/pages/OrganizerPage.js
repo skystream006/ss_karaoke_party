@@ -313,16 +313,19 @@ export default function OrganizerPage() {
     <div className={`organizer-layout ${sidebarOpen ? 'sidebar-open' : ''}`}>
       {/* Header */}
       <header className="organizer-header">
-        <button
-          className="sidebar-toggle"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="Toggle playlist"
-        >
-          {sidebarOpen ? '✕' : '☰'}
-        </button>
-        <div className="header-title">
-          <span className="header-icon">🎤</span>
-          <h1>{party.name}</h1>
+        <div className="header-left">
+          <button
+            className="sidebar-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="Toggle playlist"
+          >
+            {sidebarOpen ? '✕' : '☰'}
+          </button>
+          <div className="header-title">
+            <span className="header-icon">🎤</span>
+            <h1>{party.name}</h1>
+          </div>
+          <span className="member-name-badge">👤 {memberName}</span>
         </div>
 
         {/* Now Playing in navbar – shown when a video is active */}
@@ -345,7 +348,6 @@ export default function OrganizerPage() {
           </div>
         )}
         <div className="header-right">
-          <span className="member-name-badge">👤 {memberName}</span>
           <ThemePicker />
           <button
             className={`btn btn-sm ${isLocked ? 'btn-lock-active' : 'btn-lock'}`}
