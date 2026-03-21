@@ -43,7 +43,6 @@ function safeEqual(a, b) {
  * Returns 'admin', 'member', or null.
  */
 function validatePassword(password) {
-  if (!password) return null;
   if (process.env.API_ADMIN_PW && safeEqual(password, process.env.API_ADMIN_PW)) return 'admin';
   if (process.env.API_MEMBER_PW && safeEqual(password, process.env.API_MEMBER_PW)) return 'member';
   return null;
