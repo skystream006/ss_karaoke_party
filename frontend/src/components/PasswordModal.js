@@ -37,7 +37,7 @@ export default function PasswordModal() {
           <button
             className="password-modal__btn"
             type="submit"
-            disabled={loading || !password}
+            disabled={loading}
           >
             {loading ? 'Checking…' : 'Enter'}
           </button>

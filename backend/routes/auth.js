@@ -9,10 +9,7 @@ const { createSession, validatePassword } = require('../middleware/auth');
  * Response: { token: string, level: 'member' | 'admin' }
  */
 router.post('/', (req, res) => {
-  const { password } = req.body;
-  if (!password) {
-    return res.status(400).json({ error: 'Password is required' });
-  }
+  const { password = '' } = req.body;
 
   const level = validatePassword(password);
   if (!level) {
