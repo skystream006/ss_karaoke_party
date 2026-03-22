@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus } from '../services/api';
+import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus, updateQueueItemSinger } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import CustomizationPanel from '../components/CustomizationPanel';
@@ -81,14 +81,24 @@ export default function GuestPage() {
     [partyId]
   );
 
-  const handleReorder = async (reordered) => {
-    const previous = queue;
+  const handleReorder = async (reordered) => {    const previous = queue;
     setQueue(reordered);
     try {
       await reorderQueue(partyId, reordered.map((item) => ({ id: item.id, position: item.position })));
     } catch {
       setQueue(previous);
       setError('Failed to reorder queue.');
+    }
+  };
+
+  const handleUpdateSinger = async (itemId, singerName) => {
+    const previous = queue;
+    setQueue((prev) => prev.map((item) => item.id === itemId ? { ...item, singer_name: singerName } : item));
+    try {
+      await updateQueueItemSinger(partyId, itemId, { singer_name: singerName });
+    } catch {
+      setQueue(previous);
+      throw new Error('Failed to update singer.');
     }
   };
 
@@ -292,6 +302,8 @@ export default function GuestPage() {
                 isOrganizer={false}
                 canReorder={true}
                 canRemove={true}
+                canEditSinger={true}
+                onUpdateSinger={handleUpdateSinger}
                 currentTime={videoProgress.currentTime}
                 duration={videoProgress.duration}
                 onSeek={handleSeek}

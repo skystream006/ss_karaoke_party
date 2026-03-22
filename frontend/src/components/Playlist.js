@@ -9,15 +9,53 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, isOrganizer, canReorder, canRemove, currentTime, duration, onSeek }) {
+export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, isOrganizer, canReorder, canRemove, canEditSinger, onUpdateSinger, currentTime, duration, onSeek }) {
   // canReorder/canRemove default to isOrganizer when not explicitly provided
   const allowReorder = canReorder !== undefined ? canReorder : isOrganizer;
   const allowRemove = canRemove !== undefined ? canRemove : isOrganizer;
+  const allowEditSinger = canEditSinger !== undefined ? canEditSinger : isOrganizer;
 
   // Local drag state for the progress slider so socket updates don't reset
   // the thumb position while the user is scrubbing.
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
+
+  // Inline singer edit state
+  const [editingSingerId, setEditingSingerId] = useState(null);
+  const [editingSingerValue, setEditingSingerValue] = useState('');
+  const [singerEditLoading, setSingerEditLoading] = useState(false);
+  const [singerEditError, setSingerEditError] = useState('');
+
+  const startEditSinger = (item) => {
+    setEditingSingerId(item.id);
+    setEditingSingerValue(item.singer_name);
+    setSingerEditError('');
+  };
+
+  const cancelEditSinger = () => {
+    setEditingSingerId(null);
+    setEditingSingerValue('');
+    setSingerEditError('');
+  };
+
+  const saveEditSinger = async (item) => {
+    const trimmed = editingSingerValue.trim();
+    if (!trimmed || trimmed === item.singer_name) {
+      cancelEditSinger();
+      return;
+    }
+    setSingerEditLoading(true);
+    setSingerEditError('');
+    try {
+      await onUpdateSinger(item.id, trimmed);
+      setEditingSingerId(null);
+      setEditingSingerValue('');
+    } catch {
+      setSingerEditError('Failed to update singer.');
+    } finally {
+      setSingerEditLoading(false);
+    }
+  };
 
   const showSlider = typeof currentTime === 'number' && duration > 0;
   const sliderValue = isDragging ? dragValue : Math.floor(currentTime || 0);
@@ -116,7 +154,53 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                     {/* Song info */}
                     <div className="playlist-info">
                       <div className="playlist-title">{item.video_title}</div>
-                      <div className="playlist-singer">🎤 {item.singer_name}</div>
+                      {editingSingerId === item.id ? (
+                        <div className="playlist-singer-edit">
+                          <input
+                            className="playlist-singer-input"
+                            type="text"
+                            value={editingSingerValue}
+                            onChange={(e) => setEditingSingerValue(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditSinger(item);
+                              if (e.key === 'Escape') cancelEditSinger();
+                            }}
+                            autoFocus
+                            maxLength={255}
+                          />
+                          <button
+                            className="btn-singer-save"
+                            onClick={() => saveEditSinger(item)}
+                            disabled={singerEditLoading || !editingSingerValue.trim()}
+                            title="Save"
+                          >
+                            ✓
+                          </button>
+                          <button
+                            className="btn-singer-cancel"
+                            onClick={cancelEditSinger}
+                            title="Cancel"
+                          >
+                            ✕
+                          </button>
+                          {singerEditError && (
+                            <span className="singer-edit-error">{singerEditError}</span>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="playlist-singer">
+                          🎤 {item.singer_name}
+                          {allowEditSinger && (
+                            <button
+                              className="btn-singer-edit"
+                              onClick={() => startEditSinger(item)}
+                              title="Change singer"
+                            >
+                              ✏️
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Actions */}

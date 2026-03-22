@@ -344,8 +344,8 @@ router.patch('/:partyId/:itemId/status', writeLimiter, async (req, res) => {
   }
 });
 
-// PATCH /api/queue/:partyId/:itemId - Update the singer of a queue item (admin only)
-router.patch('/:partyId/:itemId', requireAdmin, writeLimiter, async (req, res) => {
+// PATCH /api/queue/:partyId/:itemId - Update the singer of a queue item
+router.patch('/:partyId/:itemId', writeLimiter, async (req, res) => {
   const { singer_name, member_id } = req.body;
   if (typeof singer_name !== 'string' || !singer_name.trim()) {
     return res.status(400).json({ error: 'singer_name is required' });
