@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getParties, getPartyByCode, joinParty, searchMembers, getPartyMembers } from '../services/api';
+
 import ClearableInput from '../components/ClearableInput';
 import './JoinPage.css';
 
@@ -15,7 +16,7 @@ export default function JoinPage() {
   const [memberName, setMemberName] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [codeInput, setCodeInput] = useState(codeFromUrl || '');
+  const [nameFilter, setNameFilter] = useState(codeFromUrl || '');
   const [nameSuggestions, setNameSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [partyMembers, setPartyMembers] = useState([]);
@@ -146,6 +147,11 @@ export default function JoinPage() {
     }
   };
 
+  const filteredParties = useMemo(() => {
+    const query = nameFilter.trim().toLowerCase();
+    return query ? parties.filter(p => p.name.toLowerCase().includes(query)) : parties;
+  }, [parties, nameFilter]);
+
   const handleJoin = async (e) => {
     e.preventDefault();
     if (joinRole !== 'organizer' && !memberName.trim()) {
@@ -186,39 +192,26 @@ export default function JoinPage() {
 
       {!selectedParty ? (
         <div className="join-content">
-          {/* Code input */}
-          <div className="join-card">
-            <h3>Enter Party Code</h3>
-            <div className="code-input-row">
-              <ClearableInput
-                type="text"
-                placeholder="e.g. ABC123"
-                value={codeInput}
-                onChange={(e) => setCodeInput(e.target.value.toUpperCase())}
-                maxLength={8}
-                className="code-input"
-              />
-              <button
-                className="btn btn-primary"
-                onClick={() => handleCodeLookup(codeInput)}
-                disabled={!codeInput.trim()}
-              >
-                Find
-              </button>
-            </div>
-            {error && <p className="error-msg">{error}</p>}
-          </div>
-
           {/* Active parties list */}
           <div className="join-card">
             <h3>Active Parties</h3>
+            <div className="name-filter-row">
+              <ClearableInput
+                type="text"
+                placeholder="Find party by name…"
+                value={nameFilter}
+                onChange={(e) => setNameFilter(e.target.value)}
+                className="code-input"
+              />
+            </div>
+            {error && <p className="error-msg">{error}</p>}
             {loadingParties ? (
               <p className="muted">Loading parties…</p>
-            ) : parties.length === 0 ? (
-              <p className="muted">No active parties right now.</p>
+            ) : filteredParties.length === 0 ? (
+              <p className="muted">{nameFilter.trim() ? 'No parties match your search.' : 'No active parties right now.'}</p>
             ) : (
               <ul className="parties-list">
-                {parties.map((party) => (
+                {filteredParties.map((party) => (
                   <li
                     key={party.id}
                     className="party-list-item"
@@ -244,7 +237,7 @@ export default function JoinPage() {
                   </li>
                 ))}
               </ul>
-            )}
+              )}
           </div>
         </div>
       ) : (
