@@ -1,5 +1,8 @@
 .join-container {
-  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   padding: 1rem;
   max-width: 600px;
   margin: 0 auto;
@@ -11,6 +14,7 @@
   gap: 1rem;
   margin-bottom: 2rem;
   padding-top: 1rem;
+  flex-shrink: 0;
 }
 
 .join-header h1 {
@@ -38,6 +42,10 @@
   display: flex;
   flex-direction: column;
   gap: 1.5rem;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding-bottom: 1rem;
 }
 
 .join-card {
@@ -57,21 +65,18 @@
   letter-spacing: 0.05em;
 }
 
-.code-input-row {
-  display: flex;
-  gap: 0.75rem;
+.name-filter-row {
+  margin-bottom: 0.75rem;
 }
 
 .code-input {
-  flex: 1;
+  width: 100%;
   padding: 0.75rem 1rem;
   background: var(--bg-surface);
   border: 1px solid var(--border);
   border-radius: 8px;
   color: var(--text-primary);
-  font-size: 1.2rem;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
+  font-size: 1rem;
 }
 
 .code-input:focus {
@@ -84,6 +89,8 @@
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  max-height: 300px;
+  overflow-y: auto;
 }
 
 .party-list-item {
