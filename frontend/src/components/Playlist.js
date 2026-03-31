@@ -110,6 +110,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                         src={item.video_thumbnail}
                         alt={item.video_title}
                         className="playlist-thumb"
+                        loading="lazy"
                       />
                     )}
 
