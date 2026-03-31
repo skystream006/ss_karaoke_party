@@ -33,6 +33,7 @@ export default function GuestPage() {
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
 
   const socketRef = useRef(null);
+  const latestProgressRef = useRef({ currentTime: 0, duration: 0 });
 
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = sessionStorage.getItem('memberId');
@@ -95,8 +96,26 @@ export default function GuestPage() {
   // Reset video progress when the active song changes (playing or paused)
   const activeVideoId = queue.find((i) => i.status === 'playing' || i.status === 'paused')?.video_id;
   useEffect(() => {
+    latestProgressRef.current = { currentTime: 0, duration: 0 };
     setVideoProgress({ currentTime: 0, duration: 0 });
   }, [activeVideoId]);
+
+  // Flush latest progress to state at a reduced rate to limit re-renders on
+  // low-RAM devices. The socket still receives events at full frequency; only
+  // the React state update (which triggers a full component re-render) is
+  // throttled here.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setVideoProgress((prev) => {
+        const next = latestProgressRef.current;
+        if (prev.currentTime === next.currentTime && prev.duration === next.duration) {
+          return prev; // bail out of re-render when nothing changed
+        }
+        return { ...next };
+      });
+    }, 2000);
+    return () => clearInterval(id);
+  }, []);
 
   // Send a seek request to the organizer's player
   const handleSeek = useCallback(
@@ -165,9 +184,11 @@ export default function GuestPage() {
         setActiveTab('queue');
       }
     });
-    // Receive real-time playback position broadcast by the organizer's player
+    // Receive real-time playback position broadcast by the organizer's player.
+    // Store in a ref; a separate interval flushes to state at a reduced rate
+    // to limit re-renders on low-RAM devices.
     socket.on('video:progress', ({ currentTime, duration }) => {
-      setVideoProgress({ currentTime, duration });
+      latestProgressRef.current = { currentTime, duration };
     });
     return () => {
       socket.emit('leave:party', partyId);

@@ -226,7 +226,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
               {results.map((video) => (
                 <li key={video.video_id} className="search-result-item">
                   {video.thumbnail && (
-                    <img src={video.thumbnail} alt={video.title} className="result-thumb" />
+                    <img src={video.thumbnail} alt={video.title} className="result-thumb" loading="lazy" />
                   )}
                   <div className="result-info">
                     <p className="result-title">{video.title}</p>
@@ -279,7 +279,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
           {urlVideo && (
             <div className="url-preview">
               {urlVideo.thumbnail && (
-                <img src={urlVideo.thumbnail} alt={urlVideo.title} className="result-thumb" />
+                <img src={urlVideo.thumbnail} alt={urlVideo.title} className="result-thumb" loading="lazy" />
               )}
               <div className="result-info">
                 <p className="result-title">{urlVideo.title}</p>
