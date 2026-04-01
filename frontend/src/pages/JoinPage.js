@@ -295,7 +295,6 @@ export default function JoinPage() {
                     value={memberName}
                     onChange={(e) => handleNameChange(e.target.value)}
                     onKeyDown={(e) => e.key === 'Escape' && setShowSuggestions(false)}
-                    autoFocus
                     maxLength={60}
                     autoComplete="off"
                   />
