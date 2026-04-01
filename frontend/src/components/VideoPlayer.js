@@ -68,7 +68,7 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
           },
           onStateChange: (event) => {
             if (event.data === window.YT.PlayerState.PLAYING) {
-              // Poll playback position every second while playing
+              // Poll playback position every 2 seconds while playing
               clearInterval(progressIntervalRef.current);
               progressIntervalRef.current = setInterval(() => {
                 if (playerRef.current?.getCurrentTime) {
@@ -76,7 +76,7 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
                   const dur = playerRef.current.getDuration();
                   onTimeUpdateRef.current?.(ct, dur);
                 }
-              }, 1000);
+              }, 2000);
             } else {
               clearInterval(progressIntervalRef.current);
             }
