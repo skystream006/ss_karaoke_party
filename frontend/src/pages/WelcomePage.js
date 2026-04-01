@@ -83,7 +83,6 @@ export default function WelcomePage() {
                 placeholder="e.g. Friday Night Karaoke"
                 value={partyName}
                 onChange={(e) => setPartyName(e.target.value)}
-                autoFocus
                 maxLength={100}
               />
             </div>
