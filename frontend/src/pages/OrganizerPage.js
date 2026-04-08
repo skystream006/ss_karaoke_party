@@ -27,7 +27,7 @@ const SOCKET_URL =
     : window.location.origin.replace(':3000', ':5000'));
 
 export default function OrganizerPage() {
-  const { partyId } = useParams();
+  const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
 
   const [party, setParty] = useState(null);
@@ -48,7 +48,7 @@ export default function OrganizerPage() {
   const currentVideoIdRef = useRef(null);
 
   const memberName = sessionStorage.getItem('memberName') || 'Organizer';
-  const memberId = sessionStorage.getItem('memberId');
+  const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
 
   // Keep currentVideoIdRef in sync so callbacks can read it without stale closures
   useEffect(() => {

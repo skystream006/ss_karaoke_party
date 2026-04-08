@@ -28,7 +28,7 @@ export default function WelcomePage() {
       sessionStorage.setItem('memberName', member.name);
       sessionStorage.setItem('memberId', member.id);
       sessionStorage.setItem('memberRole', member.role);
-      navigate(`/organizer/${party.id}`);
+      navigate(`/organizer/${party.id}/${member.id}`);
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to create party. Please try again.');
     } finally {

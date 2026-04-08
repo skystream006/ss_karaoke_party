@@ -15,7 +15,7 @@ const SOCKET_URL =
     : window.location.origin.replace(':3000', ':5000'));
 
 export default function GuestPage() {
-  const { partyId } = useParams();
+  const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
 
   const [party, setParty] = useState(null);
@@ -36,7 +36,7 @@ export default function GuestPage() {
   const latestProgressRef = useRef({ currentTime: 0, duration: 0 });
 
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
-  const memberId = sessionStorage.getItem('memberId');
+  const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
   const member = { id: memberId, name: memberName };
 
   const handleRemove = async (itemId) => {
