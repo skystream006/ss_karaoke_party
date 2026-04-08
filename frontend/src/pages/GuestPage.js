@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus } from '../services/api';
+import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus, getMember } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import CustomizationPanel from '../components/CustomizationPanel';
@@ -141,6 +141,19 @@ export default function GuestPage() {
           getParty(partyId),
           getQueue(partyId),
         ]);
+
+        // Validate that the member in the URL actually belongs to this party
+        if (memberIdFromUrl) {
+          try {
+            await getMember(partyId, memberIdFromUrl);
+          } catch (memberErr) {
+            if (memberErr.response?.status === 404) {
+              navigate(`/join/${partyRes.data.join_code}`);
+              return;
+            }
+          }
+        }
+
         setParty(partyRes.data);
         setQueue(queueRes.data);
         setIsLocked(partyRes.data.is_locked || false);
@@ -154,7 +167,7 @@ export default function GuestPage() {
       }
     };
     loadData();
-  }, [partyId]);
+  }, [partyId, memberIdFromUrl, navigate]);
 
   // Socket for real-time updates
   useEffect(() => {

@@ -364,6 +364,23 @@ router.get('/:id/members', async (req, res) => {
   }
 });
 
+// GET /api/parties/:id/members/:memberId - Get a single party member
+router.get('/:id/members/:memberId', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, party_id, name, role, joined_at FROM party_members WHERE id = $1 AND party_id = $2',
+      [req.params.memberId, req.params.id]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Member not found' });
+    }
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch member' });
+  }
+});
+
 // PATCH /api/parties/:id/members/:memberId - Update a party member — admin only
 router.patch('/:id/members/:memberId', writeLimiter, requireAdmin, async (req, res) => {
   const { name, role } = req.body;

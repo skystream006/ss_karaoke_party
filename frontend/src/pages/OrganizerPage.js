@@ -11,6 +11,7 @@ import {
   deleteParty,
   reactivateParty,
   lockParty,
+  getMember,
 } from '../services/api';
 import VideoPlayer from '../components/VideoPlayer';
 import Playlist from '../components/Playlist';
@@ -69,6 +70,19 @@ export default function OrganizerPage() {
           getParty(partyId),
           getQueue(partyId),
         ]);
+
+        // Validate that the member in the URL actually belongs to this party
+        if (memberIdFromUrl) {
+          try {
+            await getMember(partyId, memberIdFromUrl);
+          } catch (memberErr) {
+            if (memberErr.response?.status === 404) {
+              navigate(`/join/${partyRes.data.join_code}`);
+              return;
+            }
+          }
+        }
+
         setParty(partyRes.data);
         setQueue(queueRes.data);
         setIsLocked(partyRes.data.is_locked || false);
@@ -83,7 +97,7 @@ export default function OrganizerPage() {
       }
     };
     loadParty();
-  }, [partyId]);
+  }, [partyId, memberIdFromUrl, navigate]);
 
   // Socket connection
   useEffect(() => {
