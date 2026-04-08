@@ -136,9 +136,9 @@ export default function JoinPage() {
       sessionStorage.setItem('memberRole', joined.role);
 
       if (joined.role === 'organizer') {
-        navigate(`/organizer/${selectedParty.id}`);
+        navigate(`/organizer/${selectedParty.id}/${joined.id}`);
       } else {
-        navigate(`/guest/${selectedParty.id}`);
+        navigate(`/guest/${selectedParty.id}/${joined.id}`);
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to join party.');
@@ -172,9 +172,9 @@ export default function JoinPage() {
       sessionStorage.setItem('memberRole', member.role);
 
       if (joinRole === 'organizer') {
-        navigate(`/organizer/${selectedParty.id}`);
+        navigate(`/organizer/${selectedParty.id}/${member.id}`);
       } else {
-        navigate(`/guest/${selectedParty.id}`);
+        navigate(`/guest/${selectedParty.id}/${member.id}`);
       }
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to join party.');

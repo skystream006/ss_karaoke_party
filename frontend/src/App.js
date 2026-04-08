@@ -59,8 +59,8 @@ function AppRoutes() {
         <Route path="/" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
         <Route path="/join" element={<ProtectedRoute><JoinPage /></ProtectedRoute>} />
         <Route path="/join/:joinCode" element={<ProtectedRoute><JoinPage /></ProtectedRoute>} />
-        <Route path="/organizer/:partyId" element={<ProtectedRoute><OrganizerPage /></ProtectedRoute>} />
-        <Route path="/guest/:partyId" element={<ProtectedRoute><GuestPage /></ProtectedRoute>} />
+        <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute><OrganizerPage /></ProtectedRoute>} />
+        <Route path="/guest/:partyId/:memberId" element={<ProtectedRoute><GuestPage /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute requiredLevel="admin"><SettingsPage /></ProtectedRoute>} />
       </Routes>
     </>
