@@ -108,6 +108,22 @@ router.get('/members/search', async (req, res) => {
   }
 });
 
+router.get('/members/names', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT MIN(TRIM(name)) AS name
+       FROM party_members
+       WHERE TRIM(name) <> ''
+       GROUP BY LOWER(TRIM(name))
+       ORDER BY name`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch usernames' });
+  }
+});
+
 // GET /api/parties/:id - Get party details
 router.get('/:id', async (req, res) => {
   try {

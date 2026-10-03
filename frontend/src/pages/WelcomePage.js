@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createParty } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import ThemePicker from '../components/ThemePicker';
 import ClearableInput from '../components/ClearableInput';
 import './WelcomePage.css';
 
 export default function WelcomePage() {
   const navigate = useNavigate();
+  const { defaultUsername } = useAuth();
   const [mode, setMode] = useState(null); // null | 'create'
   const [partyName, setPartyName] = useState('');
-  const [organizerName, setOrganizerName] = useState('');
+  const [organizerName, setOrganizerName] = useState(defaultUsername);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 

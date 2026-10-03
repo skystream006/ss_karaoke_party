@@ -31,6 +31,7 @@ export const lockParty = (partyId, isLocked, memberId) => {
   return api.patch(`/parties/${partyId}/lock`, body);
 };
 export const getPartyMembers = (partyId) => api.get(`/parties/${partyId}/members`);
+export const getMemberNames = () => api.get('/parties/members/names');
 export const searchMembers = (name) => api.get(`/parties/members/search?name=${encodeURIComponent(name)}`);
 export const getMember = (partyId, memberId) => api.get(`/parties/${partyId}/members/${memberId}`);
 export const updateMember = (partyId, memberId, data) => api.patch(`/parties/${partyId}/members/${memberId}`, data);

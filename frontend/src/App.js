@@ -28,13 +28,13 @@ function QRAuthHandler() {
 
 /** Renders children when authenticated at the required level; otherwise shows the password modal. */
 function ProtectedRoute({ children, requiredLevel = 'member' }) {
-  const { authLevel, loading } = useAuth();
+  const { authLevel, loading, usernameRequired } = useAuth();
 
   if (loading) {
     return null; // brief pause while auto-auth resolves (e.g., QR session)
   }
 
-  if (authLevel === 'none') {
+  if (authLevel === 'none' || usernameRequired) {
     return <PasswordModal />;
   }
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { getParties, getPartyByCode, joinParty, searchMembers, getPartyMembers } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 
 import ClearableInput from '../components/ClearableInput';
 import './JoinPage.css';
@@ -8,12 +9,13 @@ import './JoinPage.css';
 export default function JoinPage() {
   const navigate = useNavigate();
   const { joinCode: codeFromUrl } = useParams();
+  const { defaultUsername } = useAuth();
 
   const [parties, setParties] = useState([]);
   const [loadingParties, setLoadingParties] = useState(true);
   const [selectedParty, setSelectedParty] = useState(null);
   const [joinRole, setJoinRole] = useState('guest');
-  const [memberName, setMemberName] = useState('');
+  const [memberName, setMemberName] = useState(defaultUsername);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [nameFilter, setNameFilter] = useState(codeFromUrl || '');

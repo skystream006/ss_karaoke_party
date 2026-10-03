@@ -19,6 +19,7 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 - 🔁 **Party Reactivation** — Ended parties can be reactivated without losing the member list or queue history
 - 🎨 **Themes** — Multiple colour themes selectable across the app
 - 🔐 **Password Protection** — Two-tier access control (member / admin); QR-code join links auto-grant member access without a password prompt
+- **Default Username** — After password login, select an existing party-member name from autocomplete or enter a new one. The choice is remembered in this browser and prefills the editable name fields when joining or creating parties. New names become available to other users after joining or creating a party; QR-code access does not require this selection step.
 - ⚙️ **Admin / Settings Panel** — Dedicated settings page to manage all parties and their members; supports permanent party deletion
 - 📱 **Mobile-first** — Designed to be used on phones
 - ⚡ **Real-time Updates** — Queue and playback state pushed to all connected clients via Socket.IO
