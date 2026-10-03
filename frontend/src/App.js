@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import WelcomePage from './pages/WelcomePage';
 import OrganizerPage from './pages/OrganizerPage';
 import GuestPage from './pages/GuestPage';
@@ -52,9 +52,25 @@ function ProtectedRoute({ children, requiredLevel = 'member' }) {
 }
 
 function AppRoutes() {
+  const { authLevel, defaultUsername, usernameRequired, loading, switchUser } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSwitchUser = () => {
+    switchUser();
+    navigate('/', { replace: true });
+  };
+
   return (
     <>
       <QRAuthHandler />
+      {authLevel !== 'none' && !usernameRequired && !loading && (
+        <div className="user-toolbar" aria-label="Current user">
+          {defaultUsername && <span className="user-toolbar__name">{defaultUsername}</span>}
+          <button type="button" className="btn btn-ghost" onClick={handleSwitchUser}>
+            Switch user
+          </button>
+        </div>
+      )}
       <Routes>
         <Route path="/" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
         <Route path="/join" element={<ProtectedRoute><JoinPage /></ProtectedRoute>} />

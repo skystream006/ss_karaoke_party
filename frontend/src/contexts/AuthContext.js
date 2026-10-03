@@ -90,8 +90,18 @@ export function AuthProvider({ children }) {
 
   const clearError = useCallback(() => setError(''), []);
 
+  const switchUser = useCallback(() => {
+    if (!authToken) return;
+    sessionStorage.setItem(USERNAME_REQUIRED_KEY, 'true');
+    sessionStorage.removeItem('memberName');
+    sessionStorage.removeItem('memberId');
+    sessionStorage.removeItem('memberRole');
+    setUsernameRequired(true);
+    setError('');
+  }, [authToken]);
+
   return (
-    <AuthContext.Provider value={{ authToken, authLevel, defaultUsername, usernameRequired, loading, error, login, loginWithQR, logout, clearError, saveDefaultUsername }}>
+    <AuthContext.Provider value={{ authToken, authLevel, defaultUsername, usernameRequired, loading, error, login, loginWithQR, logout, clearError, saveDefaultUsername, switchUser }}>
       {children}
     </AuthContext.Provider>
   );
