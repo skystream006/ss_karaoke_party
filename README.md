@@ -185,7 +185,7 @@ Welcome Screen
 
 ### Organizer Page
 
-- YouTube video player (YouTube IFrame API) with fullscreen support
+- YouTube video player (YouTube IFrame API) with fullscreen support and closed captions disabled (lyrics embedded in the video are unchanged)
 - **Previous / Next** song navigation buttons
 - Auto-advance to next song when current song ends
 - Slide-out sidebar with:

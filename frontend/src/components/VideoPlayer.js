@@ -1,6 +1,14 @@
 import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 import './VideoPlayer.css';
 
+const disableCaptions = (player) => {
+  // Saved YouTube preferences can override cc_load_policy. Only unload a loaded
+  // module because unloading also triggers onApiChange.
+  if (player.getOptions?.()?.includes('captions')) {
+    player.unloadModule?.('captions');
+  }
+};
+
 const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings, onPrev, hasPrev, onNext, hasNext, onTimeUpdate }, ref) {
   const playerRef = useRef(null);
   const containerRef = useRef(null);
@@ -60,14 +68,20 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
           rel: 0,
           modestbranding: 1,
           fs: 0,
+          cc_load_policy: 0,
         },
         events: {
           onReady: (event) => {
+            disableCaptions(event.target);
             event.target.playVideo();
             applySettings(event.target);
           },
+          onApiChange: (event) => {
+            disableCaptions(event.target);
+          },
           onStateChange: (event) => {
             if (event.data === window.YT.PlayerState.PLAYING) {
+              disableCaptions(event.target);
               // Poll playback position every 2 seconds while playing
               clearInterval(progressIntervalRef.current);
               progressIntervalRef.current = setInterval(() => {
