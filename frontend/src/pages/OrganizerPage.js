@@ -335,6 +335,15 @@ export default function OrganizerPage() {
           >
             {sidebarOpen ? '✕' : '☰'}
           </button>
+          <button
+            type="button"
+            className="home-button"
+            onClick={() => navigate('/')}
+            aria-label="Home"
+            title="Home"
+          >
+            <span aria-hidden="true">🏠</span>
+          </button>
           <div className="header-title">
             <span className="header-icon">🎤</span>
             <h1>{party.name}</h1>

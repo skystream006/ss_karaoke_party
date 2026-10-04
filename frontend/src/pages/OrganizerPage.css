@@ -18,7 +18,8 @@
   top: 0;
 }
 
-.sidebar-toggle {
+.sidebar-toggle,
+.home-button {
   background: transparent;
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -34,7 +35,8 @@
   transition: background 0.2s;
 }
 
-.sidebar-toggle:hover {
+.sidebar-toggle:hover,
+.home-button:hover {
   background: var(--bg-surface);
 }
 
