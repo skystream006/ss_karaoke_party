@@ -6,6 +6,7 @@ import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import CustomizationPanel from '../components/CustomizationPanel';
 import ThemePicker from '../components/ThemePicker';
+import QRCodeModal from '../components/QRCodeModal';
 import './GuestPage.css';
 
 const SOCKET_URL =
@@ -26,6 +27,7 @@ export default function GuestPage() {
   const [activeTab, setActiveTab] = useState('search');
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const [audioPanelOpen, setAudioPanelOpen] = useState(false);
+  const [qrOpen, setQrOpen] = useState(false);
   const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
   const [connected, setConnected] = useState(false);
   const [socketId, setSocketId] = useState(null);
@@ -33,7 +35,12 @@ export default function GuestPage() {
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
 
   const socketRef = useRef(null);
+  const qrDialogRef = useRef(null);
   const latestProgressRef = useRef({ currentTime: 0, duration: 0 });
+
+  useEffect(() => {
+    if (qrOpen) qrDialogRef.current?.showModal();
+  }, [qrOpen]);
 
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
@@ -240,8 +247,18 @@ export default function GuestPage() {
           {isLocked && <span className="locked-badge">🔒 Locked</span>}
           <span className="member-badge">👤 {memberName}</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        <div className="guest-header-actions">
           <ThemePicker />
+          <button
+            type="button"
+            className="btn-leave"
+            onClick={() => setQrOpen(true)}
+            aria-label="Show party QR code"
+            aria-haspopup="dialog"
+            title="Show party QR code"
+          >
+            📱 QR Code
+          </button>
           <button
             className="btn-audio-toggle"
             onClick={() => setAudioPanelOpen((o) => !o)}
@@ -260,6 +277,26 @@ export default function GuestPage() {
           <button className="btn-leave" onClick={() => navigate('/')}>Leave</button>
         </div>
       </header>
+
+      <dialog
+        ref={qrDialogRef}
+        className="guest-qr-dialog"
+        aria-label="Party QR code"
+        onClose={() => setQrOpen(false)}
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            qrDialogRef.current.close();
+          }
+        }}
+      >
+        <div className="guest-qr-dialog-actions">
+          <button type="button" className="status-panel-close" aria-label="Close party QR code" onClick={() => qrDialogRef.current.close()}>
+            ✕
+          </button>
+        </div>
+        {qrOpen && <QRCodeModal party={party} />}
+      </dialog>
 
       {/* Mobile tab switcher */}
       <nav className="mobile-tabs">
