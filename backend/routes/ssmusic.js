@@ -55,7 +55,8 @@ function normalizeSong(file) {
     video_id: mediaId(mediaPath),
     title: title.slice(0, 500),
     channel: channel.slice(0, 500),
-    thumbnail: null,
+    thumbnail: typeof file.artworkUrl === 'string' && file.artworkUrl
+      ? `/ssmusic/artwork?path=${encodeURIComponent(mediaPath)}` : null,
     source: 'ssmusic',
     media_path: mediaPath,
     media_type: mediaType(mediaPath),
@@ -99,6 +100,31 @@ function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createM
       offset,
       limit: SEARCH_LIMIT,
     });
+  }));
+
+  apiRouter.get('/artwork', cancellable(async (req, res, signal) => {
+    const mediaPath = req.query.path;
+    if (!validMediaPath(mediaPath)) throw new SsmusicError(400, 'Invalid media path');
+    const response = await client.request(client.mediaEndpoint('artwork', mediaPath), {
+      method: req.method, stream: true, signal,
+      params: mediaType(mediaPath) === 'audio' ? { fallback: 1 } : undefined,
+    });
+    const contentType = response.headers['content-type'] || '';
+    const contentEncoding = response.headers['content-encoding'];
+    if (!/^image\/(jpeg|png|webp|gif|avif|bmp)(?:;|$)/i.test(contentType)
+        || (contentEncoding && contentEncoding !== 'identity')) {
+      response.data.destroy();
+      throw new SsmusicError(502, 'Invalid ssMusic artwork response');
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (req.method === 'HEAD') {
+      response.data.destroy();
+      res.end();
+      return;
+    }
+    response.data.setTimeout?.(30000, () => response.data.destroy(new Error('Artwork stream timed out')));
+    await pipeline(response.data, res);
   }));
 
   apiRouter.get('/playback', cancellable(async (req, res, signal) => {

@@ -59,6 +59,8 @@ export const getYouTubeVideoByUrl = (url) => api.get(`/youtube/video?url=${encod
 // ssMusic requests go through the backend so the server's API key stays private.
 export const searchSSMusic = (query, offset = 0) =>
   api.get('/ssmusic/search', { params: { q: query, offset } });
+export const getSSMusicArtwork = (path, signal) =>
+  api.get('/ssmusic/artwork', { params: { path }, responseType: 'blob', signal });
 export const getSSMusicPlayback = (path, signal) =>
   api.get('/ssmusic/playback', { params: { path }, signal });
 export const getSSMusicStreamUrl = (streamPath) => `${api.defaults.baseURL.replace(/\/$/, '')}${streamPath}`;

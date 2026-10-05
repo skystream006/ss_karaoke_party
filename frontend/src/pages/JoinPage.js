@@ -6,7 +6,7 @@ import { useAuth } from '../contexts/AuthContext';
 import ClearableInput from '../components/ClearableInput';
 import './JoinPage.css';
 
-export default function JoinPage() {
+export default function JoinPage({ switchUserButton }) {
   const navigate = useNavigate();
   const { joinCode: codeFromUrl } = useParams();
   const { defaultUsername } = useAuth();
@@ -190,6 +190,7 @@ export default function JoinPage() {
       <div className="join-header">
         <button className="btn-back" onClick={() => navigate('/')}>← Back</button>
         <h1>🎵 Join a Party</h1>
+        {switchUserButton}
       </div>
 
       {!selectedParty ? (

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ClearableInput from './ClearableInput';
+import MediaThumbnail from './MediaThumbnail';
 import { searchYouTube, searchSSMusic, getYouTubeVideoByUrl, addToQueue, addNextToQueue } from '../services/api';
 import './SongSearch.css';
 
@@ -262,9 +263,8 @@ export default function SongSearch({ partyId, member, onAdded }) {
             <ul className="search-results">
               {results.map((video) => (
                 <li key={video.video_id} className="search-result-item">
-                  {video.thumbnail && (
-                    <img src={video.thumbnail} alt={video.title} className="result-thumb" loading="lazy" />
-                  )}
+                  <MediaThumbnail source={video.source} mediaPath={video.media_path}
+                    thumbnail={video.thumbnail} alt={video.title} className="result-thumb" />
                   <div className="result-info">
                     <p className="result-title">{video.title}</p>
                     <p className="result-channel">{video.channel}</p>

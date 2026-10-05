@@ -11,7 +11,7 @@ jest.mock('./services/api', () => ({
   createParty: jest.fn(), joinParty: jest.fn(), getPartyByCode: jest.fn(),
 }));
 jest.mock('./components/ThemePicker', () => () => null);
-jest.mock('./pages/OrganizerPage', () => () => <div>Organizer view</div>);
+jest.mock('./pages/OrganizerPage', () => ({ switchUserButton }) => <div>Organizer view{switchUserButton}</div>);
 jest.mock('./pages/GuestPage', () => () => <div>Guest view</div>);
 jest.mock('./pages/SettingsPage', () => () => <div>Settings view</div>);
 
@@ -123,7 +123,7 @@ test('switches users without logging in again and updates both party form defaul
   expect(sessionStorage.getItem('authLevel')).toBe('member');
   expect(localStorage.getItem('defaultUsername')).toBe('Jordan');
   expect(axios.post).toHaveBeenCalledTimes(1);
-  expect(container.querySelector('.user-toolbar__name').textContent).toBe('Jordan');
+  expect(container.querySelector('.user-toolbar')).toBeNull();
   await click('Start a Party');
   expect(container.querySelector('#organizerName').value).toBe('Jordan');
   await click('Back');

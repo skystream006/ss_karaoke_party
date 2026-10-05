@@ -72,10 +72,13 @@ Configure `SSMUSIC_SERVER_URL` and `SSMUSIC_API_KEY` on the backend. The latter 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
 | `GET` | `/api/ssmusic/search?q=&offset=0` | member | Paginated library search; returns `{ items, total, offset, limit }`, 20 results per page |
+| `GET`, `HEAD` | `/api/ssmusic/artwork?path=` | member | Proxies a file's thumbnail, requesting the upstream fallback for audio without artwork |
 | `GET` | `/api/ssmusic/playback?path=` | member | Checks file access and returns `{ stream_path, media_type, lyrics }` |
 | `GET`, `HEAD` | `/api/ssmusic/media?ticket=` | signed playback ticket | Streams only the ticket's file, with byte-range seeking support |
 
-Search adapts ssMusic's `/api/songs/search` page-based API, which currently indexes **audio only**. Each result contains `video_id`, `title`, `channel`, `thumbnail`, `source`, `media_path`, and `media_type`. Missing configuration returns 503; malformed queries/paths return 400. Upstream access restrictions still apply.
+Search adapts ssMusic's `/api/songs/search` page-based API for audio and video. Each result contains `video_id`, `title`, `channel`, `thumbnail`, `source`, `media_path`, and `media_type`. Missing configuration returns 503; malformed queries/paths return 400. Upstream access restrictions still apply.
+
+When upstream search provides `artworkUrl`, `thumbnail` contains a local `/ssmusic/artwork?path=...` reference relative to the API base. Fetch artwork with the normal bearer token and render the returned image blob; do not expose the upstream API key in an image URL. Artwork paths are constructed from the validated media identity, not upstream URLs. ssMusic queue entries store no `video_thumbnail` URL: the UI loads artwork from `media_path`, including for existing entries, without URL length limits or expiring links in the database. Unavailable artwork does not prevent adding or playing a song.
 
 URL-encode the opaque `media_path` when requesting playback. Append `stream_path` to the configured API base URL, including its `/api` prefix, for the native media element's `src`. The stream route needs no session header because the browser cannot attach one to native media requests; it verifies a four-hour, resource-scoped ticket instead. Tickets also expire on backend restart; reload the player to obtain a new one. Do not log or share these temporary playback URLs.
 

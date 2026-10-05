@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
+import MediaThumbnail from './MediaThumbnail';
 import './Playlist.css';
 
 function formatTime(seconds) {
@@ -105,14 +106,8 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                     )}
 
                     {/* Thumbnail */}
-                    {item.video_thumbnail && (
-                      <img
-                        src={item.video_thumbnail}
-                        alt={item.video_title}
-                        className="playlist-thumb"
-                        loading="lazy"
-                      />
-                    )}
+                    <MediaThumbnail source={item.source} mediaPath={item.media_path}
+                      thumbnail={item.video_thumbnail} alt={item.video_title} className="playlist-thumb" />
 
                     {/* Song info */}
                     <div className="playlist-info">

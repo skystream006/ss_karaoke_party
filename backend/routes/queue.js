@@ -65,7 +65,8 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
       `INSERT INTO queue (party_id, member_id, singer_name, video_id, video_title, video_thumbnail, position,
                           source, media_path, media_type)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [req.params.partyId, member_id || null, singer_name, video_id, video_title, video_thumbnail || null, position,
+      [req.params.partyId, member_id || null, singer_name, video_id, video_title,
+        media.source === 'ssmusic' ? null : video_thumbnail || null, position,
         media.source, media.media_path, media.media_type]
     );
 
@@ -140,7 +141,8 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
       `INSERT INTO queue (party_id, member_id, singer_name, video_id, video_title, video_thumbnail, position,
                           source, media_path, media_type)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
-      [req.params.partyId, member_id || null, singer_name, video_id, video_title, video_thumbnail || null, insertPosition,
+      [req.params.partyId, member_id || null, singer_name, video_id, video_title,
+        media.source === 'ssmusic' ? null : video_thumbnail || null, insertPosition,
         media.source, media.media_path, media.media_type]
     );
 

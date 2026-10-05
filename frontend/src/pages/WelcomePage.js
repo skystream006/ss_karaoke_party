@@ -6,7 +6,7 @@ import ThemePicker from '../components/ThemePicker';
 import ClearableInput from '../components/ClearableInput';
 import './WelcomePage.css';
 
-export default function WelcomePage() {
+export default function WelcomePage({ switchUserButton }) {
   const navigate = useNavigate();
   const { defaultUsername } = useAuth();
   const [mode, setMode] = useState(null); // null | 'create'
@@ -42,6 +42,7 @@ export default function WelcomePage() {
     <div className="welcome-container">
       <div className="welcome-theme-corner">
         <ThemePicker />
+        {switchUserButton}
       </div>
 
       <div className="welcome-notes" aria-hidden="true">

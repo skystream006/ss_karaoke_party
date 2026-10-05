@@ -52,7 +52,7 @@ function ProtectedRoute({ children, requiredLevel = 'member' }) {
 }
 
 function AppRoutes() {
-  const { authLevel, defaultUsername, usernameRequired, loading, switchUser } = useAuth();
+  const { switchUser } = useAuth();
   const navigate = useNavigate();
 
   const handleSwitchUser = () => {
@@ -60,24 +60,22 @@ function AppRoutes() {
     navigate('/', { replace: true });
   };
 
+  const switchUserButton = (
+    <button type="button" className="btn btn-ghost" onClick={handleSwitchUser}>
+      Switch user
+    </button>
+  );
+
   return (
     <>
       <QRAuthHandler />
-      {authLevel !== 'none' && !usernameRequired && !loading && (
-        <div className="user-toolbar" aria-label="Current user">
-          {defaultUsername && <span className="user-toolbar__name">{defaultUsername}</span>}
-          <button type="button" className="btn btn-ghost" onClick={handleSwitchUser}>
-            Switch user
-          </button>
-        </div>
-      )}
       <Routes>
-        <Route path="/" element={<ProtectedRoute><WelcomePage /></ProtectedRoute>} />
-        <Route path="/join" element={<ProtectedRoute><JoinPage /></ProtectedRoute>} />
-        <Route path="/join/:joinCode" element={<ProtectedRoute><JoinPage /></ProtectedRoute>} />
-        <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute><OrganizerPage /></ProtectedRoute>} />
-        <Route path="/guest/:partyId/:memberId" element={<ProtectedRoute><GuestPage /></ProtectedRoute>} />
-        <Route path="/settings" element={<ProtectedRoute requiredLevel="admin"><SettingsPage /></ProtectedRoute>} />
+        <Route path="/" element={<ProtectedRoute><WelcomePage switchUserButton={switchUserButton} /></ProtectedRoute>} />
+        <Route path="/join" element={<ProtectedRoute><JoinPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
+        <Route path="/join/:joinCode" element={<ProtectedRoute><JoinPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
+        <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute><OrganizerPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
+        <Route path="/guest/:partyId/:memberId" element={<ProtectedRoute><GuestPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
+        <Route path="/settings" element={<ProtectedRoute requiredLevel="admin"><SettingsPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
       </Routes>
     </>
   );

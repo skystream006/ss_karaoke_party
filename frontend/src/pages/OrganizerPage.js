@@ -15,6 +15,7 @@ import {
 } from '../services/api';
 import VideoPlayer from '../components/VideoPlayer';
 import Playlist from '../components/Playlist';
+import MediaThumbnail from '../components/MediaThumbnail';
 import QRCodeModal from '../components/QRCodeModal';
 import CustomizationPanel from '../components/CustomizationPanel';
 import SongSearch from '../components/SongSearch';
@@ -27,7 +28,7 @@ const SOCKET_URL =
     ? 'http://localhost:5000'
     : window.location.origin.replace(':3000', ':5000'));
 
-export default function OrganizerPage() {
+export default function OrganizerPage({ switchUserButton }) {
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
 
@@ -355,13 +356,8 @@ export default function OrganizerPage() {
         {/* Now Playing in navbar – shown when a video is active */}
         {currentVideoId && activeQueueItem && (
           <div className="header-now-playing">
-            {activeQueueItem.video_thumbnail && (
-              <img
-                src={activeQueueItem.video_thumbnail}
-                alt={activeQueueItem.video_title}
-                className="hnp-thumb"
-              />
-            )}
+            <MediaThumbnail source={activeQueueItem.source} mediaPath={activeQueueItem.media_path}
+              thumbnail={activeQueueItem.video_thumbnail} alt={activeQueueItem.video_title} className="hnp-thumb" />
             <span className="hnp-label">
               {activeQueueItem.status === 'paused' ? '⏸' : '♪'}
             </span>
@@ -373,6 +369,7 @@ export default function OrganizerPage() {
         )}
         <div className="header-right">
           <ThemePicker />
+          {switchUserButton}
           <button
             className={`btn btn-sm ${isLocked ? 'btn-lock-active' : 'btn-lock'}`}
             onClick={handleToggleLock}

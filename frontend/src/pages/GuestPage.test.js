@@ -36,12 +36,12 @@ afterEach(() => {
   container.remove();
 });
 
-async function renderGuest() {
+async function renderGuest(switchUserButton) {
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={['/guest/party-id/member-id']}>
         <Routes>
-          <Route path="/guest/:partyId/:memberId" element={<GuestPage />} />
+          <Route path="/guest/:partyId/:memberId" element={<GuestPage switchUserButton={switchUserButton} />} />
         </Routes>
       </MemoryRouter>
     );
@@ -77,6 +77,16 @@ test.each([false, true])('guest QR dialog opens, shows party links, closes and r
   act(() => { Simulate.keyDown(dialog, { key: 'Escape' }); });
   expect(dialog.hasAttribute('open')).toBe(false);
   expect(dialog.querySelector('svg')).toBeNull();
+});
+
+test('places the switch user action immediately after Status', async () => {
+  const switchUser = jest.fn();
+  await renderGuest(<button type="button" onClick={switchUser}>Switch user</button>);
+  const statusButton = container.querySelector('[aria-label="Toggle connection status"]');
+  const switchButton = statusButton.nextElementSibling;
+  expect(switchButton.textContent).toBe('Switch user');
+  act(() => { Simulate.click(switchButton); });
+  expect(switchUser).toHaveBeenCalledTimes(1);
 });
 
 test('does not offer QR sharing when the party cannot be loaded', async () => {

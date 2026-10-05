@@ -15,9 +15,10 @@ import {
   updateQueueItemSinger,
 } from '../services/api';
 import ClearableInput from '../components/ClearableInput';
+import MediaThumbnail from '../components/MediaThumbnail';
 import './SettingsPage.css';
 
-export default function SettingsPage() {
+export default function SettingsPage({ switchUserButton }) {
   const navigate = useNavigate();
 
   // Parties state
@@ -319,6 +320,7 @@ export default function SettingsPage() {
           <span className="settings-icon">⚙️</span>
           <h1>Settings</h1>
         </div>
+        {switchUserButton}
       </header>
 
       <div className="settings-content">
@@ -612,13 +614,8 @@ export default function SettingsPage() {
                   {songs.map((song) => (
                     <div key={song.id} className="settings-item settings-song-item">
                       <div className="settings-song-position">{song.position}</div>
-                      {song.video_thumbnail && (
-                        <img
-                          className="settings-song-thumbnail"
-                          src={song.video_thumbnail}
-                          alt=""
-                        />
-                      )}
+                      <MediaThumbnail source={song.source} mediaPath={song.media_path}
+                        thumbnail={song.video_thumbnail} className="settings-song-thumbnail" />
                       <div className="settings-item-main">
                         <div className="settings-item-info">
                           <div className="settings-song-title" title={song.video_title}>

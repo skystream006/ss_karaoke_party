@@ -48,7 +48,7 @@ before(async () => {
       }));
       return;
     }
-    const match = url.pathname.match(/^\/music\/api\/jobs\/job-id\/(stream|lyrics)\/([^/]+)$/);
+    const match = url.pathname.match(/^\/music\/api\/jobs\/job-id\/(stream|lyrics|artwork)\/([^/]+)$/);
     if (!match) {
       res.writeHead(404);
       res.end('unexpected upstream request');
@@ -63,6 +63,12 @@ before(async () => {
     if (name === 'redirect.mp3') {
       res.writeHead(302, { Location: '/must-not-follow' });
       res.end();
+      return;
+    }
+    if (match[1] === 'artwork') {
+      res.setHeader('Content-Type', name === 'html.mp3' ? 'text/html' : 'image/webp');
+      res.setHeader('Set-Cookie', 'upstream-session=never-forward');
+      res.end(req.method === 'HEAD' ? undefined : media);
       return;
     }
     if (match[1] === 'lyrics') {
@@ -157,6 +163,51 @@ test('search normalizes PR21 results without YouTube filtering or trusting retur
   assert.equal(new URL(request.url, 'http://fixture').searchParams.get('q'), 'Original song');
   assert.equal(request.headers['x-api-key'], 'fixture-read-only-key');
   assert.equal(request.headers.authorization, undefined);
+});
+
+test('search returns a local thumbnail reference without trusting upstream artwork URLs', async () => {
+  catalog[0].artworkUrl = 'https://untrusted.invalid/image.jpg';
+  try {
+    const data = await (await api('/ssmusic/search?q=song')).json();
+    assert.equal(data.items[0].thumbnail, `/ssmusic/artwork?path=${encodeURIComponent(songPath)}`);
+    assert.equal(data.items[1].thumbnail, null);
+  } finally {
+    delete catalog[0].artworkUrl;
+  }
+});
+
+test('artwork requires authentication and proxies audio fallback and video thumbnails privately', async () => {
+  const count = outbound.length;
+  assert.equal((await fetch(`${baseUrl}/ssmusic/artwork?path=${encodeURIComponent(songPath)}`)).status, 401);
+  assert.equal(outbound.length, count);
+  for (const mediaPath of [songPath, resource('clip.mp4')]) {
+    const response = await api(`/ssmusic/artwork?path=${encodeURIComponent(mediaPath)}`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers.get('content-type'), 'image/webp');
+    assert.equal(response.headers.get('set-cookie'), null);
+    assert.equal(response.headers.get('cache-control'), 'private, no-store');
+    assert.equal(response.headers.get('x-content-type-options'), 'nosniff');
+    assert.deepEqual(Buffer.from(await response.arrayBuffer()), media);
+    const request = outbound.at(-1);
+    assert.equal(request.headers['x-api-key'], 'fixture-read-only-key');
+    assert.equal(request.headers.authorization, undefined);
+    const url = new URL(request.url, 'http://fixture');
+    assert.equal(url.searchParams.get('fallback'), mediaPath === songPath ? '1' : null);
+    assert.equal(url.pathname, mediaPath === songPath
+      ? '/music/api/jobs/job-id/artwork/Artist%2FSong%20%231.mp3'
+      : '/music/api/jobs/job-id/artwork/clip.mp4');
+  }
+});
+
+test('artwork validates paths, preserves access restrictions and rejects non-image responses', async () => {
+  const count = outbound.length;
+  assert.equal((await api('/ssmusic/artwork?path=job-id%2F..%2Fsong.mp3')).status, 400);
+  assert.equal(outbound.length, count);
+  for (const [name, status] of [['private.mp3', 403], ['missing.mp3', 404], ['html.mp3', 502]]) {
+    const response = await api(`/ssmusic/artwork?path=${encodeURIComponent(resource(name))}`);
+    assert.equal(response.status, status);
+    assert.equal((await response.text()).includes('private upstream details'), false);
+  }
 });
 
 test('offset pagination handles non-page-aligned offsets and upstream page clamping', async () => {

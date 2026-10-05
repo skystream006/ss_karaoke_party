@@ -40,10 +40,11 @@ after(async () => {
 for (const suffix of ['', '/play-next']) {
   test(`queue ${suffix || 'add'} persists legacy YouTube payloads and ssMusic metadata`, async () => {
     for (const media of [
-      { video_id: 'abcdefghijk' },
+      { video_id: 'abcdefghijk', video_thumbnail: 'https://i.ytimg.com/vi/abcdefghijk/default.jpg' },
       {
         video_id: mediaId('job/song.mp3'), source: 'ssmusic',
         media_path: 'job/song.mp3', media_type: 'audio',
+        video_thumbnail: `/ssmusic/artwork?path=${'a'.repeat(600)}`,
       },
     ]) {
       const response = await fetch(`${baseUrl}${suffix}`, {
@@ -58,6 +59,7 @@ for (const suffix of ['', '/play-next']) {
       assert.equal(result.media_type, media.media_type || null);
       const insert = statements.filter(({ sql }) => sql.includes('INSERT INTO queue')).at(-1);
       assert.match(insert.sql, /source, media_path, media_type/);
+      assert.equal(insert.values[5], media.source === 'ssmusic' ? null : media.video_thumbnail);
       assert.equal(insert.values[6], suffix ? 3 : 1);
     }
   });

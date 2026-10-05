@@ -86,7 +86,7 @@ function createSsmusicClient({
   }
 
   function mediaEndpoint(kind, mediaPath) {
-    if (!['stream', 'lyrics'].includes(kind)) throw new SsmusicError(400, 'Invalid media operation');
+    if (!['stream', 'lyrics', 'artwork'].includes(kind)) throw new SsmusicError(400, 'Invalid media operation');
     const media = parseMediaPath(mediaPath);
     if (!media) throw new SsmusicError(400, 'Invalid media path');
     return `api/jobs/${media.jobId}/${kind}/${media.encodedName}`;

@@ -15,7 +15,7 @@ const SOCKET_URL =
     ? 'http://localhost:5000'
     : window.location.origin.replace(':3000', ':5000'));
 
-export default function GuestPage() {
+export default function GuestPage({ switchUserButton }) {
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
 
@@ -274,6 +274,7 @@ export default function GuestPage() {
             <span className={`connection-dot connection-dot--${connectionState}`} />
             Status
           </button>
+          {switchUserButton}
           <button className="btn-leave" onClick={() => navigate('/')}>Leave</button>
         </div>
       </header>
