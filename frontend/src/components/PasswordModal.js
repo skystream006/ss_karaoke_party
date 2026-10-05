@@ -70,7 +70,7 @@ export default function PasswordModal() {
           />
           {usernameRequired && (
             <datalist id="default-username-options">
-              {names.map(({ name }) => <option key={name} value={name} />)}
+              {names.slice().sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: 'base' })).map(({ name }) => <option key={name} value={name} />)}
             </datalist>
           )}
           {usernameRequired && loadingNames && <p className="password-modal__subtitle" role="status">Loading usernames...</p>}

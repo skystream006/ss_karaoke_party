@@ -177,6 +177,20 @@
   width: 100%;
   min-height: 40px;
   flex-shrink: 0;
+  background: var(--bg-surface);
+}
+
+.ssmusic-player audio,
+.ssmusic-player video {
+  color-scheme: dark;
+  accent-color: var(--primary);
+}
+
+.ssmusic-player audio::-webkit-media-controls-enclosure,
+.ssmusic-player video::-webkit-media-controls-enclosure,
+.ssmusic-player audio::-webkit-media-controls-panel,
+.ssmusic-player video::-webkit-media-controls-panel {
+  background-color: var(--bg-surface);
 }
 
 .sylt-screen {
@@ -205,6 +219,7 @@
 
 .sylt-lines {
   padding: 1.5rem 0;
+  font-size: clamp(1.1rem, 3vw, 2.6rem);
 }
 
 .sylt-line {
@@ -215,7 +230,7 @@
   cursor: pointer;
   font-family: inherit;
   white-space: pre-wrap;
-  font-size: clamp(1.1rem, 3vw, 2.6rem);
+  font-size: 1em;
   line-height: 1.6;
   margin: 0.6em 0;
   color: #aaa4c0;
@@ -229,6 +244,7 @@
 .sylt-line.active {
   color: #ffe16b;
   font-weight: 700;
+  font-size: 1.5em;
 }
 
 .sylt-line.sung {

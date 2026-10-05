@@ -533,8 +533,8 @@ export default function SettingsPage() {
                               onChange={(e) => setEditingMemberRole(e.target.value)}
                               className="settings-inline-select"
                             >
-                              <option value="organizer">Organizer</option>
                               <option value="guest">Guest</option>
+                              <option value="organizer">Organizer</option>
                             </select>
                             {memberEditError && (
                               <span className="settings-inline-error">{memberEditError}</span>
@@ -634,7 +634,7 @@ export default function SettingsPage() {
                                   autoFocus
                                 >
                                   <option value="">— select a member —</option>
-                                  {members.map((m) => (
+                                  {members.slice().sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: 'base' })).map((m) => (
                                     <option key={m.id} value={m.id}>
                                       {m.name}
                                     </option>

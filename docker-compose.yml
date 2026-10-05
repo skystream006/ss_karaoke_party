@@ -52,9 +52,12 @@ services:
       YOUTUBE_API_KEY: ${YOUTUBE_API_KEY}
       SSMUSIC_SERVER_URL: ${SSMUSIC_SERVER_URL}
       SSMUSIC_API_KEY: ${SSMUSIC_API_KEY}
+      SSMUSIC_CA_CERT_FILE: ${SSMUSIC_CA_CERT_FILE:-}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       API_ADMIN_PW: ${API_ADMIN_PW}
       API_MEMBER_PW: ${API_MEMBER_PW}
+    volumes:
+      - ./certs:/app/certs:ro
     ports:
       - "6000:5000"
     restart: unless-stopped

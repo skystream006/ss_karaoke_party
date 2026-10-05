@@ -60,6 +60,24 @@ API_ADMIN_PW=choose_a_strong_admin_password
 API_MEMBER_PW=choose_a_member_password
 ```
 
+#### Initialize ssMusic configuration with Python
+
+With Python 3 installed, run this instead of copying `.env.example` manually:
+
+```powershell
+python _initialize_project.py
+```
+
+The script creates `.env` from the example with placeholder credentials, a placeholder ssMusic hostname, and `SSMUSIC_CA_CERT_FILE=/app/certs/ssmusic-ca.pem`. It creates `certs/ssmusic-ca.pem` by exporting the existing public certificate from the local `ssmusic_server-app-1` Docker container. Existing `.env` and certificate files are preserved; existing certificates are still validated. No containers are started or restarted. No Python packages need to be installed.
+
+For a different container name, use `--container NAME`. A custom public certificate path inside the container can be supplied with `--container-cert-path PATH`. Alternatively, import a trusted PEM certificate or CA bundle obtained from the ssMusic administrator:
+
+```powershell
+python _initialize_project.py --cert-file C:/path/to/server-cert.pem
+```
+
+The script validates public certificates and rejects private keys. It does not generate an unrelated self-signed certificate, because that would not establish trust in the existing ssMusic server. If certificate import fails, it exits with an error and leaves any newly created placeholder `.env` in place for the next attempt. Fill in the placeholder values before starting Docker, and ensure the ssMusic hostname matches the certificate. On Windows, `py` can be used instead of `python` when the Python launcher is installed.
+
 ### 2. Start with Docker Compose
 
 ```bash
@@ -83,6 +101,10 @@ SSMUSIC_API_KEY=replace_with_the_server_search_api_key
 ```
 
 The URL must be reachable from the backend container; `localhost` inside Docker refers to that container, not another server. Restart/rebuild the backend after changing configuration. Flyway applies the queue media-source migration automatically with Docker Compose; local installations must also apply new migrations before starting.
+
+For a self-signed certificate or private CA, obtain the **public certificate** from the ssMusic administrator through a trusted channel. Put it in `certs/ssmusic-ca.pem` and set `SSMUSIC_CA_CERT_FILE=/app/certs/ssmusic-ca.pem` in the root `.env`. Compose mounts `certs` read-only. Native Node users should set an absolute local file path instead. Leave this setting unset for certificates already trusted by Node. Never copy the server's private key.
+
+The hostname or IP in `SSMUSIC_SERVER_URL` must also appear in the certificate's Subject Alternative Names. For example, a certificate for `192-168-6-66.sslip.io` does not cover the raw IP `192.168.6.66`; use `https://192-168-6-66.sslip.io:4123/` when that name resolves to your server. Certificate verification stays enabled. Replace the trusted certificate and restart the backend if the server regenerates its self-signed certificate.
 
 In either search panel, check **ssMusic Search** and search normally. Unchecking it restores YouTube search; **Karaoke versions only** is a YouTube-only filter. Use **Load more** for additional library results. Both **Add to queue** and **Play next** support ssMusic songs.
 
@@ -170,6 +192,7 @@ Flyway applies migrations in version order and tracks which have already run in 
 | `YOUTUBE_API_KEY` | — | **Required** for YouTube search |
 | `SSMUSIC_SERVER_URL` | — | Optional ssMusic Server base URL, reachable from the backend |
 | `SSMUSIC_API_KEY` | — | Optional ssMusic Server `SEARCH_API_KEY`; required with `SSMUSIC_SERVER_URL` |
+| `SSMUSIC_CA_CERT_FILE` | — | Optional backend path to a trusted CA/self-signed public certificate for ssMusic HTTPS |
 | `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
 | `API_ADMIN_PW` | — | **Required** password for admin access (settings page, management APIs) |
 | `API_MEMBER_PW` | — | **Required** password for member access (join, guest, organizer pages) |

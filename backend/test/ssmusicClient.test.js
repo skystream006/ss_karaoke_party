@@ -1,6 +1,10 @@
 const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
+const axios = require('axios');
+const { mkdtempSync, writeFileSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const path = require('node:path');
 const { createSsmusicClient } = require('../lib/ssmusicClient');
 
 let server;
@@ -74,4 +78,46 @@ test('upstream requests can be canceled without disclosing request configuration
   const pending = client.request('slow', { signal: controller.signal });
   controller.abort();
   await assert.rejects(pending, { status: 502, message: 'ssMusic server request failed' });
+});
+
+test('configured HTTPS base URLs use the search endpoint and optional certificate without disabling verification', async (context) => {
+  const directory = mkdtempSync(path.join(tmpdir(), 'ssmusic-ca-'));
+  const caFile = path.join(directory, 'server-cert.pem');
+  writeFileSync(caFile, 'fixture-public-certificate');
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const request = context.mock.method(axios, 'request', async (config) => {
+    assert.equal(config.url, 'https://192.168.6.66:4123/api/songs/search');
+    assert.equal(config.headers['X-API-Key'], 'fixture-api-key');
+    assert.equal(config.httpsAgent.options.ca.toString(), 'fixture-public-certificate');
+    assert.equal(config.httpsAgent.options.rejectUnauthorized, true);
+    return { status: 200, data: { files: [], total: 0 }, headers: {} };
+  });
+  for (const suffix of ['', '/']) {
+    const client = createSsmusicClient({ serverUrl: `https://192.168.6.66:4123${suffix}`, apiKey: 'fixture-api-key', caFile });
+    await client.request('api/songs/search', { params: { q: 'song', page: 1, pageSize: 20 } });
+  }
+  assert.equal(request.mock.callCount(), 2);
+});
+
+test('unreadable certificate configuration fails without making a request or exposing its path', async () => {
+  const client = createSsmusicClient({ serverUrl, apiKey: 'fixture-api-key', caFile: '\0' });
+  const count = requests.length;
+  await assert.rejects(client.request('api/songs/search'), { status: 503, message: 'ssMusic CA certificate could not be loaded' });
+  assert.equal(requests.length, count);
+});
+
+test('TLS errors explain trust and hostname failures without leaking credentials', async (context) => {
+  let code = 'DEPTH_ZERO_SELF_SIGNED_CERT';
+  context.mock.method(axios, 'request', async () => { throw Object.assign(new Error('private upstream details'), { code }); });
+  const client = createSsmusicClient({ serverUrl: 'https://example.com', apiKey: 'fixture-api-key', caFile: '' });
+  for (const errorCode of ['DEPTH_ZERO_SELF_SIGNED_CERT', 'SELF_SIGNED_CERT_IN_CHAIN', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE', 'UNABLE_TO_GET_ISSUER_CERT_LOCALLY', 'ERR_TLS_CERT_ALTNAME_INVALID']) {
+    code = errorCode;
+    await assert.rejects(client.request('api/songs/search'), (error) => {
+      assert.equal(error.status, 502);
+      assert.match(error.message, code === 'ERR_TLS_CERT_ALTNAME_INVALID' ? /does not match SSMUSIC_SERVER_URL/ : /Configure SSMUSIC_CA_CERT_FILE/);
+      assert.equal(error.config, undefined);
+      assert.equal(error.message.includes('fixture-api-key'), false);
+      return true;
+    });
+  }
 });

@@ -302,7 +302,7 @@ export default function JoinPage() {
                   />
                   {showSuggestions && (
                     <ul className="name-suggestions" ref={suggestionsRef} role="listbox">
-                      {nameSuggestions.map((suggestion) => (
+                      {nameSuggestions.slice().sort((first, second) => first.name.localeCompare(second.name, undefined, { sensitivity: 'base' })).map((suggestion) => (
                         <li
                           key={suggestion.id}
                           role="option"

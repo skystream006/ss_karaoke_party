@@ -37,7 +37,7 @@ export default function ThemePicker() {
       </button>
       {open && (
         <ul className="theme-picker-dropdown" role="listbox" aria-label="Color themes">
-          {Object.entries(themes).map(([key, theme]) => (
+          {Object.entries(themes).sort((first, second) => first[1].label.localeCompare(second[1].label, undefined, { sensitivity: 'base' })).map(([key, theme]) => (
             <li key={key}>
               <button
                 className={`theme-option${themeKey === key ? ' active' : ''}`}
