@@ -187,9 +187,7 @@
 }
 
 .ssmusic-player audio::-webkit-media-controls-enclosure,
-.ssmusic-player video::-webkit-media-controls-enclosure,
-.ssmusic-player audio::-webkit-media-controls-panel,
-.ssmusic-player video::-webkit-media-controls-panel {
+.ssmusic-player audio::-webkit-media-controls-panel {
   background-color: var(--bg-surface);
 }
 
