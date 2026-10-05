@@ -157,3 +157,99 @@
   color: var(--text-secondary);
   font-size: 0.85rem !important;
 }
+
+.ssmusic-player {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  background: radial-gradient(ellipse at top, #27234b, #090912);
+}
+
+.ssmusic-player video {
+  width: 100%;
+  height: 100%;
+  background: #000;
+}
+
+.ssmusic-player audio {
+  width: 100%;
+  min-height: 40px;
+  flex-shrink: 0;
+}
+
+.sylt-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  padding: 1rem;
+}
+
+.sylt-screen h2 {
+  font-size: clamp(0.85rem, 2vw, 1.4rem);
+  margin: 0 0 0.75rem;
+  color: #d4d0ea;
+}
+
+.sylt-lines,
+.sylt-fallback {
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.sylt-lines {
+  padding: 1.5rem 0;
+}
+
+.sylt-line {
+  display: block;
+  width: 100%;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: pre-wrap;
+  font-size: clamp(1.1rem, 3vw, 2.6rem);
+  line-height: 1.6;
+  margin: 0.6em 0;
+  color: #aaa4c0;
+}
+
+.sylt-line:focus-visible {
+  outline: 2px solid #ffe16b;
+  outline-offset: -2px;
+}
+
+.sylt-line.active {
+  color: #ffe16b;
+  font-weight: 700;
+}
+
+.sylt-line.sung {
+  color: #8d849f;
+}
+
+.sylt-fallback {
+  display: grid;
+  place-items: center;
+  font-size: clamp(1rem, 2.5vw, 2rem);
+}
+
+.ssmusic-notice,
+.ssmusic-play-button {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  background: #171325;
+  padding: 1rem;
+  border-radius: 8px;
+}

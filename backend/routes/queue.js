@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db/db');
 const { writeLimiter } = require('../middleware/rateLimiter');
 const { requireAdmin } = require('../middleware/auth');
+const { queueMedia } = require('../lib/ssmusicMedia');
 
 // Order all songs by position so completed songs remain in their original place
 const QUEUE_ORDER_BY = `position ASC`;
@@ -12,7 +13,8 @@ router.get('/:partyId', async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT q.id, q.party_id, q.member_id, q.singer_name, q.video_id,
-              q.video_title, q.video_thumbnail, q.position, q.status, q.added_at
+              q.video_title, q.video_thumbnail, q.position, q.status, q.added_at,
+              q.source, q.media_path, q.media_type
        FROM queue q
        WHERE q.party_id = $1
        ORDER BY ${QUEUE_ORDER_BY}`,
@@ -30,6 +32,12 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
   const { member_id, singer_name, video_id, video_title, video_thumbnail } = req.body;
   if (!singer_name || !video_id || !video_title) {
     return res.status(400).json({ error: 'singer_name, video_id, and video_title are required' });
+  }
+  let media;
+  try {
+    media = queueMedia(req.body);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
   }
 
   const client = await pool.connect();
@@ -54,9 +62,11 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
     const position = posResult.rows[0].next_pos;
 
     const result = await client.query(
-      `INSERT INTO queue (party_id, member_id, singer_name, video_id, video_title, video_thumbnail, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [req.params.partyId, member_id || null, singer_name, video_id, video_title, video_thumbnail || null, position]
+      `INSERT INTO queue (party_id, member_id, singer_name, video_id, video_title, video_thumbnail, position,
+                          source, media_path, media_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [req.params.partyId, member_id || null, singer_name, video_id, video_title, video_thumbnail || null, position,
+        media.source, media.media_path, media.media_type]
     );
 
     await client.query('COMMIT');
@@ -88,6 +98,12 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
   const { member_id, singer_name, video_id, video_title, video_thumbnail } = req.body;
   if (!singer_name || !video_id || !video_title) {
     return res.status(400).json({ error: 'singer_name, video_id, and video_title are required' });
+  }
+  let media;
+  try {
+    media = queueMedia(req.body);
+  } catch (err) {
+    return res.status(400).json({ error: err.message });
   }
 
   const client = await pool.connect();
@@ -121,9 +137,11 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
     );
 
     const result = await client.query(
-      `INSERT INTO queue (party_id, member_id, singer_name, video_id, video_title, video_thumbnail, position)
-       VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-      [req.params.partyId, member_id || null, singer_name, video_id, video_title, video_thumbnail || null, insertPosition]
+      `INSERT INTO queue (party_id, member_id, singer_name, video_id, video_title, video_thumbnail, position,
+                          source, media_path, media_type)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+      [req.params.partyId, member_id || null, singer_name, video_id, video_title, video_thumbnail || null, insertPosition,
+        media.source, media.media_path, media.media_type]
     );
 
     await client.query('COMMIT');

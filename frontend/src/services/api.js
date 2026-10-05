@@ -56,6 +56,13 @@ export const searchYouTube = (query, karaoke = false) =>
 // YouTube video lookup by URL
 export const getYouTubeVideoByUrl = (url) => api.get(`/youtube/video?url=${encodeURIComponent(url)}`);
 
+// ssMusic requests go through the backend so the server's API key stays private.
+export const searchSSMusic = (query, offset = 0) =>
+  api.get('/ssmusic/search', { params: { q: query, offset } });
+export const getSSMusicPlayback = (path, signal) =>
+  api.get('/ssmusic/playback', { params: { path }, signal });
+export const getSSMusicStreamUrl = (streamPath) => `${api.defaults.baseURL.replace(/\/$/, '')}${streamPath}`;
+
 // Server info
 export const getServerInfo = () => api.get('/server-info');
 

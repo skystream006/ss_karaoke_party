@@ -101,11 +101,11 @@ export default function GuestPage() {
   };
 
   // Reset video progress when the active song changes (playing or paused)
-  const activeVideoId = queue.find((i) => i.status === 'playing' || i.status === 'paused')?.video_id;
+  const activeItemId = queue.find((i) => i.status === 'playing' || i.status === 'paused')?.id;
   useEffect(() => {
     latestProgressRef.current = { currentTime: 0, duration: 0 };
     setVideoProgress({ currentTime: 0, duration: 0 });
-  }, [activeVideoId]);
+  }, [activeItemId]);
 
   // Flush latest progress to state at a reduced rate to limit re-renders on
   // low-RAM devices. The socket still receives events at full frequency; only
