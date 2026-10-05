@@ -3,7 +3,7 @@ const path = require('path');
 const { pipeline } = require('stream/promises');
 const { createSsmusicClient, SsmusicError } = require('../lib/ssmusicClient');
 const {
-  validMediaPath, mediaType, mediaId, normalizeLyrics, createMediaTickets,
+  parseMediaPath, validMediaPath, mediaType, mediaId, normalizeLyrics, createMediaTickets,
 } = require('../lib/ssmusicMedia');
 
 const SEARCH_LIMIT = 20;
@@ -45,7 +45,8 @@ function cancellable(handler) {
 function normalizeSong(file) {
   if (!file || typeof file.jobId !== 'string' || typeof file.name !== 'string') return null;
   const mediaPath = `${file.jobId}/${file.name}`;
-  if (!validMediaPath(mediaPath)) return null;
+  const media = parseMediaPath(mediaPath);
+  if (!media || media.jobId !== file.jobId || media.name !== file.name) return null;
   const title = typeof file.title === 'string' && file.title.trim()
     ? file.title : path.posix.basename(file.name, path.posix.extname(file.name));
   const channel = typeof file.artist === 'string' && file.artist.trim() ? file.artist
@@ -109,8 +110,13 @@ function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createM
     response.data.destroy();
     let lyrics = normalizeLyrics(null);
     if (/\.mp3$/i.test(mediaPath)) {
-      const metadata = await client.request(client.mediaEndpoint('lyrics', mediaPath), { signal });
-      lyrics = normalizeLyrics(metadata.data);
+      try {
+        const metadata = await client.request(client.mediaEndpoint('lyrics', mediaPath), { signal });
+        lyrics = normalizeLyrics(metadata.data);
+      } catch (error) {
+        const status = error.upstreamStatus || error.status;
+        if (signal.aborted || !(error instanceof SsmusicError) || (status !== 429 && status < 500)) throw error;
+      }
     }
     res.json({
       stream_path: `/ssmusic/media?ticket=${encodeURIComponent(tickets.issue(mediaPath))}`,

@@ -41,7 +41,10 @@ for (const suffix of ['', '/play-next']) {
   test(`queue ${suffix || 'add'} persists legacy YouTube payloads and ssMusic metadata`, async () => {
     for (const media of [
       { video_id: 'abcdefghijk' },
-      { video_id: mediaId('artist/song.mp3'), source: 'ssmusic', media_path: 'artist/song.mp3', media_type: 'audio' },
+      {
+        video_id: mediaId('job/song.mp3'), source: 'ssmusic',
+        media_path: 'job/song.mp3', media_type: 'audio',
+      },
     ]) {
       const response = await fetch(`${baseUrl}${suffix}`, {
         method: 'POST',
@@ -66,7 +69,7 @@ for (const suffix of ['', '/play-next']) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         singer_name: 'Guest', video_title: 'Song', source: 'ssmusic',
-        video_id: 'forged', media_path: 'artist/song.mp3', media_type: 'audio',
+        video_id: 'forged', media_path: 'job/song.mp3', media_type: 'audio',
       }),
     });
     assert.equal(response.status, 400);

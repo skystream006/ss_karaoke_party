@@ -12,16 +12,21 @@ function mediaType(mediaPath) {
   return null;
 }
 
+function parseMediaPath(value) {
+  if (typeof value !== 'string' || !value || value.length > 4096
+      || /[\\:\u0000-\u001f\u007f]/.test(value) || /%[0-9a-f]{2}/i.test(value)
+      || Buffer.from(value, 'utf8').toString('utf8') !== value
+      || !/^[A-Za-z0-9_-]+\//.test(value)
+      || !value.split('/').every((part) => part && part !== '.' && part !== '..')
+      || !mediaType(value)) return null;
+  const separator = value.indexOf('/');
+  const jobId = value.slice(0, separator);
+  const name = value.slice(separator + 1);
+  return { jobId, name, encodedName: encodeURIComponent(name) };
+}
+
 function validMediaPath(value) {
-  return typeof value === 'string'
-    && value.length > 0
-    && value.length <= 4096
-    && !/[\\:\u0000-\u001f\u007f]/.test(value)
-    && !/%[0-9a-f]{2}/i.test(value)
-    && Buffer.from(value, 'utf8').toString('utf8') === value
-    && /^[A-Za-z0-9_-]+\//.test(value)
-    && value.split('/').every((part) => part && part !== '.' && part !== '..')
-    && mediaType(value) !== null;
+  return parseMediaPath(value) !== null;
 }
 
 function mediaId(mediaPath) {
@@ -90,4 +95,4 @@ function createMediaTickets({ now = Date.now, secret = crypto.randomBytes(32) } 
   };
 }
 
-module.exports = { validMediaPath, mediaType, mediaId, normalizeLyrics, queueMedia, createMediaTickets };
+module.exports = { parseMediaPath, validMediaPath, mediaType, mediaId, normalizeLyrics, queueMedia, createMediaTickets };

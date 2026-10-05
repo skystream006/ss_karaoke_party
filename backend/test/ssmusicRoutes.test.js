@@ -18,14 +18,15 @@ const outbound = [];
 const denied = new Set();
 const tickets = createMediaTickets({ now: () => now });
 const media = Buffer.from('0123456789abcdef');
-const songPath = 'job-id/Artist/Song #1.mp3';
+const resource = (name) => `job-id/${name}`;
+const songPath = resource('Artist/Song #1.mp3');
 const catalog = Array.from({ length: 45 }, (_, i) => ({
   jobId: 'job-id',
   name: i === 0 ? 'Artist/Song #1.mp3' : `Song ${i}.mp3`,
   title: `Title ${i}`,
   artist: 'Artist',
   playlistTitle: 'Playlist',
-  streamUrl: 'https://untrusted.invalid/never-follow-this',
+  streamUrl: `/api/jobs/job-id/stream/${encodeURIComponent(i === 0 ? 'Artist/Song #1.mp3' : `Song ${i}.mp3`)}`,
 }));
 
 async function listen(server) {
@@ -65,6 +66,11 @@ before(async () => {
       return;
     }
     if (match[1] === 'lyrics') {
+      if (name.startsWith('metadata-')) {
+        res.writeHead(Number(name.match(/^metadata-(\d+)\.mp3$/)[1]));
+        res.end('private upstream metadata error');
+        return;
+      }
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({
         sylt: name === 'untimed.mp3' ? [] : [{ time: 1.25, text: 'First line' }, { time: 2.5, text: 'Second line' }],
@@ -164,6 +170,23 @@ test('offset pagination handles non-page-aligned offsets and upstream page clamp
   assert.deepEqual(beyond.items, []);
 });
 
+test('search ignores arbitrary upstream URLs and derives media paths from validated identities', async () => {
+  const original = catalog[0].streamUrl;
+  try {
+    for (const malicious of ['https://untrusted.invalid/song.mp3', resource('another.mp3')]) {
+      catalog[0].streamUrl = malicious;
+      const response = await api('/ssmusic/search?q=song');
+      assert.equal(response.status, 200);
+      const data = await response.json();
+      assert.equal(data.items.length, 20);
+      assert.equal(data.items[0].media_path, songPath);
+      assert.equal(outbound.at(-1).url.startsWith('/music/api/songs/search?'), true);
+    }
+  } finally {
+    catalog[0].streamUrl = original;
+  }
+});
+
 test('search rejects malformed query parameters without forwarding them upstream', async () => {
   const count = outbound.length;
   for (const query of ['q[]=song', 'q=x&offset=-1', 'q=x&offset=1.5', 'q=x&offset[]=1', `q=${'a'.repeat(201)}`]) {
@@ -191,11 +214,28 @@ test('playback verifies access with HEAD and returns scoped credentials plus mil
 });
 
 test('video and audio without timed lyrics remain playable', async () => {
-  const video = await (await api('/ssmusic/playback?path=job-id%2Fclip.mp4')).json();
+  const video = await (await api(`/ssmusic/playback?path=${encodeURIComponent(resource('clip.mp4'))}`)).json();
   assert.equal(video.media_type, 'video');
   assert.deepEqual(video.lyrics, { lines: [], text: '' });
-  const audio = await (await api('/ssmusic/playback?path=job-id%2Funtimed.mp3')).json();
+  const audio = await (await api(`/ssmusic/playback?path=${encodeURIComponent(resource('untimed.mp3'))}`)).json();
   assert.deepEqual(audio.lyrics, { lines: [], text: 'Plain lyrics only' });
+});
+
+test('transient lyrics failures do not prevent playback but access failures remain enforced', async () => {
+  for (const status of [429, 500, 503]) {
+    const response = await api(`/ssmusic/playback?path=${encodeURIComponent(resource(`metadata-${status}.mp3`))}`);
+    assert.equal(response.status, 200);
+    const playback = await response.json();
+    assert.deepEqual(playback.lyrics, { lines: [], text: '' });
+    assert.match(playback.stream_path, /^\/ssmusic\/media\?ticket=/);
+  }
+  for (const status of [401, 403, 404]) {
+    const response = await api(`/ssmusic/playback?path=${encodeURIComponent(resource(`metadata-${status}.mp3`))}`);
+    assert.equal(response.status, status === 401 ? 502 : status);
+    const body = await response.text();
+    assert.equal(body.includes('stream_path'), false);
+    assert.equal(body.includes('private upstream metadata error'), false);
+  }
 });
 
 test('native GET and HEAD stream byte ranges without bearer tokens or upstream cookies', async () => {
@@ -220,7 +260,7 @@ test('invalid, tampered and expired media tickets never reach upstream', async (
   const original = tickets.issue(songPath);
   const [payload, signature] = original.split('.');
   const decoded = JSON.parse(Buffer.from(payload, 'base64url'));
-  decoded.path = 'job-id/private.mp3';
+  decoded.path = resource('private.mp3');
   const forged = `${Buffer.from(JSON.stringify(decoded)).toString('base64url')}.${signature}`;
   for (const ticket of ['', `${original}x`, forged]) {
     const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${encodeURIComponent(ticket)}`);
@@ -234,7 +274,7 @@ test('invalid, tampered and expired media tickets never reach upstream', async (
 
 test('media access is rechecked upstream and 403, 404 and 416 responses stay sanitized', async () => {
   for (const [name, status] of [['private.mp3', 403], ['missing.mp3', 404], ['redirect.mp3', 502]]) {
-    const response = await api(`/ssmusic/playback?path=job-id%2F${name}`);
+    const response = await api(`/ssmusic/playback?path=${encodeURIComponent(resource(name))}`);
     assert.equal(response.status, status);
     assert.equal((await response.text()).includes('private upstream details'), false);
   }
@@ -257,6 +297,8 @@ test('absolute paths, traversal and generic non-media files cannot obtain ticket
   for (const path of [
     'https://outside.invalid/a.mp3', '/job/song.mp3', 'job/../song.mp3',
     'job/%2e%2e/song.mp3', 'job/secret.env', 'job\\song.mp3',
+    resource('../song.mp3'), resource('%2e%2e/song.mp3'), resource('secret.env'),
+    '/api/jobs/job-id/stream/folder/song.mp3', '/api/jobs/job-id/lyrics/song.mp3',
   ]) {
     assert.equal((await api(`/ssmusic/playback?path=${encodeURIComponent(path)}`)).status, 400);
   }
@@ -274,7 +316,7 @@ test('media tickets cannot authorize other API endpoints or mutation methods', a
 
 test('media proxy rejects HTML and unexpectedly encoded upstream bodies', async () => {
   for (const name of ['html.mp3', 'compressed.mp3']) {
-    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue(`job-id/${name}`)}`);
+    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue(resource(name))}`);
     assert.equal(response.status, 502);
     assert.match(response.headers.get('content-type'), /application\/json/);
     assert.deepEqual(await response.json(), { error: 'Invalid ssMusic media response' });
@@ -284,7 +326,7 @@ test('media proxy rejects HTML and unexpectedly encoded upstream bodies', async 
 test('streaming starts before the file completes and cancels upstream after browser disconnect', { timeout: 3000 }, async () => {
   const controller = new AbortController();
   try {
-    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue('job-id/large.mp3')}`, {
+    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue(resource('large.mp3'))}`, {
       signal: controller.signal,
     });
     const chunk = await response.body.getReader().read();

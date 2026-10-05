@@ -4,15 +4,17 @@ const {
   validMediaPath, mediaType, mediaId, normalizeLyrics, queueMedia, createMediaTickets,
 } = require('../lib/ssmusicMedia');
 
+const resource = (name, job = 'job') => `${job}/${name}`;
+
 test('ssMusic IDs are stable, path-specific and fit the existing video_id column', () => {
-  const id = mediaId('歌手/Song #1.mp3');
-  assert.equal(id, mediaId('歌手/Song #1.mp3'));
-  assert.notEqual(id, mediaId('another/Song #1.mp3'));
+  const id = mediaId(resource('歌手/Song #1.mp3'));
+  assert.equal(id, mediaId(resource('歌手/Song #1.mp3')));
+  assert.notEqual(id, mediaId(resource('another/Song #1.mp3')));
   assert.ok(id.length <= 50);
 });
 
 test('media paths accept nested songs and reject URLs, traversal and non-media files', () => {
-  for (const value of ['job/Song.mp3', 'job/歌手/Song #1.mp3', 'job/100% Song.mp3', 'Videos/Clip.MP4']) {
+  for (const value of ['Song.mp3', '歌手/Song #1.mp3', '[NoVocals]/100% Song.mp3', 'Clip.MP4'].map((name) => resource(name))) {
     assert.equal(validMediaPath(value), true, value);
   }
   for (const value of [
@@ -20,6 +22,12 @@ test('media paths accept nested songs and reject URLs, traversal and non-media f
     'C:\\music\\song.mp3', '../song.mp3', 'artist/../song.mp3', 'artist/./song.mp3',
     'artist//song.mp3', '%2e%2e/song.mp3', '%252e%252e/song.mp3', 'artist%2fsong.mp3',
     'song.mp3\u0000', 'job/\ud800.mp3', 'secret.env', 'song.html', 'folder/',
+    resource('../song.mp3'), resource('artist/../song.mp3'), resource('artist/./song.mp3'),
+    resource('/song.mp3'), resource('artist//song.mp3'), resource('artist\\song.mp3'),
+    resource('%2e%2e/song.mp3'), resource('%252e%252e/song.mp3'), resource('song.html'),
+    resource('song.mp3\u0000'), '/api/jobs/job/lyrics/song.mp3', '/api/jobs/job/stream/folder/song.mp3',
+    '/api/jobs/job/stream/song.mp3?key=fixture', '/api/jobs/job/stream/song.mp3#fragment',
+    '/api/jobs/job/stream/%ZZ.mp3', '/api/jobs/job/stream/%ED%A0%80.mp3',
   ]) {
     assert.equal(validMediaPath(value), false, String(value));
   }
@@ -45,8 +53,8 @@ test('queue defaults to YouTube and strictly validates ssMusic identity and meta
     source: 'youtube', media_path: null, media_type: null,
   });
   const song = {
-    source: 'ssmusic', media_path: 'artist/song.mp3', media_type: 'audio',
-    video_id: mediaId('artist/song.mp3'),
+    source: 'ssmusic', media_path: resource('artist/song.mp3'), media_type: 'audio',
+    video_id: mediaId(resource('artist/song.mp3')),
   };
   assert.deepEqual(queueMedia(song), {
     source: song.source, media_path: song.media_path, media_type: song.media_type,
@@ -63,12 +71,12 @@ test('queue defaults to YouTube and strictly validates ssMusic identity and meta
 test('tickets are scoped, signed, expire and contain no API or session credentials', () => {
   let now = 1000;
   const tickets = createMediaTickets({ now: () => now });
-  const token = tickets.issue('artist/song.mp3');
-  assert.equal(tickets.verify(token), 'artist/song.mp3');
+  const token = tickets.issue(resource('artist/song.mp3'));
+  assert.equal(tickets.verify(token), resource('artist/song.mp3'));
   const [payload, signature] = token.split('.');
   const decoded = JSON.parse(Buffer.from(payload, 'base64url').toString());
   assert.deepEqual(Object.keys(decoded).sort(), ['expires', 'path']);
-  decoded.path = 'artist/another.mp3';
+  decoded.path = resource('artist/another.mp3');
   const forged = `${Buffer.from(JSON.stringify(decoded)).toString('base64url')}.${signature}`;
   assert.equal(tickets.verify(forged), null);
   assert.equal(tickets.verify(`${token}.extra`), null);

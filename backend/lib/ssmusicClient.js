@@ -1,5 +1,5 @@
 const axios = require('axios');
-const { validMediaPath } = require('./ssmusicMedia');
+const { parseMediaPath } = require('./ssmusicMedia');
 
 class SsmusicError extends Error {
   constructor(status, message) {
@@ -54,6 +54,7 @@ function createSsmusicClient({
       if (response.status < 200 || response.status >= 300) {
         if (stream) response.data.destroy();
         const error = upstreamError(response.status);
+        error.upstreamStatus = response.status;
         if (response.status === 416) error.contentRange = response.headers['content-range'];
         throw error;
       }
@@ -68,11 +69,9 @@ function createSsmusicClient({
 
   function mediaEndpoint(kind, mediaPath) {
     if (!['stream', 'lyrics'].includes(kind)) throw new SsmusicError(400, 'Invalid media operation');
-    if (!validMediaPath(mediaPath)) throw new SsmusicError(400, 'Invalid media path');
-    const separator = mediaPath.indexOf('/');
-    const jobId = mediaPath.slice(0, separator);
-    const name = mediaPath.slice(separator + 1);
-    return `api/jobs/${encodeURIComponent(jobId)}/${kind}/${encodeURIComponent(name)}`;
+    const media = parseMediaPath(mediaPath);
+    if (!media) throw new SsmusicError(400, 'Invalid media path');
+    return `api/jobs/${media.jobId}/${kind}/${media.encodedName}`;
   }
 
   return { request, mediaEndpoint };
