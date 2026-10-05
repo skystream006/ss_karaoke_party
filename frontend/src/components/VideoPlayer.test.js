@@ -2,6 +2,12 @@ import React, { createRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import VideoPlayer from './VideoPlayer';
+import { getSSMusicPlayback } from '../services/api';
+
+jest.mock('../services/api', () => ({
+  getSSMusicPlayback: jest.fn(() => new Promise(() => {})),
+  getSSMusicStreamUrl: jest.fn((path) => `/api${path}`),
+}));
 
 let root;
 let container;
@@ -10,6 +16,7 @@ let players;
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   jest.useFakeTimers();
+  getSSMusicPlayback.mockImplementation(() => new Promise(() => {}));
   players = [];
   window.YT = {
     PlayerState: { ENDED: 0, PLAYING: 1, PAUSED: 2 },
@@ -172,4 +179,42 @@ test('preserves imperative playback controls', () => {
   expect(player.seekTo).toHaveBeenCalledWith(45, true);
   expect(player.pauseVideo).toHaveBeenCalledTimes(1);
   expect(player.playVideo).toHaveBeenCalledTimes(1);
+});
+
+test('switches from YouTube to ssMusic without leaving a YouTube player or timer behind', () => {
+  const first = renderPlayer();
+  act(() => first.options.events.onStateChange({ target: first.player, data: window.YT.PlayerState.PLAYING }));
+  renderPlayer({ videoId: 'ssmusic-song', mediaPath: 'owner/music/song.mp3', mediaType: 'audio' });
+  expect(first.player.destroy).toHaveBeenCalledTimes(1);
+  expect(jest.getTimerCount()).toBe(0);
+  expect(container.querySelector('#yt-player')).toBeNull();
+  expect(container.querySelector('.sylt-screen')).not.toBeNull();
+  const next = renderPlayer({ videoId: 'next-youtube-song', mediaPath: null });
+  expect(next.options.videoId).toBe('next-youtube-song');
+  expect(container.querySelector('.sylt-screen')).toBeNull();
+});
+
+test('a second queue entry of the same song restarts playback', () => {
+  const first = renderPlayer({ playbackKey: 'entry-one' });
+  const next = renderPlayer({ playbackKey: 'entry-two' });
+  expect(first.player.destroy).toHaveBeenCalledTimes(1);
+  expect(next.options.videoId).toBe('first-song');
+  expect(players).toHaveLength(2);
+});
+
+test('a paused entry remains paused when the player finishes loading', () => {
+  const { player, options } = renderPlayer({ paused: true });
+  act(() => options.events.onReady({ target: player }));
+  expect(player.playVideo).not.toHaveBeenCalled();
+  expect(player.pauseVideo).toHaveBeenCalled();
+});
+
+test('cancels a delayed YouTube initialization when switching to ssMusic', () => {
+  delete window.YT.Player;
+  renderPlayer();
+  const delayedReady = window.onYouTubeIframeAPIReady;
+  renderPlayer({ videoId: 'ssmusic-song', mediaPath: 'owner/music/song.mp3' });
+  window.YT.Player = jest.fn();
+  act(() => delayedReady());
+  expect(window.YT.Player).not.toHaveBeenCalled();
 });

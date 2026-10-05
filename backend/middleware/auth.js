@@ -13,7 +13,7 @@ setInterval(() => {
       sessions.delete(token);
     }
   }
-}, 60 * 60 * 1000); // run cleanup every hour
+}, 60 * 60 * 1000).unref(); // run cleanup every hour without keeping a stopped server alive
 
 /**
  * Create a new session token for the given auth level.

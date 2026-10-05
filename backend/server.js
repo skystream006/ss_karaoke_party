@@ -7,6 +7,7 @@ const os = require('os');
 const pool = require('./db/db');
 const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
 const { requireAuth } = require('./middleware/auth');
+const ssmusic = require('./routes/ssmusic').createSsmusicRoutes();
 
 const app = express();
 const server = http.createServer(app);
@@ -41,6 +42,9 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// Native media elements authenticate only with an expiring, single-resource ticket.
+app.use('/api/ssmusic/media', ssmusic.mediaRouter);
+
 // Apply authentication to all remaining API routes
 app.use('/api', requireAuth);
 
@@ -48,6 +52,7 @@ app.use('/api', requireAuth);
 app.use('/api/parties', require('./routes/parties'));
 app.use('/api/queue', require('./routes/queue'));
 app.use('/api/youtube', searchLimiter, require('./routes/youtube'));
+app.use('/api/ssmusic', searchLimiter, ssmusic.apiRouter);
 
 // Server info (local IP address)
 app.get('/api/server-info', (req, res) => {

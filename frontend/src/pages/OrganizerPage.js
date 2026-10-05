@@ -33,7 +33,8 @@ export default function OrganizerPage() {
 
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
-  const [currentVideoId, setCurrentVideoId] = useState(null);
+  const [currentItem, setCurrentItem] = useState(null);
+  const currentVideoId = currentItem?.video_id || null;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'search' | 'settings'
   const [qrPanelOpen, setQrPanelOpen] = useState(true);
@@ -46,21 +47,21 @@ export default function OrganizerPage() {
 
   const socketRef = useRef(null);
   const videoPlayerRef = useRef(null);
-  const currentVideoIdRef = useRef(null);
+  const currentItemIdRef = useRef(null);
 
   const memberName = sessionStorage.getItem('memberName') || 'Organizer';
   const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
 
-  // Keep currentVideoIdRef in sync so callbacks can read it without stale closures
+  // Track queue entries, not media IDs: the same song can be queued twice.
   useEffect(() => {
-    currentVideoIdRef.current = currentVideoId;
-  }, [currentVideoId]);
+    currentItemIdRef.current = currentItem?.id;
+  }, [currentItem]);
 
   // Reset video progress when the playing song changes
   useEffect(() => {
     setVideoCurrentTime(0);
     setVideoDuration(0);
-  }, [currentVideoId]);
+  }, [currentItem?.id]);
 
   // Load party data
   useEffect(() => {
@@ -88,8 +89,8 @@ export default function OrganizerPage() {
         setIsLocked(partyRes.data.is_locked || false);
 
         // Auto-play first queued song
-        const playing = queueRes.data.find((i) => i.status === 'playing');
-        if (playing) setCurrentVideoId(playing.video_id);
+        const active = queueRes.data.find((i) => i.status === 'playing' || i.status === 'paused');
+        if (active) setCurrentItem(active);
       } catch (err) {
         setError('Failed to load party data.');
       } finally {
@@ -113,11 +114,11 @@ export default function OrganizerPage() {
           const playing = updatedQueue.find((i) => i.status === 'playing');
           const paused = updatedQueue.find((i) => i.status === 'paused');
           const active = playing || paused;
-          setCurrentVideoId(active ? active.video_id : null);
+          setCurrentItem(active || null);
           // Handle player state changes triggered by another client (e.g. a guest)
           if (paused) {
             videoPlayerRef.current?.pauseVideo();
-          } else if (playing) {
+          } else if (playing && playing.id === currentItemIdRef.current) {
             // If the same video is already loaded, resume it; otherwise VideoPlayer
             // will create a fresh player that auto-plays via onReady.
             videoPlayerRef.current?.playVideo();
@@ -125,7 +126,7 @@ export default function OrganizerPage() {
         }
       }
     });
-    // A guest requested a seek – apply it to the local YouTube player
+    // A guest requested a seek – apply it to the local player
     socket.on('video:seek', ({ seekTime }) => {
       videoPlayerRef.current?.seekTo(seekTime);
     });
@@ -178,12 +179,11 @@ export default function OrganizerPage() {
     async (item) => {
       try {
         await updateQueueItemStatus(partyId, item.id, 'playing');
-        if (currentVideoIdRef.current === item.video_id) {
+        if (currentItemIdRef.current === item.id) {
           // Same video is already loaded – resume from current position
           videoPlayerRef.current?.playVideo();
-        } else {
-          setCurrentVideoId(item.video_id);
         }
+        setCurrentItem({ ...item, status: 'playing' });
       } catch {
         setError('Failed to start song.');
       }
@@ -197,6 +197,7 @@ export default function OrganizerPage() {
         await updateQueueItemStatus(partyId, item.id, 'paused');
         // Pause the player in place – do NOT unload the video so position is preserved
         videoPlayerRef.current?.pauseVideo();
+        setCurrentItem((current) => current?.id === item.id ? { ...current, status: 'paused' } : current);
       } catch {
         setError('Failed to pause song.');
       }
@@ -212,12 +213,12 @@ export default function OrganizerPage() {
     const next = nextSongs.length > 0 ? nextSongs.reduce((a, b) => (a.position < b.position ? a : b)) : null;
     if (next) {
       await updateQueueItemStatus(partyId, next.id, 'playing');
-      setCurrentVideoId(next.video_id);
+      setCurrentItem({ ...next, status: 'playing' });
     } else {
       if (active) {
         await updateQueueItemStatus(partyId, active.id, 'played');
       }
-      setCurrentVideoId(null);
+      setCurrentItem(null);
     }
   }, [partyId, queue]);
 
@@ -230,7 +231,7 @@ export default function OrganizerPage() {
       if (prevSongs.length === 0) return;
       const prev = prevSongs.reduce((a, b) => (a.position > b.position ? a : b));
       await updateQueueItemStatus(partyId, prev.id, 'playing');
-      setCurrentVideoId(prev.video_id);
+      setCurrentItem({ ...prev, status: 'playing' });
     } catch {
       setError('Failed to go to previous song.');
     }
@@ -245,7 +246,7 @@ export default function OrganizerPage() {
       if (nextSongs.length === 0) return;
       const next = nextSongs.reduce((a, b) => (a.position < b.position ? a : b));
       await updateQueueItemStatus(partyId, next.id, 'playing');
-      setCurrentVideoId(next.video_id);
+      setCurrentItem({ ...next, status: 'playing' });
     } catch {
       setError('Failed to skip to next song.');
     }
@@ -258,7 +259,7 @@ export default function OrganizerPage() {
     socketRef.current?.emit('video:progress', { partyId, currentTime, duration });
   }, [partyId]);
 
-  // Seek the local YouTube player (triggered by the organizer dragging the slider)
+  // Seek the local player (triggered by the organizer dragging the slider)
   const handleSeek = useCallback((seekTime) => {
     videoPlayerRef.current?.seekTo(seekTime);
   }, []);
@@ -485,6 +486,11 @@ export default function OrganizerPage() {
             <VideoPlayer
               ref={videoPlayerRef}
               videoId={currentVideoId}
+              playbackKey={currentItem?.id}
+              mediaPath={currentItem?.source === 'ssmusic' ? currentItem.media_path : null}
+              mediaType={currentItem?.media_type}
+              title={currentItem?.video_title}
+              paused={currentItem?.status === 'paused'}
               onEnded={handleVideoEnded}
               settings={settings}
               onPrev={handlePrevious}

@@ -25,9 +25,18 @@ CREATE TABLE IF NOT EXISTS queue (
   video_id VARCHAR(50) NOT NULL,
   video_title VARCHAR(500) NOT NULL,
   video_thumbnail VARCHAR(500),
+  source VARCHAR(20) NOT NULL DEFAULT 'youtube' CHECK (source IN ('youtube', 'ssmusic')),
+  media_path TEXT,
+  media_type VARCHAR(10),
   position INTEGER NOT NULL,
   status VARCHAR(20) DEFAULT 'queued', -- 'queued', 'playing'
-  added_at TIMESTAMP DEFAULT NOW()
+  added_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT queue_media_check CHECK (
+    (source = 'youtube' AND media_path IS NULL AND media_type IS NULL)
+    OR
+    (source = 'ssmusic' AND media_path IS NOT NULL AND media_path <> ''
+      AND media_type IS NOT NULL AND media_type IN ('audio', 'video'))
+  )
 );
 
 CREATE INDEX IF NOT EXISTS idx_queue_party_id ON queue(party_id);

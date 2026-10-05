@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import ClearableInput from './ClearableInput';
-import { searchYouTube, getYouTubeVideoByUrl, addToQueue, addNextToQueue } from '../services/api';
+import { searchYouTube, searchSSMusic, getYouTubeVideoByUrl, addToQueue, addNextToQueue } from '../services/api';
 import './SongSearch.css';
 
 export default function SongSearch({ partyId, member, onAdded }) {
@@ -9,7 +9,9 @@ export default function SongSearch({ partyId, member, onAdded }) {
   // Search tab state
   const [query, setQuery] = useState('');
   const [karaokeOnly, setKaraokeOnly] = useState(false);
+  const [ssMusicSearch, setSSMusicSearch] = useState(false);
   const [results, setResults] = useState([]);
+  const [nextOffset, setNextOffset] = useState(null);
   const [loading, setLoading] = useState(false);
   const [adding, setAdding] = useState(null);
   const [playingNext, setPlayingNext] = useState(null);
@@ -28,25 +30,40 @@ export default function SongSearch({ partyId, member, onAdded }) {
   const [urlPlayNextSuccess, setUrlPlayNextSuccess] = useState(false);
 
   const hasSearched = useRef(false);
+  const searchRequest = useRef(0);
+  const submittedQuery = useRef('');
 
-  const runSearch = async (q, karaoke) => {
+  const runSearch = async (q, karaoke, ssMusic, offset = 0) => {
+    const request = ++searchRequest.current;
     setLoading(true);
     setError('');
-    setResults([]);
+    if (!offset) setResults([]);
+    setNextOffset(null);
     try {
-      const res = await searchYouTube(q, karaoke);
-      setResults(res.data);
+      const res = ssMusic ? await searchSSMusic(q, offset) : await searchYouTube(q, karaoke);
+      if (request !== searchRequest.current) return;
+      const items = ssMusic ? res.data.items : res.data;
+      setResults((previous) => offset ? [...previous, ...items] : items);
+      const next = offset + (ssMusic ? res.data.limit : 0);
+      setNextOffset(ssMusic && items.length > 0 && next < res.data.total ? next : null);
     } catch (err) {
-      setError(err.response?.data?.error || 'Search failed. Make sure the YouTube API key is configured.');
+      if (request !== searchRequest.current) return;
+      setError(err.response?.data?.error || `Search failed. Make sure the ${ssMusic ? 'ssMusic server and' : 'YouTube'} API key is configured.`);
+      if (offset) setNextOffset(offset);
     } finally {
-      setLoading(false);
+      if (request === searchRequest.current) setLoading(false);
     }
   };
+
+  useEffect(() => () => { searchRequest.current += 1; }, []);
 
   const handleQueryChange = (e) => {
     setQuery(e.target.value);
     if (!e.target.value) {
+      searchRequest.current += 1;
+      setLoading(false);
       setResults([]);
+      setNextOffset(null);
       setError('');
       hasSearched.current = false;
     }
@@ -56,16 +73,19 @@ export default function SongSearch({ partyId, member, onAdded }) {
     e.preventDefault();
     if (!query.trim()) return;
     hasSearched.current = true;
-    runSearch(query.trim(), karaokeOnly);
+    submittedQuery.current = query.trim();
+    runSearch(submittedQuery.current, karaokeOnly, ssMusicSearch);
   };
 
-  // Re-run search when karaoke toggle changes, but only if a search has been performed
+  // Re-run the last search when the source or karaoke toggle changes.
   useEffect(() => {
-    if (hasSearched.current && query.trim()) {
-      runSearch(query.trim(), karaokeOnly);
+    setSuccessId(null);
+    setPlayNextSuccessId(null);
+    if (hasSearched.current) {
+      runSearch(submittedQuery.current, karaokeOnly, ssMusicSearch);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [karaokeOnly]);
+  }, [karaokeOnly, ssMusicSearch]);
 
   const handleAdd = async (video) => {
     setAdding(video.video_id);
@@ -76,6 +96,9 @@ export default function SongSearch({ partyId, member, onAdded }) {
         video_id: video.video_id,
         video_title: video.title,
         video_thumbnail: video.thumbnail,
+        ...(video.source === 'ssmusic' && {
+          source: video.source, media_path: video.media_path, media_type: video.media_type,
+        }),
       });
       setSuccessId(video.video_id);
       setTimeout(() => setSuccessId(null), 2000);
@@ -96,6 +119,9 @@ export default function SongSearch({ partyId, member, onAdded }) {
         video_id: video.video_id,
         video_title: video.title,
         video_thumbnail: video.thumbnail,
+        ...(video.source === 'ssmusic' && {
+          source: video.source, media_path: video.media_path, media_type: video.media_type,
+        }),
       });
       setPlayNextSuccessId(video.video_id);
       setTimeout(() => setPlayNextSuccessId(null), 2000);
@@ -213,13 +239,24 @@ export default function SongSearch({ partyId, member, onAdded }) {
           <label className="karaoke-toggle">
             <input
               type="checkbox"
+              checked={ssMusicSearch}
+              onChange={(e) => setSSMusicSearch(e.target.checked)}
+            />
+            ssMusic Search
+          </label>
+          <label className="karaoke-toggle">
+            <input
+              type="checkbox"
               checked={karaokeOnly}
+              disabled={ssMusicSearch}
               onChange={(e) => setKaraokeOnly(e.target.checked)}
             />
             🎤 Karaoke versions only
           </label>
+          {ssMusicSearch && <p className="muted">Search your ssMusic library. The karaoke filter applies only to YouTube.</p>}
 
           {error && <div className="error-msg">{error}</div>}
+          {!loading && !error && hasSearched.current && results.length === 0 && <p className="muted">No songs found.</p>}
 
           {results.length > 0 && (
             <ul className="search-results">
@@ -253,6 +290,16 @@ export default function SongSearch({ partyId, member, onAdded }) {
                 </li>
               ))}
             </ul>
+          )}
+          {nextOffset !== null && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={loading}
+              onClick={() => runSearch(submittedQuery.current, karaokeOnly, ssMusicSearch, nextOffset)}
+            >
+              {loading ? 'Loading…' : 'Load more'}
+            </button>
           )}
         </>
       )}

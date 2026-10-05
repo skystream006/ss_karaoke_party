@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
+import SSMusicPlayer from './SSMusicPlayer';
 import './VideoPlayer.css';
 
 const disableCaptions = (player) => {
@@ -9,8 +10,11 @@ const disableCaptions = (player) => {
   }
 };
 
-const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings, onPrev, hasPrev, onNext, hasNext, onTimeUpdate }, ref) {
+const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, mediaPath, mediaType, title, paused = false, onEnded, settings, onPrev, hasPrev, onNext, hasNext, onTimeUpdate }, ref) {
   const playerRef = useRef(null);
+  const nativePlayerRef = useRef(null);
+  const pausedRef = useRef(paused);
+  pausedRef.current = paused;
   const containerRef = useRef(null);
   const wrapperRef = useRef(null);
   const mouseTimerRef = useRef(null);
@@ -23,14 +27,17 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
   // Expose seekTo/pauseVideo/playVideo so parent pages can programmatically control the player
   useImperativeHandle(ref, () => ({
     seekTo: (seconds) => {
+      if (nativePlayerRef.current) return nativePlayerRef.current.seekTo(seconds);
       if (playerRef.current?.seekTo) {
         playerRef.current.seekTo(seconds, true);
       }
     },
     pauseVideo: () => {
+      if (nativePlayerRef.current) return nativePlayerRef.current.pauseVideo();
       playerRef.current?.pauseVideo?.();
     },
     playVideo: () => {
+      if (nativePlayerRef.current) return nativePlayerRef.current.playVideo();
       playerRef.current?.playVideo?.();
     },
   }), []);
@@ -38,18 +45,21 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
   const [controlsVisible, setControlsVisible] = useState(true);
 
   useEffect(() => {
+    if (mediaPath || !videoId) return;
     if (!window.YT) {
       const tag = document.createElement('script');
       tag.src = 'https://www.youtube.com/iframe_api';
       const firstScript = document.getElementsByTagName('script')[0];
       firstScript.parentNode.insertBefore(tag, firstScript);
     }
-  }, []);
+  }, [mediaPath, videoId]);
 
   useEffect(() => {
-    if (!videoId) return;
+    if (!videoId || mediaPath) return;
+    let disposed = false;
 
     const initPlayer = () => {
+      if (disposed || !containerRef.current) return;
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;
@@ -73,7 +83,8 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
         events: {
           onReady: (event) => {
             disableCaptions(event.target);
-            event.target.playVideo();
+            if (pausedRef.current) event.target.pauseVideo();
+            else event.target.playVideo();
             applySettings(event.target);
           },
           onApiChange: (event) => {
@@ -111,6 +122,8 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
     // Capture ref here so the cleanup closure sees the same node
     const container = containerRef.current;
     return () => {
+      disposed = true;
+      if (window.onYouTubeIframeAPIReady === initPlayer) window.onYouTubeIframeAPIReady = null;
       clearInterval(progressIntervalRef.current);
       progressIntervalRef.current = null;
       if (playerRef.current) {
@@ -124,7 +137,11 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
       }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-creating the player on each render would be disruptive; onEnded is kept current via onEndedRef
-  }, [videoId]);
+  }, [videoId, mediaPath, playbackKey]);
+
+  useEffect(() => {
+    if (paused) playerRef.current?.pauseVideo?.();
+  }, [paused]);
 
   const applySettings = (player) => {
     if (!player || !settings) return;
@@ -215,7 +232,19 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, onEnded, settings
       onMouseMove={handleMouseMove}
     >
       <div className="video-container">
-        <div ref={containerRef} id="yt-player" />
+        {mediaPath ? (
+          <SSMusicPlayer
+            key={playbackKey || mediaPath}
+            ref={nativePlayerRef}
+            mediaPath={mediaPath}
+            mediaType={mediaType}
+            title={title}
+            paused={paused}
+            settings={settings}
+            onEnded={onEnded}
+            onTimeUpdate={onTimeUpdate}
+          />
+        ) : <div ref={containerRef} id="yt-player" />}
       </div>
 
       {/* Fullscreen overlay nav buttons */}

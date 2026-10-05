@@ -9,6 +9,8 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 - 👋 **Returning Member Quick-Join** — Join page shows current party members to click and rejoin instantly; name field autocompletes from past parties
 - 📋 **Party Queue** — Real-time playlist visible to all participants with full song-status lifecycle (`queued → playing ↔ paused → played`)
 - 🔍 **YouTube Search** — Both organizer and guests can search for songs with an optional **karaoke-only** filter, or add a song by pasting a YouTube URL directly
+- 🎶 **ssMusic Search** — Check **ssMusic Search** to search a self-hosted ssMusic Server library and queue its songs alongside YouTube songs
+- 🎤 **Synchronized Lyrics** — ssMusic audio displays an auto-scrolling SYLT screen with timed lyric highlighting; plain lyrics or a no-lyrics message appear when synchronized lyrics are unavailable
 - ⏯️ **Playback Controls** — Play, pause, resume, skip to next or go back to previous song; guests can also control playback from their device
 - ⏭️ **Auto-advance** — Player automatically moves to the next queued song when the current one ends
 - 📊 **Song Progress** — Real-time progress bar shared between the organizer player and all guests; guests can seek to any position
@@ -70,6 +72,25 @@ cd /to/folder && git pull && docker compose up --build -d
 
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:6000
+
+### Optional: ssMusic Server
+
+Use an [ssMusic Server](https://github.com/skystream006/ssMusic_Server) version containing [PR #21](https://github.com/skystream006/ssMusic_Server/pull/21). Configure `SEARCH_API_KEY` on that server, then set these **backend-only** variables in this app's root `.env` for Docker Compose (or `backend/.env` for local development):
+
+```dotenv
+SSMUSIC_SERVER_URL=https://music.example.com
+SSMUSIC_API_KEY=replace_with_the_server_search_api_key
+```
+
+The URL must be reachable from the backend container; `localhost` inside Docker refers to that container, not another server. Restart/rebuild the backend after changing configuration. Flyway applies the queue media-source migration automatically with Docker Compose; local installations must also apply new migrations before starting.
+
+In either search panel, check **ssMusic Search** and search normally. Unchecking it restores YouTube search; **Karaoke versions only** is a YouTube-only filter. Use **Load more** for additional library results. Both **Add to queue** and **Play next** support ssMusic songs.
+
+The search API introduced by PR #21 currently returns **audio files only**. The player also supports video files when supplied by the server. Videos use native browser playback; audio uses the SYLT lyric screen, including in fullscreen. Click a timed lyric line to seek; instrumental cues display as ♪. Plain USLT lyrics are shown when SYLT is absent. ssMusic currently reads embedded lyrics from MP3 files only.
+
+Pause/resume, seek, tempo, volume, guest progress and automatic next-song playback work with both sources. If the browser blocks autoplay, click **Play song**. Media codecs must be supported by the browser; this app does not transcode media or generate missing lyrics.
+
+Search, lyric retrieval and streaming are proxied through the backend using `X-API-Key`; the ssMusic key is never sent to the browser. Media URLs use expiring, file-scoped playback tickets instead of the key or login token. Only files accessible to the server's read-only search key are available; private media remains subject to ssMusic Server's access checks. Use HTTPS when accessing a remote server.
 
 ### 3. Open on your phone
 
@@ -146,7 +167,9 @@ Flyway applies migrations in version order and tracks which have already run in 
 | `DB_NAME` | `karaoke_party` | Database name |
 | `DB_USER` | `postgres` | DB username |
 | `DB_PASSWORD` | `postgres` | DB password |
-| `YOUTUBE_API_KEY` | — | **Required** for song search |
+| `YOUTUBE_API_KEY` | — | **Required** for YouTube search |
+| `SSMUSIC_SERVER_URL` | — | Optional ssMusic Server base URL, reachable from the backend |
+| `SSMUSIC_API_KEY` | — | Optional ssMusic Server `SEARCH_API_KEY`; required with `SSMUSIC_SERVER_URL` |
 | `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
 | `API_ADMIN_PW` | — | **Required** password for admin access (settings page, management APIs) |
 | `API_MEMBER_PW` | — | **Required** password for member access (join, guest, organizer pages) |
@@ -185,7 +208,7 @@ Welcome Screen
 
 ### Organizer Page
 
-- YouTube video player (YouTube IFrame API) with fullscreen support and closed captions disabled (lyrics embedded in the video are unchanged)
+- YouTube video player (YouTube IFrame API) with fullscreen support and closed captions disabled (lyrics embedded in the video are unchanged), plus native ssMusic audio/video playback with a synchronized lyric screen for audio
 - **Previous / Next** song navigation buttons
 - Auto-advance to next song when current song ends
 - Slide-out sidebar with:
@@ -197,7 +220,7 @@ Welcome Screen
 ### Guest Page
 
 - **Queue tab** — view current playlist with live progress bar; play/pause controls; seek to any position
-- **Search tab** — search YouTube (with karaoke-only toggle) or add a song by YouTube URL; add songs to the queue
+- **Search tab** — search YouTube (with karaoke-only toggle), check **ssMusic Search** for the configured media library, or add a song by YouTube URL; add songs to the queue
 
 ### Settings / Admin Page
 
