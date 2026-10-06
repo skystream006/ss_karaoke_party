@@ -221,6 +221,24 @@ test('offset pagination handles non-page-aligned offsets and upstream page clamp
   assert.deepEqual(beyond.items, []);
 });
 
+test('search forwards the no-vocals filter to every upstream page', async () => {
+  for (const value of ['true', 'false']) {
+    const count = outbound.length;
+    const response = await api(`/ssmusic/search?q=song&offset=15&NoVocalsOnly=${value}`);
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).items.length, 20);
+    const requests = outbound.slice(count);
+    assert.equal(requests.length, 2);
+    for (const request of requests) {
+      const params = new URL(request.url, 'http://fixture').searchParams;
+      assert.equal(params.get('NoVocalsOnly'), value);
+      assert.equal(params.has('novocalsonly'), false);
+    }
+  }
+  await api('/ssmusic/search?q=song');
+  assert.equal(new URL(outbound.at(-1).url, 'http://fixture').searchParams.get('NoVocalsOnly'), 'false');
+});
+
 test('search ignores arbitrary upstream URLs and derives media paths from validated identities', async () => {
   const original = catalog[0].streamUrl;
   try {
@@ -240,7 +258,10 @@ test('search ignores arbitrary upstream URLs and derives media paths from valida
 
 test('search rejects malformed query parameters without forwarding them upstream', async () => {
   const count = outbound.length;
-  for (const query of ['q[]=song', 'q=x&offset=-1', 'q=x&offset=1.5', 'q=x&offset[]=1', `q=${'a'.repeat(201)}`]) {
+  for (const query of [
+    'q[]=song', 'q=x&offset=-1', 'q=x&offset=1.5', 'q=x&offset[]=1', `q=${'a'.repeat(201)}`,
+    'NoVocalsOnly=yes', 'NoVocalsOnly=', 'NoVocalsOnly[]=true', 'NoVocalsOnly=true&NoVocalsOnly=false',
+  ]) {
     assert.equal((await api(`/ssmusic/search?${query}`)).status, 400);
   }
   assert.equal(outbound.length, count);

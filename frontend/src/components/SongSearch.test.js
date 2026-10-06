@@ -57,10 +57,10 @@ test('defaults to YouTube and re-runs the search when ssMusic is selected', asyn
   expect(searchYouTube).toHaveBeenCalledWith('song', false);
   expect(container.textContent).toContain('YouTube song');
   await toggleSSMusic();
-  expect(searchSSMusic).toHaveBeenCalledWith('song', 0);
+  expect(searchSSMusic).toHaveBeenCalledWith('song', 0, true);
   expect(container.textContent).toContain('Library song');
   expect(container.textContent).not.toContain('YouTube song');
-  expect(container.querySelectorAll('input[type="checkbox"]')[1].disabled).toBe(true);
+  expect([...container.querySelectorAll('label')].find(label => label.textContent.includes('Karaoke versions')).querySelector('input').disabled).toBe(true);
   await toggleSSMusic(false);
   expect(searchYouTube).toHaveBeenCalledTimes(2);
 });
@@ -152,9 +152,34 @@ test('loads additional results using the submitted query rather than unsubmitted
     data: { items: [{ ...song, video_id: 'second', title: 'Second song' }], total: 21, offset: 20, limit: 20 },
   });
   await act(async () => Simulate.click([...container.querySelectorAll('button')].find((button) => button.textContent === 'Load more')));
-  expect(searchSSMusic).toHaveBeenLastCalledWith('song', 20);
+  expect(searchSSMusic).toHaveBeenLastCalledWith('song', 20, true);
   expect(container.querySelectorAll('.search-result-item')).toHaveLength(2);
   expect(container.textContent).not.toContain('Load more');
+});
+
+test('shows the default-checked no-vocals filter only for ssMusic and restarts pagination when toggled', async () => {
+  const filter = () => [...container.querySelectorAll('label')]
+    .find(label => label.textContent.includes('No vocals only'))?.querySelector('input');
+  expect(filter()).toBeUndefined();
+  await toggleSSMusic();
+  expect(filter().checked).toBe(true);
+  expect(filter().closest('.ssmusic-search-filters').textContent).toContain('ssMusic Search');
+  await search();
+  expect(searchSSMusic).toHaveBeenLastCalledWith('song', 0, true);
+  searchSSMusic.mockResolvedValueOnce({ data: { items: [song], total: 21, offset: 0, limit: 20 } });
+  await act(async () => Simulate.change(filter(), { target: { checked: false } }));
+  expect(searchSSMusic).toHaveBeenLastCalledWith('song', 0, false);
+  searchSSMusic.mockResolvedValueOnce({
+    data: { items: [{ ...song, video_id: 'second' }], total: 21, offset: 20, limit: 20 },
+  });
+  await act(async () => Simulate.click([...container.querySelectorAll('button')].find(button => button.textContent === 'Load more')));
+  expect(searchSSMusic).toHaveBeenLastCalledWith('song', 20, false);
+  await act(async () => Simulate.change(filter(), { target: { checked: true } }));
+  expect(searchSSMusic).toHaveBeenLastCalledWith('song', 0, true);
+  expect(container.querySelectorAll('.search-result-item')).toHaveLength(1);
+  await toggleSSMusic(false);
+  expect(filter()).toBeUndefined();
+  expect(searchYouTube).toHaveBeenLastCalledWith('song', false);
 });
 
 test('ignores a stale YouTube response after switching sources', async () => {

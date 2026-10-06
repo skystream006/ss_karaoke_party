@@ -106,7 +106,7 @@ For a self-signed certificate or private CA, obtain the **public certificate** f
 
 The hostname or IP in `SSMUSIC_SERVER_URL` must also appear in the certificate's Subject Alternative Names. For example, a certificate for `192-168-6-66.sslip.io` does not cover the raw IP `192.168.6.66`; use `https://192-168-6-66.sslip.io:4123/` when that name resolves to your server. Certificate verification stays enabled. Replace the trusted certificate and restart the backend if the server regenerates its self-signed certificate.
 
-In either search panel, check **ssMusic Search** and search normally. Unchecking it restores YouTube search; **Karaoke versions only** is a YouTube-only filter. Use **Load more** for additional library results. Both **Add to queue** and **Play next** support ssMusic songs.
+In either search panel, check **ssMusic Search** and search normally. **No vocals only** appears beside it and is checked by default; uncheck it to include songs with vocals. This filter requires an ssMusic Server version supporting the `NoVocalsOnly` search parameter. Unchecking **ssMusic Search** hides the filter and restores YouTube search; **Karaoke versions only** is a YouTube-only filter. Use **Load more** for additional library results. Both **Add to queue** and **Play next** support ssMusic songs.
 
 The search API introduced by PR #21 currently returns **audio files only**. The player also supports video files when supplied by the server. Videos use native browser playback; audio uses the SYLT lyric screen, including in fullscreen. Click a timed lyric line to seek; instrumental cues display as ♪. Plain USLT lyrics are shown when SYLT is absent. ssMusic currently reads embedded lyrics from MP3 files only.
 

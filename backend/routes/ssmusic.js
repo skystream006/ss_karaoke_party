@@ -70,15 +70,19 @@ function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createM
   apiRouter.get('/search', cancellable(async (req, res, signal) => {
     const q = req.query.q === undefined ? '' : req.query.q;
     const rawOffset = req.query.offset === undefined ? '0' : req.query.offset;
+    const noVocalsOnly = req.query.NoVocalsOnly === undefined ? 'false' : req.query.NoVocalsOnly;
     if (typeof q !== 'string' || q.length > 200 || typeof rawOffset !== 'string'
         || !/^(0|[1-9]\d*)$/.test(rawOffset) || !Number.isSafeInteger(Number(rawOffset))) {
       throw new SsmusicError(400, 'Invalid search query or offset');
+    }
+    if (noVocalsOnly !== 'true' && noVocalsOnly !== 'false') {
+      throw new SsmusicError(400, 'Invalid NoVocalsOnly filter');
     }
     const offset = Number(rawOffset);
     const page = Math.floor(offset / SEARCH_LIMIT) + 1;
     const loadPage = async (requestedPage) => {
       const { data } = await client.request('api/songs/search', {
-        params: { q: q.trim(), page: requestedPage, pageSize: SEARCH_LIMIT },
+        params: { q: q.trim(), page: requestedPage, pageSize: SEARCH_LIMIT, NoVocalsOnly: noVocalsOnly === 'true' },
         signal,
       });
       if (!Array.isArray(data?.files) || !Number.isSafeInteger(data.total) || data.total < 0

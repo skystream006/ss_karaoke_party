@@ -11,6 +11,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
   const [query, setQuery] = useState('');
   const [karaokeOnly, setKaraokeOnly] = useState(false);
   const [ssMusicSearch, setSSMusicSearch] = useState(false);
+  const [noVocalsOnly, setNoVocalsOnly] = useState(true);
   const [results, setResults] = useState([]);
   const [nextOffset, setNextOffset] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -41,7 +42,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
     if (!offset) setResults([]);
     setNextOffset(null);
     try {
-      const res = ssMusic ? await searchSSMusic(q, offset) : await searchYouTube(q, karaoke);
+      const res = ssMusic ? await searchSSMusic(q, offset, noVocalsOnly) : await searchYouTube(q, karaoke);
       if (request !== searchRequest.current) return;
       const items = ssMusic ? res.data.items : res.data;
       setResults((previous) => offset ? [...previous, ...items] : items);
@@ -78,7 +79,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
     runSearch(submittedQuery.current, karaokeOnly, ssMusicSearch);
   };
 
-  // Re-run the last search when the source or karaoke toggle changes.
+  // Re-run the last search when the source or filters change.
   useEffect(() => {
     setSuccessId(null);
     setPlayNextSuccessId(null);
@@ -86,7 +87,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
       runSearch(submittedQuery.current, karaokeOnly, ssMusicSearch);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [karaokeOnly, ssMusicSearch]);
+  }, [karaokeOnly, ssMusicSearch, noVocalsOnly]);
 
   const handleAdd = async (video) => {
     setAdding(video.video_id);
@@ -237,14 +238,26 @@ export default function SongSearch({ partyId, member, onAdded }) {
             </button>
           </form>
 
-          <label className="karaoke-toggle">
-            <input
-              type="checkbox"
-              checked={ssMusicSearch}
-              onChange={(e) => setSSMusicSearch(e.target.checked)}
-            />
-            ssMusic Search
-          </label>
+          <div className="ssmusic-search-filters">
+            <label className="karaoke-toggle">
+              <input
+                type="checkbox"
+                checked={ssMusicSearch}
+                onChange={(e) => setSSMusicSearch(e.target.checked)}
+              />
+              ssMusic Search
+            </label>
+            {ssMusicSearch && (
+              <label className="karaoke-toggle">
+                <input
+                  type="checkbox"
+                  checked={noVocalsOnly}
+                  onChange={(e) => setNoVocalsOnly(e.target.checked)}
+                />
+                No vocals only
+              </label>
+            )}
+          </div>
           <label className="karaoke-toggle">
             <input
               type="checkbox"
