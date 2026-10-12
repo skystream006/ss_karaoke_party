@@ -1,6 +1,8 @@
 const express = require('express');
 const path = require('path');
 const { pipeline } = require('stream/promises');
+const pool = require('../db/db');
+const defaultAuth = require('../middleware/auth');
 const { createSsmusicClient, SsmusicError } = require('../lib/ssmusicClient');
 const {
   parseMediaPath, validMediaPath, mediaType, mediaId, normalizeLyrics, createMediaTickets,
@@ -63,9 +65,19 @@ function normalizeSong(file) {
   };
 }
 
-function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createMediaTickets() } = {}) {
+function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createMediaTickets(),
+  auth = defaultAuth, database = pool } = {}) {
   const apiRouter = express.Router();
   const mediaRouter = express.Router();
+
+  async function authorizePlayback(session, mediaPath) {
+    if (!session) throw new SsmusicError(401, 'Session expired or revoked');
+    if (session.level === 'guest') {
+      const { rows } = await database.query('SELECT id FROM queue WHERE party_id = $1 AND media_path = $2 LIMIT 1',
+        [session.partyId, mediaPath]);
+      if (!rows.length) throw new SsmusicError(403, 'This song is not in your party.');
+    }
+  }
 
   apiRouter.get('/search', cancellable(async (req, res, signal) => {
     const q = req.query.q === undefined ? '' : req.query.q;
@@ -134,6 +146,7 @@ function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createM
   apiRouter.get('/playback', cancellable(async (req, res, signal) => {
     const mediaPath = req.query.path;
     if (!validMediaPath(mediaPath)) throw new SsmusicError(400, 'Invalid media path');
+    await authorizePlayback(req.auth, mediaPath);
     const response = await client.request(client.mediaEndpoint('stream', mediaPath), {
       method: 'HEAD', stream: true, signal,
     });
@@ -149,15 +162,17 @@ function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createM
       }
     }
     res.json({
-      stream_path: `/ssmusic/media?ticket=${encodeURIComponent(tickets.issue(mediaPath))}`,
+      stream_path: `/ssmusic/media?ticket=${encodeURIComponent(tickets.issue(mediaPath, req.auth))}`,
       media_type: mediaType(mediaPath),
       lyrics,
     });
   }));
 
   mediaRouter.get('/', cancellable(async (req, res, signal) => {
-    const mediaPath = tickets.verify(req.query.ticket);
-    if (!mediaPath) throw new SsmusicError(401, 'Invalid or expired media ticket');
+    const ticket = tickets.claims(req.query.ticket);
+    if (!ticket?.sessionId) throw new SsmusicError(401, 'Invalid or expired media ticket');
+    const mediaPath = ticket.path;
+    await authorizePlayback(await auth.resolveSessionById(ticket.sessionId), mediaPath);
     const headers = {};
     if (req.headers.range !== undefined) {
       if (!/^bytes=(?:\d+-\d*|-\d+)$/.test(req.headers.range)) {

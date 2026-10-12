@@ -52,45 +52,37 @@ async function renderGuest(switchUserButton) {
   });
 }
 
-test.each([false, true])('guest QR dialog opens, shows party links, closes and reopens (locked: %s)', async (isLocked) => {
+test.each([false, true])('guests cannot create or share host invitations (locked: %s)', async (isLocked) => {
   getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', join_code: 'ABCDEF', is_locked: isLocked } });
   await renderGuest();
-  const dialog = container.querySelector('dialog');
-  dialog.showModal = jest.fn(() => dialog.setAttribute('open', ''));
-  dialog.close = jest.fn(() => {
-    dialog.removeAttribute('open');
-    dialog.dispatchEvent(new Event('close'));
-  });
   expect(getServerInfo).not.toHaveBeenCalled();
-  const openButton = container.querySelector('button[aria-label="Show party QR code"]');
-  await act(async () => { Simulate.click(openButton); });
-  expect(dialog.showModal).toHaveBeenCalledTimes(1);
-  expect(dialog.querySelector('h2').textContent).toBe('Join "Friday"');
-  expect(dialog.querySelector('.join-code-display').textContent).toBe('ABCDEF');
-  expect(dialog.querySelector('.url-text').textContent).toBe(`${window.location.origin}/join/ABCDEF`);
-  expect(dialog.querySelector('.qr-wrapper svg')).not.toBeNull();
-  act(() => { Simulate.click([...dialog.querySelectorAll('button')].find(button => button.textContent === 'IP Address')); });
-  expect(dialog.querySelector('.url-text').textContent).toContain('192.168.1.10');
-  expect(dialog.querySelector('.url-text').textContent).toContain('/join/ABCDEF');
-  act(() => { Simulate.click(dialog.querySelector('[aria-label="Close party QR code"]')); });
-  expect(dialog.hasAttribute('open')).toBe(false);
-  expect(dialog.querySelector('svg')).toBeNull();
-  await act(async () => { Simulate.click(openButton); });
-  expect(dialog.showModal).toHaveBeenCalledTimes(2);
-  expect(dialog.querySelector('.url-text').textContent).toBe(`${window.location.origin}/join/ABCDEF`);
-  act(() => { Simulate.keyDown(dialog, { key: 'Escape' }); });
-  expect(dialog.hasAttribute('open')).toBe(false);
-  expect(dialog.querySelector('svg')).toBeNull();
+  expect(container.querySelector('[aria-label="Show party QR code"]')).toBeNull();
+  expect(container.querySelector('dialog')).toBeNull();
+  expect(container.textContent).not.toContain('ABCDEF');
 });
 
-test('places the Change Alias action immediately after Status', async () => {
+test('places the sign-out action immediately after Status', async () => {
   const switchUser = jest.fn();
-  await renderGuest(<button type="button" onClick={switchUser}>Change Alias</button>);
+  await renderGuest(<button type="button" onClick={switchUser}>Sign out</button>);
   const statusButton = container.querySelector('[aria-label="Toggle connection status"]');
   const switchButton = statusButton.nextElementSibling;
-  expect(switchButton.textContent).toBe('Change Alias');
+  expect(switchButton.textContent).toBe('Sign out');
   act(() => { Simulate.click(switchButton); });
   expect(switchUser).toHaveBeenCalledTimes(1);
+});
+
+test('guest socket authentication reads the latest session token on every connection', async () => {
+  await renderGuest();
+  expect(io.mock.calls[0][0]).toBe(window.location.origin);
+  const authenticate = io.mock.calls[0][1].auth;
+  const callback = jest.fn();
+  sessionStorage.setItem('authToken', 'party-session');
+  authenticate(callback);
+  expect(callback).toHaveBeenLastCalledWith({ token: 'party-session' });
+  sessionStorage.setItem('authToken', 'replacement-session');
+  authenticate(callback);
+  expect(callback).toHaveBeenLastCalledWith({ token: 'replacement-session' });
+  sessionStorage.removeItem('authToken');
 });
 
 test('does not offer QR sharing when the party cannot be loaded', async () => {

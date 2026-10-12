@@ -1,6 +1,16 @@
 .qr-panel {
 }
 
+.party-invitation .modal-content { border-radius: 8px; min-width: 0; }
+.party-invitation .modal-header h2 { overflow-wrap: anywhere; }
+.party-invitation .qr-wrapper { max-width: 100%; border-radius: 8px; }
+.party-invitation .qr-wrapper svg { display: block; width: 220px; max-width: 100%; height: auto; aspect-ratio: 1; }
+.party-invitation .url-section { border: 0; border-radius: 0; padding: 0; background: none; }
+.party-invitation .url-text { min-width: 0; overflow-wrap: anywhere; }
+.party-invitation .url-label { letter-spacing: 0; }
+.party-invitation .copy-btn { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; flex: 0 0 36px; }
+.qr-regenerate { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
+
 .modal-content {
   background: var(--bg-card);
   border-radius: 20px;

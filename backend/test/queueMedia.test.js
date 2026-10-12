@@ -14,6 +14,8 @@ let removalItem;
 let removeJob;
 let partyLocked = false;
 let checkedOutClients = 0;
+const partyId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const memberId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
 const statements = [];
 const fakePool = {
   async connect() {
@@ -22,6 +24,10 @@ const fakePool = {
   },
   async query(sql, values) {
     statements.push({ sql, values });
+    if (sql.includes('FROM parties party LEFT JOIN')) {
+      return { rows: [{ id: partyId, is_active: true, is_locked: partyLocked, member_id: memberId, name: 'Guest', role: 'organizer' }] };
+    }
+    if (sql.startsWith('SELECT id FROM party_members')) return { rows: [{ id: memberId }] };
     if (sql.includes('JOIN parties p')) return { rows: conversionItem ? [{ ...conversionItem }] : [] };
     if (sql.startsWith('SELECT * FROM queue WHERE id')) return { rows: removalItem ? [{ ...removalItem }] : [] };
     if (sql.startsWith('DELETE FROM queue')) { removalItem = null; return { rows: [] }; }
@@ -43,6 +49,11 @@ before(async () => {
   require.cache[require.resolve('../db/db')] = { exports: fakePool };
   const app = express();
   app.use(express.json());
+  app.use((req, res, next) => {
+    req.auth = { userId: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', level: 'member' };
+    req.authLevel = 'member';
+    next();
+  });
   app.set('ssmusicJobs', {
     submit: (item) => submitJob(item),
     withPlaylistVideo: (item, operation) => operation(),
@@ -53,7 +64,7 @@ before(async () => {
   server = await new Promise((resolve) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
   });
-  baseUrl = `http://127.0.0.1:${server.address().port}/api/queue/party`;
+  baseUrl = `http://127.0.0.1:${server.address().port}/api/queue/${partyId}`;
 });
 
 beforeEach((context) => {
@@ -97,7 +108,7 @@ for (const suffix of ['', '/play-next']) {
   });
 
   test(`queue ${suffix || 'add'} rejects forged ssMusic IDs before opening a transaction`, async () => {
-    const previous = statements.length;
+    const previous = statements.filter(({ sql }) => sql === 'BEGIN').length;
     const response = await fetch(`${baseUrl}${suffix}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -107,7 +118,7 @@ for (const suffix of ['', '/play-next']) {
       }),
     });
     assert.equal(response.status, 400);
-    assert.equal(statements.length, previous);
+    assert.equal(statements.filter(({ sql }) => sql === 'BEGIN').length, previous);
   });
 }
 
@@ -144,7 +155,7 @@ test('YouTube searches return all results without embedding or category filters'
 });
 
 for (const suffix of ['', '/play-next']) {
-  const payload = { member_id: 'member', singer_name: 'Guest', video_id: 'abcdefghijk', video_title: 'Song' };
+  const payload = { member_id: memberId, singer_name: 'Guest', video_id: 'abcdefghijk', video_title: 'Song' };
   const add = () => fetch(`${baseUrl}${suffix}`, {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
   });
@@ -182,10 +193,10 @@ for (const suffix of ['', '/play-next']) {
       assert.equal(response.status, 201);
       const result = await response.json();
       assert.equal(submitted.id, 'item');
-      assert.equal(submitted.party_id, 'party');
+      assert.equal(submitted.party_id, partyId);
       assert.equal(submitted.video_id, payload.video_id);
       assert.equal(result.id, submitted.id);
-      assert.equal(result.member_id, 'member');
+      assert.equal(result.member_id, memberId);
       assert.equal(result.singer_name, 'Guest');
       assert.equal(result.status, 'queued');
       assert.equal(result.position, suffix ? 3 : 1);
@@ -253,7 +264,7 @@ for (const suffix of ['', '/play-next']) {
 }
 
 test('queue conversion endpoint returns pending and immediately ready items', async () => {
-  conversionItem = { id: 'item', party_id: 'party', source: 'youtube', is_locked: false };
+  conversionItem = { id: 'item', party_id: partyId, source: 'youtube', is_locked: false };
   for (const source of ['youtube', 'ssmusic']) {
     submitJob = async (item) => ({ ...item, source, ssmusic_job_id: 'job' });
     const response = await fetch(`${baseUrl}/item/ssmusic`, { method: 'POST' });
@@ -262,7 +273,7 @@ test('queue conversion endpoint returns pending and immediately ready items', as
     assert.equal(result.id, 'item');
     assert.equal(result.source, source);
     assert.equal(result.ssmusic_job_id, 'job');
-    assert.deepEqual(statements.at(-1).values, ['item', 'party']);
+    assert.deepEqual(statements.at(-1).values, ['item', partyId]);
   }
 });
 

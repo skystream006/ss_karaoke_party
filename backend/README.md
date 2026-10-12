@@ -2,16 +2,11 @@
 
 ## Authentication
 
-API endpoints require a valid session token sent as a `Bearer` token in the `Authorization` header, except the auth endpoints, public health check, and ssMusic streaming endpoint (which requires a file-scoped playback ticket).
+API endpoints require `Authorization: Bearer <token>`, except passkey enrollment/login, invitation resolution/redemption, the public health check, and ticket-authenticated media streaming. Password login and anonymous QR session issuance have been removed (legacy auth endpoints return 410).
 
-Two auth levels are supported:
+`admin` and `member` are approved passkey accounts; `member` accounts can host parties. `guest` sessions come only from valid host invitations and are restricted to their assigned party and member. Account sessions last 24 hours and are stored as hashes in PostgreSQL. Guest access ends no later than the invitation or host session. Every protected request rechecks account approval, membership and invitation validity. Auth/API responses are non-cacheable.
 
-| Level | Env var | Description |
-|-------|---------|-------------|
-| `member` | `API_MEMBER_PW` | Access to join, guest, and organizer pages and their APIs |
-| `admin` | `API_ADMIN_PW` | Full access, including the settings page and all management APIs |
-
-Session tokens are valid for **24 hours**. Endpoints marked **🔐 admin** require an admin-level token.
+Apply all Flyway migrations, including [V5__Passkeys_and_party_invitations.sql](db/migrations/V5__Passkeys_and_party_invitations.sql), before starting. Set `PASSKEY_RP_ID` and the exact `PASSKEY_ORIGIN`. HTTPS is required outside localhost; raw IP RP IDs are rejected. Optional secondary settings must be supplied together. Register the first administrator locally before exposing the service. Later registrations require admin approval. Use Node.js 22+.
 
 ---
 
@@ -21,10 +16,22 @@ Session tokens are valid for **24 hours**. Endpoints marked **🔐 admin** requi
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
-| `POST` | `/api/auth` | None | Validate password and receive a session token |
-| `GET` | `/api/auth/qr-session` | None | Issue a short-lived member-level token for QR-code access |
+| `POST` | `/api/auth/register/options` | Configured Origin | `{ name }` creates a single-use registration challenge |
+| `POST` | `/api/auth/register/verify` | Configured Origin | `{ requestId, response }`; first verified account is admin, later accounts are pending |
+| `POST` | `/api/auth/login/options` | Configured Origin | Discoverable passkey login options |
+| `POST` | `/api/auth/login/verify` | Configured Origin | `{ requestId, response }`; verifies signature, UV, RP, origin and counter |
+| `GET` | `/api/auth/me` | session | Authoritative `{ level, user, partyId, memberId, expiresAt }` |
+| `POST` | `/api/auth/logout` | session | Revoke this session and dependent guest sessions; 204 |
+| `GET` | `/api/auth/passkeys` | account | Public credential metadata for your account |
+| `POST` | `/api/auth/passkeys/options` | account + Origin | Options to enroll another passkey for your account |
+| `POST` | `/api/auth/passkeys/verify` | account + Origin | `{ requestId, response }`; 201 on verified enrollment |
+| `DELETE` | `/api/auth/passkeys/:id` | account | Remove an owned credential, retaining at least one; 204 |
+| `GET` | `/api/auth/users` | admin | List accounts and approval status |
+| `PATCH` | `/api/auth/users/:id` | admin | `{ role?, status? }`; revoke target's sessions and invitations |
 
-`POST /api/auth` body: `{ "password": "..." }` → response: `{ "token": "...", "level": "member" | "admin" }`
+Options endpoints return `{ requestId, options }`. A successful sign-in returns `{ token, level, user, partyId, memberId, expiresAt }`. Pending registration returns 201 with `{ pending: true, message }`, without a token. Role is assigned server-side; registration cannot request admin access. Names are case-insensitively unique, 2-60 characters. Challenges expire after five minutes, are consumed on the first verification attempt, and do not survive restart. `Origin` must match a configured origin exactly; credentials are verified against that ceremony's RP ID. Passkey ceremonies are rate-limited to 30 requests per five minutes per client IP and challenge storage is bounded.
+
+Roles are `admin` or `member`; account status is `pending`, `approved` or `revoked`. Account changes invalidate all of the target's sessions and dependent invitations/guests. Self-revocation and removing the last approved admin are rejected. Passkey removal does not revoke existing sessions; logout or account revocation does.
 
 ### Parties
 
@@ -34,18 +41,29 @@ Session tokens are valid for **24 hours**. Endpoints marked **🔐 admin** requi
 | `GET` | `/api/parties/all` | 🔐 admin | List all parties (active + ended) |
 | `POST` | `/api/parties` | member | Create a party |
 | `GET` | `/api/parties/members/search?name=` | member | Search members by name across all parties |
-| `GET` | `/api/parties/:id` | member | Get party details |
-| `GET` | `/api/parties/join/:code` | member | Look up party by join code |
-| `POST` | `/api/parties/:id/join` | member | Join a party |
+| `GET` | `/api/parties/:id` | party member / admin | Get authorized party details |
+| `POST` | `/api/parties/invitations/resolve` | invitation | `{ invitation }` returns only party ID/name, host name and expiry |
+| `POST` | `/api/parties/:id/invitations` | joined host | Issue a new invitation tied to this host's membership and session |
+| `POST` | `/api/parties/:id/join` | invitation or account | Redeem an invitation as guest, or join as the authenticated account |
 | `PATCH` | `/api/parties/:id` | 🔐 admin | Update party name |
-| `PATCH` | `/api/parties/:id/reactivate` | member | Reactivate an ended party |
-| `DELETE` | `/api/parties/:id` | member | End a party (marks inactive) |
-| `DELETE` | `/api/parties/:id/remove` | member | Permanently delete a party and all its data |
-| `GET` | `/api/parties/:id/members` | member | List party members |
+| `PATCH` | `/api/parties/:id/reactivate` | admin | Reactivate an ended party |
+| `PATCH` | `/api/parties/:id/lock` | party host / admin | Lock or unlock; caller-supplied member IDs are not authorization |
+| `DELETE` | `/api/parties/:id` | party host / admin | End a party and revoke invitations/guest sessions |
+| `DELETE` | `/api/parties/:id/remove` | admin | Permanently delete a party and all its data |
+| `GET` | `/api/parties/:id/members` | party member / admin | List members of the authorized party |
+| `GET` | `/api/parties/:id/members/:memberId` | own member / admin | Fetch your own membership |
 | `PATCH` | `/api/parties/:id/members/:memberId` | 🔐 admin | Update member name / role |
 | `DELETE` | `/api/parties/:id/members/:memberId` | 🔐 admin | Remove a member from the party |
 
+Invitation creation returns `{ id, token, partyId, expiresAt }`. The secret is random (32 bytes, base64url); only its SHA-256 hash is persisted. It expires after at most 12 hours, capped by the host session. Generating a new QR for the same host membership/session revokes the old invitation and its guests. Other hosts' invitations are independent. Host logout, expiry, revocation, membership removal/demotion, or ending/deleting the party invalidates derived access. Reactivation does not restore invitations.
+
+Guest redemption is `POST /api/parties/:id/join` with `{ "name": "Guest", "invitation": "<secret>" }`. It returns `{ member, token, level: "guest", user: null, partyId, memberId, expiresAt }`. The secret must match this party and a live host. `role: "organizer"`, supplied member/account IDs, weak codes, and expired/replaced invitations are rejected. Every redemption creates a distinct guest membership; a matching display name never grants another identity. The QR is reusable until revoked/expired, so possession permits joining that one party. Browser URLs use `/join/invite#invite=<secret>` to keep secrets out of request URLs/referrers; avoid logging POST bodies.
+
+Approved accounts may join with `{ name?, role? }` and a bearer session; omitted role defaults to organizer. Their membership is keyed by account ID, not name. A guest bearer token without a valid invitation cannot join another party or upgrade its role. Legacy `GET /api/parties/join/:code` no longer grants access. Listing/searching parties or names requires an approved account. QR-only memberships cannot be promoted to host.
+
 ### Queue
+
+All queue operations require membership in the requested party (or admin). The `member` label below includes a scoped QR guest, but never permits another party. Non-host submissions use the authenticated membership and name; forged member IDs are rejected. Hosts assigning a singer must choose a member of that same party.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|
@@ -101,7 +119,7 @@ The optional `NoVocalsOnly` parameter accepts `true` or `false` and is forwarded
 
 When upstream search provides `artworkUrl`, `thumbnail` contains a local `/ssmusic/artwork?path=...` reference relative to the API base. Fetch artwork with the normal bearer token and render the returned image blob; do not expose the upstream API key in an image URL. Artwork paths are constructed from the validated media identity, not upstream URLs. ssMusic queue entries store no `video_thumbnail` URL: the UI loads artwork from `media_path`, including for existing entries, without URL length limits or expiring links in the database. Unavailable artwork does not prevent adding or playing a song.
 
-URL-encode the opaque `media_path` when requesting playback. Append `stream_path` to the configured API base URL, including its `/api` prefix, for the native media element's `src`. The stream route needs no session header because the browser cannot attach one to native media requests; it verifies a four-hour, resource-scoped ticket instead. Tickets also expire on backend restart; reload the player to obtain a new one. Do not log or share these temporary playback URLs.
+URL-encode the opaque `media_path` when requesting playback. Append `stream_path` to the configured API base URL, including its `/api` prefix, for the native media element's `src`. The stream route verifies a resource/session-bound ticket and rechecks its issuing session on every request. Tickets last at most four hours, capped by the session, and expire on backend restart. A QR guest can obtain/use tickets only for files in its own party queue. Logout, invitation replacement, host revocation, or removing that song from the queue blocks subsequent guest stream requests. Already buffered/downloaded bytes cannot be recalled. Do not log or share playback URLs.
 
 `lyrics` contains `{ lines: [{ time, text }], text }`. Cue times are normalized to **milliseconds** from ssMusic's seconds-based `sylt` array; `text` is its plain `uslt` fallback. MP3 files may have embedded lyrics; other formats can play without them. No lyric generation or editing is exposed. Streaming never forwards the upstream key or redirects to the browser, and responses are private/non-cacheable.
 
@@ -115,6 +133,8 @@ URL-encode the opaque `media_path` when requesting playback. Append `stream_path
 ---
 
 ## Socket.IO Events
+
+Connect using `io(origin, { auth: { token } })`. Unauthenticated/expired sessions are rejected at the handshake. Every room join/event revalidates the session and party membership; only hosts can send `video:progress`. Guests can seek/change audio only inside their joined party and while unlocked. Session/invitation revocations disconnect affected sockets, and sockets disconnect at session expiry. `join:party` acknowledges `{ ok: true }` or `{ error }`.
 
 | Direction | Event | Payload / Description |
 |-----------|-------|----------------------|

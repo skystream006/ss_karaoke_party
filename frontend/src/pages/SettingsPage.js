@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Users } from 'lucide-react';
 import {
   getAllParties,
   updateParty,
@@ -320,6 +321,7 @@ export default function SettingsPage({ switchUserButton }) {
           <span className="settings-icon">⚙️</span>
           <h1>Settings</h1>
         </div>
+        <button className="btn btn-ghost" onClick={() => navigate('/account')}><Users size={18} aria-hidden="true" /> Accounts</button>
         {switchUserButton}
       </header>
 

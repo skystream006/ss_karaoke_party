@@ -11,7 +11,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-postgres}"]
       interval: 5s
@@ -53,13 +53,16 @@ services:
       SSMUSIC_SERVER_URL: ${SSMUSIC_SERVER_URL}
       SSMUSIC_API_KEY: ${SSMUSIC_API_KEY}
       SSMUSIC_CA_CERT_FILE: ${SSMUSIC_CA_CERT_FILE:-}
-      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
-      API_ADMIN_PW: ${API_ADMIN_PW}
-      API_MEMBER_PW: ${API_MEMBER_PW}
+      FRONTEND_URL: ${FRONTEND_URL:-https://localhost:${HTTPS_PORT:-4124}}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-localhost}
+      PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-https://localhost:${HTTPS_PORT:-4124}}
+      PASSKEY_RP_ID_SECONDARY: ${PASSKEY_RP_ID_SECONDARY:-}
+      PASSKEY_ORIGIN_SECONDARY: ${PASSKEY_ORIGIN_SECONDARY:-}
+      TRUST_PROXY: ${TRUST_PROXY:-1}
     volumes:
       - ./certs:/app/certs:ro
     ports:
-      - "6000:5000"
+      - "127.0.0.1:6000:5000"
     restart: unless-stopped
 
   frontend:
@@ -68,11 +71,24 @@ services:
     depends_on:
       - backend
     environment:
-      REACT_APP_API_URL: ${REACT_APP_API_URL:-http://localhost:5000/api}
-      REACT_APP_SOCKET_URL: ${REACT_APP_SOCKET_URL:-http://localhost:5000}
+      PORT: ${PORT:-3124}
+      HTTPS_PORT: ${HTTPS_PORT:-4124}
+      PASSKEY_RP_ID: ${PASSKEY_RP_ID:-localhost}
+      PASSKEY_ORIGIN: ${PASSKEY_ORIGIN:-https://localhost:${HTTPS_PORT:-4124}}
+      PASSKEY_RP_ID_SECONDARY: ${PASSKEY_RP_ID_SECONDARY:-}
+      PASSKEY_ORIGIN_SECONDARY: ${PASSKEY_ORIGIN_SECONDARY:-}
+      HTTPS_CERT_PATH: ${HTTPS_CERT_PATH:-}
+      HTTPS_KEY_PATH: ${HTTPS_KEY_PATH:-}
+      REACT_APP_API_URL: ${REACT_APP_API_URL:-/api}
+      REACT_APP_SOCKET_URL: ${REACT_APP_SOCKET_URL:-}
+    volumes:
+      - frontend_tls:/var/lib/karaoke/tls
+      - ${HTTPS_CERTS_DIR:-./tls}:/run/karaoke-tls:ro
     ports:
-      - "${PORT:-3000}:80"
+      - "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${PORT:-3124}:80"
+      - "${DOCKER_BIND_ADDRESS:-127.0.0.1}:${HTTPS_PORT:-4124}:443"
     restart: unless-stopped
 
 volumes:
   postgres_data:
+  frontend_tls:

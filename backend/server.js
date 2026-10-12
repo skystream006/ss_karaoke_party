@@ -6,21 +6,26 @@ const cors = require('cors');
 const os = require('os');
 const pool = require('./db/db');
 const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
-const { requireAuth } = require('./middleware/auth');
+const { requireAuth, requireAccount } = require('./middleware/auth');
+const { passkeyConfigurations } = require('./lib/passkeys');
+const { registerPartySockets } = require('./lib/partySockets');
 const ssmusic = require('./routes/ssmusic').createSsmusicRoutes();
 const { createSsmusicJobs } = require('./lib/ssmusicJobs');
 
 const app = express();
+if (process.env.TRUST_PROXY) {
+  app.set('trust proxy', /^\d+$/.test(process.env.TRUST_PROXY)
+    ? Number(process.env.TRUST_PROXY) : process.env.TRUST_PROXY);
+}
 const server = http.createServer(app);
 
 // Database schema is managed by Flyway (see backend/db/migrations/).
 
 // CORS configuration
-const allowedOrigins = process.env.FRONTEND_URL
-  ? [process.env.FRONTEND_URL]
-  : ['http://localhost:3000', 'http://localhost:3001'];
+const allowedOrigins = passkeyConfigurations().map(({ origin }) => origin);
 
 const io = new Server(server, {
+  maxHttpBufferSize: 8192,
   cors: {
     origin: allowedOrigins,
     methods: ['GET', 'POST'],
@@ -33,7 +38,13 @@ app.set('ssmusicJobs', ssmusicJobs);
 server.on('close', () => ssmusicJobs.close());
 
 app.use(cors({ origin: allowedOrigins }));
-app.use(express.json());
+app.use(express.json({ limit: '64kb' }));
+app.use('/api', (req, res, next) => {
+  res.set('Referrer-Policy', 'no-referrer');
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Cache-Control', 'no-store');
+  next();
+});
 
 // Apply general rate limiter to all API routes
 app.use('/api', generalLimiter);
@@ -49,17 +60,18 @@ app.get('/api/health', (req, res) => {
 // Native media elements authenticate only with an expiring, single-resource ticket.
 app.use('/api/ssmusic/media', ssmusic.mediaRouter);
 
+app.use('/api/parties', require('./routes/parties'));
+
 // Apply authentication to all remaining API routes
 app.use('/api', requireAuth);
 
 // Routes (more specific limiters are applied per-route inside route files)
-app.use('/api/parties', require('./routes/parties'));
 app.use('/api/queue', require('./routes/queue'));
 app.use('/api/youtube', searchLimiter, require('./routes/youtube'));
 app.use('/api/ssmusic', searchLimiter, ssmusic.apiRouter);
 
 // Server info (local IP address)
-app.get('/api/server-info', (req, res) => {
+app.get('/api/server-info', requireAccount, (req, res) => {
   const interfaces = os.networkInterfaces();
   let localIp = null;
   for (const iface of Object.values(interfaces)) {
@@ -74,56 +86,7 @@ app.get('/api/server-info', (req, res) => {
   res.json({ ip: localIp });
 });
 
-// Socket.IO
-io.on('connection', (socket) => {
-  console.log(`Socket connected: ${socket.id}`);
-
-  socket.on('join:party', (partyId) => {
-    socket.join(partyId);
-    console.log(`Socket ${socket.id} joined party room: ${partyId}`);
-  });
-
-  socket.on('leave:party', (partyId) => {
-    socket.leave(partyId);
-    console.log(`Socket ${socket.id} left party room: ${partyId}`);
-  });
-
-  // Organizer broadcasts current playback position to guests
-  socket.on('video:progress', ({ partyId, currentTime, duration }) => {
-    if (
-      typeof partyId !== 'string' ||
-      typeof currentTime !== 'number' || !isFinite(currentTime) || currentTime < 0 ||
-      typeof duration !== 'number' || !isFinite(duration) || duration < 0
-    ) return;
-    socket.to(partyId).emit('video:progress', { currentTime, duration });
-  });
-
-  // Guest requests a seek; organizer receives and seeks the player
-  socket.on('video:seek', ({ partyId, seekTime }) => {
-    if (
-      typeof partyId !== 'string' ||
-      typeof seekTime !== 'number' || !isFinite(seekTime) || seekTime < 0
-    ) return;
-    socket.to(partyId).emit('video:seek', { seekTime });
-  });
-
-  // Guest requests audio settings change; organizer receives and applies it
-  socket.on('audio:settings', ({ partyId, settings }) => {
-    if (
-      typeof partyId !== 'string' ||
-      !settings ||
-      typeof settings !== 'object' ||
-      typeof settings.key !== 'number' || !isFinite(settings.key) || settings.key < -12 || settings.key > 12 ||
-      typeof settings.tempo !== 'number' || !isFinite(settings.tempo) || settings.tempo < 0.5 || settings.tempo > 2.0 ||
-      typeof settings.vocalLevel !== 'number' || !isFinite(settings.vocalLevel) || settings.vocalLevel < 0 || settings.vocalLevel > 100
-    ) return;
-    socket.to(partyId).emit('audio:settings', { settings });
-  });
-
-  socket.on('disconnect', () => {
-    console.log(`Socket disconnected: ${socket.id}`);
-  });
-});
+registerPartySockets(io);
 
 const PORT = process.env.PORT || 5000;
 

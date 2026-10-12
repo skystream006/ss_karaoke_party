@@ -5,8 +5,8 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 ## Features
 
 - 🎉 **Create a Party** — Organizer starts a named session and receives a QR code / join link for guests
-- 🎵 **Join a Party** — Guests join via QR code, join code, or browsing active parties; can join as Guest or Organizer
-- 👋 **Returning Member Quick-Join** — Join page shows current party members to click and rejoin instantly; name field autocompletes from past parties
+- **Join a Party** - Approved passkey accounts can browse and host parties. QR guests join only the party named in a valid host invitation.
+- **Account-bound Memberships** - Returning hosts rejoin their own membership; a name or member ID cannot impersonate another person.
 - 📋 **Party Queue** — Real-time playlist visible to all participants with full song-status lifecycle (`queued → playing ↔ paused → played`)
 - 🔍 **YouTube Search** — Both organizer and guests can search for songs with an optional **karaoke-only** filter, or add a song by pasting a YouTube URL directly
 - 🎶 **ssMusic Search** — Check **ssMusic Search** to search a self-hosted ssMusic Server library and queue its songs alongside YouTube songs
@@ -20,8 +20,8 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 - 👥 **Member Management** — View, rename, change the role of, or remove any party member; secondary organizers are supported
 - 🔁 **Party Reactivation** — Ended parties can be reactivated without losing the member list or queue history
 - 🎨 **Themes** — Multiple colour themes selectable across the app
-- 🔐 **Password Protection** — Two-tier access control (member / admin); QR-code join links auto-grant member access without a password prompt
-- **Default Username** — After password login, select an existing party-member name from autocomplete or enter a new one. The choice is remembered in this browser and prefills the editable name fields when joining or creating parties. New names become available to other users after joining or creating a party; QR-code access does not require this selection step.
+- **Passkey Login** - WebAuthn with required user verification; the first account is admin and later accounts need approval. Password login is removed.
+- **Host-bound QR Invitations** - Random, expiring invitations grant a separate guest identity and access to one party only. Host logout, access revocation, invitation replacement, or ending the party revokes that guest access.
 - ⚙️ **Admin / Settings Panel** — Dedicated settings page to manage all parties and their members; supports permanent party deletion
 - 📱 **Mobile-first** — Designed to be used on phones
 - ⚡ **Real-time Updates** — Queue and playback state pushed to all connected clients via Socket.IO
@@ -56,8 +56,11 @@ Edit `.env` and fill in:
 
 ```
 YOUTUBE_API_KEY=your_key_here
-API_ADMIN_PW=choose_a_strong_admin_password
-API_MEMBER_PW=choose_a_member_password
+PORT=3124
+HTTPS_PORT=4124
+PASSKEY_RP_ID=localhost
+PASSKEY_ORIGIN=https://localhost:4124
+DOCKER_BIND_ADDRESS=127.0.0.1
 ```
 
 #### Initialize ssMusic configuration with Python
@@ -88,8 +91,13 @@ docker-compose up --build
 cd /to/folder && git pull && docker compose up --build -d
 ```
 
-- Frontend: http://localhost:3000
-- Backend API: http://localhost:6000
+- HTTPS frontend and API: https://localhost:4124
+- HTTP: http://localhost:3124 redirects to `PASSKEY_ORIGIN`
+- Backend diagnostics only: http://localhost:6000 (loopback; normal clients use the frontend proxy)
+
+Open the frontend at the exact `PASSKEY_ORIGIN` and create the first administrator passkey before exposing the application. Compose binds the frontend, database and backend ports to loopback by default. For remote hosting, configure the final HTTPS hostname before enrolling passkeys; see Authentication below. Never remove existing database volumes when upgrading.
+
+On first startup, Nginx generates a self-signed TLS certificate in a persistent Docker volume. Trust its public certificate on each client or supply a trusted certificate/key pair as described below. Changing the examples does not change an existing `.env`: replace any old HTTP `PASSKEY_ORIGIN` with the actual HTTPS origin before rebuilding.
 
 ### Optional: ssMusic Server
 
@@ -120,17 +128,69 @@ Search, video add/remove actions, job status, lyric retrieval and streaming are 
 
 ### 3. Open on your phone
 
-Make sure your phone and the host machine are on the same network, then browse to:
+Configure a hostname reachable by the host and phones, with a trusted certificate. For direct access through the bundled HTTPS proxy:
 
+```dotenv
+DOCKER_BIND_ADDRESS=0.0.0.0
+HTTPS_PORT=4124
+PASSKEY_RP_ID=party.example.com
+PASSKEY_ORIGIN=https://party.example.com:4124
 ```
-http://<your-machine-ip>:3000
+
+Open that exact URL on the host, sign in, join a party as Organizer, and open its QR panel. Guests scan the generated invitation and enter a name; they do not need an account or passkey. Raw IP addresses are not valid passkey RP IDs. The QR uses the host browser's origin, so a `localhost` QR is only useful on that same computer.
+
+The included Nginx reverse proxy terminates TLS, serves the UI, and forwards `/api` and `/socket.io` to the internal backend. Change `DOCKER_BIND_ADDRESS` only when the intended clients/proxy need network access, after enrolling the initial administrator. Allow the selected ports through the host firewall as appropriate; this project does not change firewall or router rules. Do not expose the backend or database ports publicly.
+
+## HTTPS and Reverse Proxy
+
+This follows ssMusic_Server's separate HTTP/HTTPS listeners and persistent-certificate behavior, adapted to the existing Nginx frontend. `PORT` (default 3124) publishes container port 80 for HTTP redirects. `HTTPS_PORT` (default 4124) publishes container port 443 for TLS 1.2/1.3. `PASSKEY_ORIGIN` is the exact browser-facing HTTPS origin and is the fixed redirect target; request `Host` headers cannot redirect visitors to arbitrary hosts. Redirects preserve paths/query strings, and browsers retain invitation URL fragments.
+
+### Certificates
+
+When `HTTPS_CERT_PATH` and `HTTPS_KEY_PATH` are unset, startup generates a unique self-signed certificate and key under `/var/lib/karaoke/tls` in the named `frontend_tls` volume. The private key has mode 0600 and is never placed in the image or source tree. The certificate covers primary/secondary passkey hostnames and loopback. It is reused across container rebuilds/recreation, and regenerated on startup when required hostnames change or fewer than 30 days remain. Restart the frontend periodically so renewal checks run; a regenerated self-signed certificate must be trusted again. Back up this volume along with the database; never use `docker compose down -v` unless intentionally deleting data.
+
+Export only the generated public certificate for inspection/trust:
+
+```powershell
+docker compose cp frontend:/var/lib/karaoke/tls/server-cert.pem ./certs/karaoke-https.pem
 ```
+
+Verify and trust it on your devices using their normal certificate-management tools. A browser warning bypass is not a substitute for trusted TLS and may prevent passkeys. For public access, a CA-issued certificate is recommended. No automatic public ACME issuance is configured.
+
+To use your own full certificate chain and matching unencrypted private key, put them in the separate Git-ignored `tls/` directory (not `certs/`) or set `HTTPS_CERTS_DIR` to an existing certificate directory:
+
+```dotenv
+HTTPS_CERTS_DIR=./tls
+HTTPS_CERT_PATH=/run/karaoke-tls/fullchain.pem
+HTTPS_KEY_PATH=/run/karaoke-tls/privkey.pem
+```
+
+Compose mounts that directory read-only in the frontend. Both settings are required, and the certificate must be valid, match the private key, and cover every configured origin hostname. Custom files are never overwritten or replaced with generated files; startup fails if they are invalid. Reload/restart Nginx after renewing them. The separate `certs/` mount continues to hold only public CA certificates for outbound ssMusic connections.
+
+### An External Proxy on Port 443
+
+Keep `PASSKEY_ORIGIN=https://party.example.com` when clients use standard port 443. Configure the external reverse proxy to reach the app's **HTTPS** listener on port 4124, forwarding `/api` and WebSocket upgrades for `/socket.io`. Do not forward it to HTTP port 3124, which now only redirects. Verify the upstream certificate using its hostname and trusted certificate/CA; do not disable certificate verification.
+
+If clients also need direct access on port 4124 with the same passkey hostname:
+
+```dotenv
+PASSKEY_RP_ID=party.example.com
+PASSKEY_ORIGIN=https://party.example.com
+PASSKEY_RP_ID_SECONDARY=party.example.com
+PASSKEY_ORIGIN_SECONDARY=https://party.example.com:4124
+```
+
+Both exact origins are accepted and use the same RP ID. Different hostnames need separately enrolled passkeys. Alternatively, forward public TCP port 443 to local 4124 without terminating TLS upstream; the bundled Nginx will terminate it. DNS and port forwarding must be configured outside this project.
+
+Nginx forwards the connection's scheme and client address. Compose defaults `TRUST_PROXY=1` for the bundled proxy. If another trusted proxy is in front, configure the appropriate hop count/subnet and restrict network access so clients cannot bypass it; otherwise forwarded-address-based rate limits can be spoofed. Native Node development leaves proxy trust disabled unless explicitly configured.
 
 ---
 
 ## Development (without Docker)
 
 ### Backend
+
+Use Node.js 22 or newer (the Docker images use Node.js 24).
 
 ```bash
 cd backend
@@ -197,29 +257,40 @@ Flyway applies migrations in version order and tracks which have already run in 
 | `SSMUSIC_SERVER_URL` | — | Optional ssMusic Server base URL, reachable from the backend |
 | `SSMUSIC_API_KEY` | — | Optional ssMusic Server `SEARCH_API_KEY`; required with `SSMUSIC_SERVER_URL` |
 | `SSMUSIC_CA_CERT_FILE` | — | Optional backend path to a trusted CA/self-signed public certificate for ssMusic HTTPS |
-| `FRONTEND_URL` | `http://localhost:3000` | CORS allowed origin |
-| `API_ADMIN_PW` | — | **Required** password for admin access (settings page, management APIs) |
-| `API_MEMBER_PW` | — | **Required** password for member access (join, guest, organizer pages) |
+| `FRONTEND_URL` | `http://localhost:3000` | Legacy fallback for the passkey origin in native execution |
+| `PASSKEY_RP_ID` | Origin hostname | Passkey relying-party hostname; never a raw IP address |
+| `PASSKEY_ORIGIN` | `FRONTEND_URL` or `http://localhost:3000` | Exact browser origin, including a non-default port; HTTPS except localhost |
+| `PASSKEY_RP_ID_SECONDARY` | Unset | Optional second hostname, configured together with its origin |
+| `PASSKEY_ORIGIN_SECONDARY` | Unset | Optional second exact browser origin; both configured origins are allowed by CORS |
+
+For Compose, `PORT` is the HTTP redirect port (3124), `HTTPS_PORT` is the TLS frontend port (4124), and `DOCKER_BIND_ADDRESS` defaults to `127.0.0.1`. The backend's internal port remains 5000. Compose defaults `PASSKEY_ORIGIN` to `https://localhost:${HTTPS_PORT}` and the RP ID to `localhost`. Set the actual browser origin explicitly, including the HTTPS port when it is not 443; a proxy-facing origin can differ from the published port. Native Node development still uses the HTTP backend/CRA setup above.
+
+Docker TLS settings: `HTTPS_CERT_PATH` and `HTTPS_KEY_PATH` select a custom pair inside the frontend; `HTTPS_CERTS_DIR` selects its host directory (default `./tls`). Unset certificate paths enable persistent generated certificates. `TRUST_PROXY` configures trusted backend proxy hops (Compose default 1).
 
 ### Frontend (`frontend/.env`)
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `REACT_APP_API_URL` | `/api` (proxied) | Backend API base URL |
-| `REACT_APP_SOCKET_URL` | auto-detected | Socket.IO server URL |
+| `REACT_APP_SOCKET_URL` | Page origin | Socket.IO server URL; the same-origin proxy is recommended |
 
 ---
 
 ## Authentication
 
-The app uses a simple password-based session system. Two password tiers are configured via environment variables:
+Authentication uses SimpleWebAuthn, following the passkey enrollment model in ssMusic_Server. The first verified registration creates the approved administrator atomically. All later registrations are pending until an admin approves them in **Settings > Accounts**. Admins can assign Host (`member`) or Admin roles and revoke access. Account changes revoke that account's sessions and dependent guest access. At least one approved administrator must remain.
 
-| Level | Env var | Access |
-|-------|---------|--------|
-| **member** | `API_MEMBER_PW` | Join parties, use guest and organizer pages, and their APIs |
-| **admin** | `API_ADMIN_PW` | Everything above **plus** the settings page and all party/member management APIs |
+**Settings > Passkeys** lists your credentials and allows adding another passkey or removing one while retaining at least one. Private keys stay in your authenticator. PostgreSQL stores public keys, counters, accounts, and SHA-256 session/invitation hashes. WebAuthn challenges require user verification, are single-use, expire after five minutes, and are bound to the configured origin and RP ID. Enrollment of an additional credential is also bound to the signed-in account/session.
 
-On first visit the app prompts for a password. A session token (valid for 24 hours) is issued and sent with every subsequent API request as a `Bearer` token. QR-code join links automatically obtain a member-level session without a password prompt.
+Account sessions expire after 24 hours, survive backend restarts, and are stored in browser session storage. Logout revokes the server session. A guest's session is tied to its party, new guest membership, invitation, and host session; its role cannot be upgraded through `/join`. Guests cannot list parties/accounts, manage hosts, create invitations, or read/change another party's queue. Search remains available for adding songs; guest ssMusic playback is restricted to songs in their own queue. HTTP requests, socket room joins/events, and media requests enforce the same scope.
+
+Each QR display creates a new cryptographically random 256-bit invitation, valid for up to 12 hours and never beyond the host session. The secret is in the URL fragment (`/join/invite#invite=...`), not a public join code or URL sent to the server; the browser submits it in a POST body. Replacing that host session's QR revokes its previous invitation and derived guest sessions. Closing the QR panel does not revoke it; reopening generates a replacement. Sign out or end the party to revoke access when finished. Treat the QR/link as a bearer invitation: anyone who receives or photographs it can join that party while it remains valid. It is reusable by multiple guests, each receiving a distinct member/session, not a one-use ticket.
+
+Use HTTPS outside localhost and keep RP hostnames stable. A secondary origin can be configured as a matched origin/RP pair; unrelated hostnames need separately enrolled credentials. Run one backend instance: challenges, rate limits, Socket.IO rooms and media-ticket signing keys are process-local. Expired sessions are denied even if their rows have not yet been pruned. Already downloaded or buffered media cannot be recalled.
+
+### Upgrading from passwords
+
+Apply [V5__Passkeys_and_party_invitations.sql](backend/db/migrations/V5__Passkeys_and_party_invitations.sql) through Flyway before starting the new backend. Compose applies it automatically. Existing parties, members, and queues are retained. Old member names do not establish account ownership; approved hosts join with their new account to create an owned membership. Existing password sessions and six-character QR links are invalid. `API_ADMIN_PW` and `API_MEMBER_PW` are no longer read and can be removed from existing environment files. Complete first-admin enrollment locally, approve other hosts, then generate new QR invitations.
 
 ---
 
@@ -228,9 +299,10 @@ On first visit the app prompts for a password. A session token (valid for 24 hou
 ```
 Welcome Screen
 ├── Start a Party → Enter party name + your name → Organizer Page
-├── Join a Party  → Browse parties / enter code → Enter name → Guest Page
-│                                                       └── (Scan QR) ──────┘
-└── Settings      → Admin panel (manage parties & members)
+├── Join a Party  → Approved account joins its own membership
+└── Settings      → Passkeys / Accounts (admin) / Parties (admin)
+
+Host QR invitation → Validate invitation → Enter name → Scoped Guest Page
 ```
 
 ### Organizer Page
@@ -254,6 +326,14 @@ Welcome Screen
 - List all parties (active and inactive)
 - Rename parties, reactivate ended parties, permanently delete parties
 - View and manage party members — rename, change role (guest ↔ organizer), remove
+
+QR-only members cannot be promoted to organizers; hosting requires an approved passkey account.
+
+## Verification
+
+Run `npm --prefix backend test` and `npm --prefix frontend test -- --watchAll=false --runInBand`, then `npm --prefix frontend run build`. The setup-helper tests use `python -m unittest discover -s tests -v`.
+
+The security integration suite uses real signed WebAuthn responses and PostgreSQL transactions. Point `TEST_DATABASE_URL` at a disposable database whose name ends in `_test`, then run `npm --prefix backend run test:security`. The suite creates and drops only a uniquely named test schema. It covers concurrent first-admin enrollment, pending approval, signature/origin/user-verification failures, passkey management, invitation rotation/expiry, impersonation and cross-party denial, host logout, party end/reactivation, and account revocation. Do not use a production database.
 
 ---
 

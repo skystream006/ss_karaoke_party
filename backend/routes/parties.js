@@ -1,9 +1,68 @@
 const express = require('express');
 const router = express.Router();
 const pool = require('../db/db');
-const { v4: uuidv4 } = require('uuid');
+const { randomInt } = require('node:crypto');
 const { writeLimiter } = require('../middleware/rateLimiter');
-const { requireAdmin, requireAuth } = require('../middleware/auth');
+const { requireAdmin, requireAuth, requireAccount, requirePartyAccess, requirePartyHost, validId } = require('../middleware/auth');
+const { createPartyInvitations } = require('../lib/partyInvitations');
+
+const invitations = createPartyInvitations();
+
+router.post('/invitations/resolve', writeLimiter, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const invitation = await invitations.find(req.body.invitation);
+    res.json({ party: { id: invitation.party_id, name: invitation.party_name },
+      host: invitation.host_name, expiresAt: invitation.expires_at });
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Unable to check invitation.' });
+  }
+});
+
+router.post('/:id/join', writeLimiter, (req, res, next) => {
+  if (req.body.invitation !== undefined) return next();
+  requireAuth(req, res, () => requireAccount(req, res, next));
+}, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    if (req.body.invitation !== undefined) {
+      return res.status(201).json(await invitations.join(req.params.id, req.body));
+    }
+    const name = typeof req.body.name === 'string' && req.body.name.trim() ? req.body.name.trim() : req.auth.user.name;
+    const role = req.body.role === undefined ? 'organizer' : req.body.role;
+    if (!validId(req.params.id) || name.length > 60 || !['organizer', 'guest'].includes(role)) {
+      return res.status(400).json({ error: 'Invalid party membership.' });
+    }
+    const result = await pool.query(
+      `INSERT INTO party_members (party_id, name, role, user_id)
+       SELECT id, $2, $3, $4 FROM parties WHERE id = $1 AND is_active = true
+       ON CONFLICT (party_id, user_id) WHERE user_id IS NOT NULL
+       DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role
+       RETURNING id, party_id, name, role, joined_at`,
+      [req.params.id, name, role, req.auth.userId]);
+    if (!result.rows[0]) return res.status(404).json({ error: 'Party not found or not active.' });
+    if (role !== 'organizer') {
+      await pool.query('DELETE FROM party_invitations WHERE host_member_id = $1', [result.rows[0].id]);
+      req.app.get('io')?.in(`member:${result.rows[0].id}`).disconnectSockets(true);
+    }
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to join party.' });
+  }
+});
+
+router.use(requireAuth);
+
+router.post('/:id/invitations', writeLimiter, requirePartyHost, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    const { revokedIds, ...invitation } = await invitations.issue(req.auth, req.params.id);
+    for (const id of revokedIds) req.app.get('io')?.in(`invitation:${id}`).disconnectSockets(true);
+    res.status(201).json(invitation);
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Failed to create invitation.' });
+  }
+});
 
 const DEFAULT_ORGANIZER_NAME = 'Organizer';
 // Generate a short join code
@@ -11,13 +70,13 @@ function generateJoinCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let code = '';
   for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length));
+    code += chars.charAt(randomInt(chars.length));
   }
   return code;
 }
 
 // GET /api/parties - List all active parties
-router.get('/', async (req, res) => {
+router.get('/', requireAccount, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT id, name, join_code, is_locked, created_at FROM parties WHERE is_active = true ORDER BY created_at DESC'
@@ -43,7 +102,7 @@ router.get('/all', requireAdmin, async (req, res) => {
 });
 
 // POST /api/parties - Create a new party
-router.post('/', writeLimiter, async (req, res) => {
+router.post('/', writeLimiter, requireAccount, async (req, res) => {
   const { name, organizer_name } = req.body;
   if (!name || !organizer_name) {
     return res.status(400).json({ error: 'Party name and organizer name are required' });
@@ -70,8 +129,8 @@ router.post('/', writeLimiter, async (req, res) => {
     const party = partyResult.rows[0];
 
     const memberResult = await client.query(
-      'INSERT INTO party_members (party_id, name, role) VALUES ($1, $2, $3) RETURNING *',
-      [party.id, organizer_name, 'organizer']
+      'INSERT INTO party_members (party_id, name, role, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [party.id, organizer_name, 'organizer', req.auth.userId]
     );
 
     await client.query('COMMIT');
@@ -86,7 +145,7 @@ router.post('/', writeLimiter, async (req, res) => {
 });
 
 // GET /api/parties/members/search - Search members by name across all parties
-router.get('/members/search', async (req, res) => {
+router.get('/members/search', requireAccount, async (req, res) => {
   const { name } = req.query;
   if (!name || !name.trim() || name.trim().length < 2) {
     return res.json([]);
@@ -108,7 +167,7 @@ router.get('/members/search', async (req, res) => {
   }
 });
 
-router.get('/members/names', async (req, res) => {
+router.get('/members/names', requireAccount, async (req, res) => {
   try {
     const result = await pool.query(
       `SELECT MIN(TRIM(name)) AS name
@@ -125,7 +184,7 @@ router.get('/members/names', async (req, res) => {
 });
 
 // GET /api/parties/:id - Get party details
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePartyAccess, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT id, name, join_code, is_active, is_locked, created_at FROM parties WHERE id = $1',
@@ -143,56 +202,7 @@ router.get('/:id', async (req, res) => {
 
 // GET /api/parties/join/:code - Look up a party by join code
 router.get('/join/:code', async (req, res) => {
-  try {
-    const result = await pool.query(
-      'SELECT id, name, join_code, is_active FROM parties WHERE join_code = $1 AND is_active = true',
-      [req.params.code.toUpperCase()]
-    );
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Party not found' });
-    }
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to find party' });
-  }
-});
-
-// POST /api/parties/:id/join - Join a party
-router.post('/:id/join', writeLimiter, async (req, res) => {
-  const { name, role } = req.body;
-  const memberRole = role === 'organizer' ? 'organizer' : 'guest';
-  if (!name && memberRole !== 'organizer') {
-    return res.status(400).json({ error: 'Name is required' });
-  }
-  const memberName = name || DEFAULT_ORGANIZER_NAME;
-
-  try {
-    const partyResult = await pool.query(
-      'SELECT id FROM parties WHERE id = $1 AND is_active = true',
-      [req.params.id]
-    );
-    if (partyResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Party not found or not active' });
-    }
-
-    const existingMember = await pool.query(
-      'SELECT * FROM party_members WHERE party_id = $1 AND LOWER(name) = LOWER($2) AND role = $3',
-      [req.params.id, memberName, memberRole]
-    );
-    if (existingMember.rows.length > 0) {
-      return res.status(200).json(existingMember.rows[0]);
-    }
-
-    const memberResult = await pool.query(
-      'INSERT INTO party_members (party_id, name, role) VALUES ($1, $2, $3) RETURNING *',
-      [req.params.id, memberName, memberRole]
-    );
-    res.status(201).json(memberResult.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to join party' });
-  }
+  res.status(410).json({ error: 'Join codes have been replaced by host invitations.' });
 });
 
 // PATCH /api/parties/:id - Update party details (e.g. name) — admin only
@@ -254,8 +264,8 @@ router.post('/:id/duplicate', writeLimiter, requireAdmin, async (req, res) => {
     const party = partyResult.rows[0];
 
     const memberResult = await client.query(
-      'INSERT INTO party_members (party_id, name, role) VALUES ($1, $2, $3) RETURNING *',
-      [party.id, DEFAULT_ORGANIZER_NAME, 'organizer']
+      'INSERT INTO party_members (party_id, name, role, user_id) VALUES ($1, $2, $3, $4) RETURNING *',
+      [party.id, req.auth.user.name || DEFAULT_ORGANIZER_NAME, 'organizer', req.auth.userId]
     );
 
     await client.query('COMMIT');
@@ -270,7 +280,7 @@ router.post('/:id/duplicate', writeLimiter, requireAdmin, async (req, res) => {
 });
 
 // PATCH /api/parties/:id/reactivate - Reactivate an ended party
-router.patch('/:id/reactivate', async (req, res) => {
+router.patch('/:id/reactivate', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       'UPDATE parties SET is_active = true WHERE id = $1 RETURNING id, name, join_code, is_active, is_locked, created_at',
@@ -287,29 +297,10 @@ router.patch('/:id/reactivate', async (req, res) => {
 });
 
 // PATCH /api/parties/:id/lock - Lock or unlock a party — admin or organizer
-router.patch('/:id/lock', writeLimiter, requireAuth, async (req, res) => {
-  const { is_locked, member_id } = req.body;
+router.patch('/:id/lock', writeLimiter, requirePartyHost, async (req, res) => {
+  const { is_locked } = req.body;
   if (typeof is_locked !== 'boolean') {
     return res.status(400).json({ error: 'is_locked must be a boolean' });
-  }
-
-  // Non-admin callers must supply a member_id that belongs to an organizer of this party
-  if (req.authLevel !== 'admin') {
-    if (!member_id) {
-      return res.status(403).json({ error: 'Only organizers can lock the party' });
-    }
-    try {
-      const memberResult = await pool.query(
-        'SELECT role FROM party_members WHERE id = $1 AND party_id = $2',
-        [member_id, req.params.id]
-      );
-      if (memberResult.rows.length === 0 || memberResult.rows[0].role !== 'organizer') {
-        return res.status(403).json({ error: 'Only organizers can lock the party' });
-      }
-    } catch (err) {
-      console.error(err);
-      return res.status(500).json({ error: 'Failed to verify organizer status' });
-    }
   }
 
   try {
@@ -332,12 +323,14 @@ router.patch('/:id/lock', writeLimiter, requireAuth, async (req, res) => {
 });
 
 // DELETE /api/parties/:id - End a party (organizer only)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', requirePartyHost, async (req, res) => {
   try {
     await pool.query(
-      'UPDATE parties SET is_active = false WHERE id = $1',
+      `WITH ended AS (UPDATE parties SET is_active = false WHERE id = $1 RETURNING id)
+       DELETE FROM party_invitations WHERE party_id IN (SELECT id FROM ended)`,
       [req.params.id]
     );
+    req.app.get('io')?.in(req.params.id).disconnectSockets(true);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -346,7 +339,7 @@ router.delete('/:id', async (req, res) => {
 });
 
 // DELETE /api/parties/:id/remove - Permanently delete a party and all its data
-router.delete('/:id/remove', async (req, res) => {
+router.delete('/:id/remove', requireAdmin, async (req, res) => {
   try {
     const result = await pool.query(
       'DELETE FROM parties WHERE id = $1 RETURNING id',
@@ -355,6 +348,7 @@ router.delete('/:id/remove', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Party not found' });
     }
+    req.app.get('io')?.in(req.params.id).disconnectSockets(true);
     res.json({ success: true });
   } catch (err) {
     console.error(err);
@@ -363,7 +357,7 @@ router.delete('/:id/remove', async (req, res) => {
 });
 
 // GET /api/parties/:id/members - List all members of a party
-router.get('/:id/members', async (req, res) => {
+router.get('/:id/members', requirePartyAccess, async (req, res) => {
   try {
     const partyResult = await pool.query('SELECT id FROM parties WHERE id = $1', [req.params.id]);
     if (partyResult.rows.length === 0) {
@@ -381,7 +375,10 @@ router.get('/:id/members', async (req, res) => {
 });
 
 // GET /api/parties/:id/members/:memberId - Get a single party member
-router.get('/:id/members/:memberId', async (req, res) => {
+router.get('/:id/members/:memberId', requirePartyAccess, async (req, res) => {
+  if (req.authLevel !== 'admin' && req.params.memberId !== req.partyAccess.member_id) {
+    return res.status(403).json({ error: 'This membership belongs to another user.' });
+  }
   try {
     const result = await pool.query(
       'SELECT id, party_id, name, role, joined_at FROM party_members WHERE id = $1 AND party_id = $2',
@@ -408,7 +405,8 @@ router.patch('/:id/members/:memberId', writeLimiter, requireAdmin, async (req, r
   try {
     await client.query('BEGIN');
     const result = await client.query(
-      'UPDATE party_members SET name = $1, role = $2 WHERE id = $3 AND party_id = $4 RETURNING id, party_id, name, role, joined_at',
+      `UPDATE party_members SET name = $1, role = $2 WHERE id = $3 AND party_id = $4
+       AND ($2 = 'guest' OR user_id IS NOT NULL) RETURNING id, party_id, name, role, joined_at`,
       [name.trim(), memberRole, req.params.memberId, req.params.id]
     );
     if (result.rows.length === 0) {
@@ -423,10 +421,14 @@ router.patch('/:id/members/:memberId', writeLimiter, requireAdmin, async (req, r
       'SELECT * FROM queue WHERE party_id = $1 ORDER BY position ASC',
       [req.params.id]
     );
+    if (memberRole !== 'organizer') {
+      await client.query('DELETE FROM party_invitations WHERE host_member_id = $1', [req.params.memberId]);
+    }
     await client.query('COMMIT');
 
     const io = req.app.get('io');
     if (io) {
+      io.in(`member:${req.params.memberId}`).disconnectSockets(true);
       io.to(req.params.id).emit('queue:update', { action: 'update', queue: updatedQueue.rows });
     }
 
@@ -450,6 +452,7 @@ router.delete('/:id/members/:memberId', writeLimiter, requireAdmin, async (req, 
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Member not found' });
     }
+    req.app.get('io')?.in(`member:${req.params.memberId}`).disconnectSockets(true);
     res.json({ success: true });
   } catch (err) {
     console.error(err);

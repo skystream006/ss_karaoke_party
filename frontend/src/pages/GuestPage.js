@@ -6,15 +6,11 @@ import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import CustomizationPanel from '../components/CustomizationPanel';
 import ThemePicker from '../components/ThemePicker';
-import QRCodeModal from '../components/QRCodeModal';
 import useSSMusicJobs from '../hooks/useSSMusicJobs';
 import './GuestPage.css';
 
 const SOCKET_URL =
-  process.env.REACT_APP_SOCKET_URL ||
-  (window.location.hostname === 'localhost'
-    ? 'http://localhost:5000'
-    : window.location.origin.replace(':3000', ':5000'));
+  process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
 export default function GuestPage({ switchUserButton }) {
   const { partyId, memberId: memberIdFromUrl } = useParams();
@@ -29,7 +25,6 @@ export default function GuestPage({ switchUserButton }) {
   const [activeTab, setActiveTab] = useState('search');
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const [audioPanelOpen, setAudioPanelOpen] = useState(false);
-  const [qrOpen, setQrOpen] = useState(false);
   const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
   const [connected, setConnected] = useState(false);
   const [socketId, setSocketId] = useState(null);
@@ -37,12 +32,7 @@ export default function GuestPage({ switchUserButton }) {
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
 
   const socketRef = useRef(null);
-  const qrDialogRef = useRef(null);
   const latestProgressRef = useRef({ currentTime: 0, duration: 0 });
-
-  useEffect(() => {
-    if (qrOpen) qrDialogRef.current?.showModal();
-  }, [qrOpen]);
 
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
@@ -155,8 +145,9 @@ export default function GuestPage({ switchUserButton }) {
           try {
             await getMember(partyId, memberIdFromUrl);
           } catch (memberErr) {
-            if (memberErr.response?.status === 404) {
-              navigate(`/join/${partyRes.data.join_code}`);
+            if ([401, 403, 404].includes(memberErr.response?.status)) {
+              window.dispatchEvent(new Event('auth:expired'));
+              navigate('/');
               return;
             }
           }
@@ -179,14 +170,15 @@ export default function GuestPage({ switchUserButton }) {
 
   // Socket for real-time updates
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'],
+      auth: (callback) => callback({ token: sessionStorage.getItem('authToken') }) });
     socketRef.current = socket;
     let hasConnected = false;
     socket.on('connect', () => {
       setConnected(true);
       setSocketId(socket.id);
       setReconnectAttempts(0);
-      socket.emit('join:party', partyId);
+      socket.emit('join:party', partyId, (result) => { if (result?.error) setError(result.error); });
       if (hasConnected) {
         getQueue(partyId).then(({ data }) => {
           if (socketRef.current === socket) setQueue(data);
@@ -194,9 +186,13 @@ export default function GuestPage({ switchUserButton }) {
       }
       hasConnected = true;
     });
-    socket.on('disconnect', () => {
+    socket.on('connect_error', (failure) => {
+      if (failure.message === 'Unauthorized') window.dispatchEvent(new Event('auth:expired'));
+    });
+    socket.on('disconnect', (reason) => {
       setConnected(false);
       setSocketId(null);
+      if (reason === 'io server disconnect') getQueue(partyId).catch(() => setError('Party access ended.'));
     });
     socket.on('reconnect_attempt', (attempt) => {
       setReconnectAttempts(attempt);
@@ -258,16 +254,6 @@ export default function GuestPage({ switchUserButton }) {
         <div className="guest-header-actions">
           <ThemePicker />
           <button
-            type="button"
-            className="btn-leave"
-            onClick={() => setQrOpen(true)}
-            aria-label="Show party QR code"
-            aria-haspopup="dialog"
-            title="Show party QR code"
-          >
-            📱 QR Code
-          </button>
-          <button
             className="btn-audio-toggle"
             onClick={() => setAudioPanelOpen((o) => !o)}
             aria-label="Toggle audio settings"
@@ -283,29 +269,8 @@ export default function GuestPage({ switchUserButton }) {
             Status
           </button>
           {switchUserButton}
-          <button className="btn-leave" onClick={() => navigate('/')}>Leave</button>
         </div>
       </header>
-
-      <dialog
-        ref={qrDialogRef}
-        className="guest-qr-dialog"
-        aria-label="Party QR code"
-        onClose={() => setQrOpen(false)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') {
-            event.preventDefault();
-            qrDialogRef.current.close();
-          }
-        }}
-      >
-        <div className="guest-qr-dialog-actions">
-          <button type="button" className="status-panel-close" aria-label="Close party QR code" onClick={() => qrDialogRef.current.close()}>
-            ✕
-          </button>
-        </div>
-        {qrOpen && <QRCodeModal party={party} />}
-      </dialog>
 
       {/* Mobile tab switcher */}
       <nav className="mobile-tabs">

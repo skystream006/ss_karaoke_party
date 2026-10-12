@@ -25,12 +25,17 @@ class InitializeProjectTests(unittest.TestCase):
         (self.project / ".env.example").write_text(
             "PORT=3124\nSSMUSIC_SERVER_URL=https://old-host/\n"
             "SSMUSIC_API_KEY=example-value\nDB_PASSWORD=postgres\n"
+            "PASSKEY_RP_ID=party.example.test\nPASSKEY_ORIGIN=https://party.example.test\n"
             "# SSMUSIC_CA_CERT_FILE=/app/certs/ssmusic-ca.pem\n",
             encoding="utf-8",
         )
         initialize.create_environment(self.project)
         result = (self.project / ".env").read_text(encoding="utf-8")
         self.assertIn("PORT=3124\n", result)
+        self.assertIn("PASSKEY_RP_ID=party.example.test\n", result)
+        self.assertIn("PASSKEY_ORIGIN=https://party.example.test\n", result)
+        self.assertNotIn("API_ADMIN_PW", result)
+        self.assertNotIn("API_MEMBER_PW", result)
         for key, value in initialize.PLACEHOLDERS.items():
             self.assertEqual(result.count(f"{key}={value}\n"), 1)
         self.assertNotIn("old-host", result)
@@ -38,9 +43,9 @@ class InitializeProjectTests(unittest.TestCase):
 
     def test_existing_environment_is_not_read_printed_or_overwritten(self):
         destination = self.project / ".env"
-        destination.write_bytes(b"API_MEMBER_PW=existing-secret\r\n")
+        destination.write_bytes(b"SSMUSIC_API_KEY=existing-secret\r\n")
         initialize.create_environment(self.project)
-        self.assertEqual(destination.read_bytes(), b"API_MEMBER_PW=existing-secret\r\n")
+        self.assertEqual(destination.read_bytes(), b"SSMUSIC_API_KEY=existing-secret\r\n")
         self.assertNotIn("existing-secret", self.output.getvalue())
 
     def test_supplied_public_certificate_is_validated_and_copied(self):

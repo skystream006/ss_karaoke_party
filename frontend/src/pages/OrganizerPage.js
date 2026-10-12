@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { CircleStop } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import {
   getParty,
   getQueue,
@@ -8,6 +10,7 @@ import {
   reorderQueue,
   updateQueueItemStatus,
   resetQueue,
+  endParty,
   deleteParty,
   reactivateParty,
   lockParty,
@@ -24,12 +27,10 @@ import useSSMusicJobs from '../hooks/useSSMusicJobs';
 import './OrganizerPage.css';
 
 const SOCKET_URL =
-  process.env.REACT_APP_SOCKET_URL ||
-  (window.location.hostname === 'localhost'
-    ? 'http://localhost:5000'
-    : window.location.origin.replace(':3000', ':5000'));
+  process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
 export default function OrganizerPage({ switchUserButton }) {
+  const { authLevel } = useAuth();
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
 
@@ -42,7 +43,7 @@ export default function OrganizerPage({ switchUserButton }) {
   const currentVideoId = currentMedia?.video_id || null;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'search' | 'settings'
-  const [qrPanelOpen, setQrPanelOpen] = useState(true);
+  const [qrPanelOpen, setQrPanelOpen] = useState(false);
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -80,10 +81,14 @@ export default function OrganizerPage({ switchUserButton }) {
         // Validate that the member in the URL actually belongs to this party
         if (memberIdFromUrl) {
           try {
-            await getMember(partyId, memberIdFromUrl);
+            const { data: membership } = await getMember(partyId, memberIdFromUrl);
+            if (membership.role === 'guest') {
+              navigate(`/guest/${partyId}/${memberIdFromUrl}`, { replace: true });
+              return;
+            }
           } catch (memberErr) {
-            if (memberErr.response?.status === 404) {
-              navigate(`/join/${partyRes.data.join_code}`);
+            if ([401, 403, 404].includes(memberErr.response?.status)) {
+              navigate('/join');
               return;
             }
           }
@@ -107,17 +112,24 @@ export default function OrganizerPage({ switchUserButton }) {
 
   // Socket connection
   useEffect(() => {
-    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
+    const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'],
+      auth: (callback) => callback({ token: sessionStorage.getItem('authToken') }) });
     socketRef.current = socket;
     let hasConnected = false;
     socket.on('connect', () => {
-      socket.emit('join:party', partyId);
+      socket.emit('join:party', partyId, (result) => { if (result?.error) setError(result.error); });
       if (hasConnected) {
         getQueue(partyId).then(({ data }) => {
           if (socketRef.current === socket) setQueue(data);
         }).catch(() => {});
       }
       hasConnected = true;
+    });
+    socket.on('connect_error', (failure) => {
+      if (failure.message === 'Unauthorized') window.dispatchEvent(new Event('auth:expired'));
+    });
+    socket.on('disconnect', (reason) => {
+      if (reason === 'io server disconnect') getQueue(partyId).catch(() => setError('Party access ended.'));
     });
     socket.on('queue:update', ({ action, queue: updatedQueue }) => {
       if (updatedQueue) {
@@ -307,6 +319,16 @@ export default function OrganizerPage({ switchUserButton }) {
     }
   };
 
+  const handleEndParty = async () => {
+    if (!window.confirm('End this party and disconnect invited guests?')) return;
+    try {
+      await endParty(partyId);
+      navigate('/');
+    } catch {
+      setError('Failed to end party.');
+    }
+  };
+
   const handleDeleteParty = async () => {
     if (!window.confirm('Permanently delete this party and all its data? This cannot be undone.')) return;
     try {
@@ -400,9 +422,12 @@ export default function OrganizerPage({ switchUserButton }) {
           >
             {isLocked ? '🔓' : '🔒'}
           </button>
-          <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party" title="Permanently delete party">
+          {party.is_active && <button className="btn btn-delete-sm" onClick={handleEndParty} aria-label="End party" title="End party">
+            <CircleStop size={18} aria-hidden="true" />
+          </button>}
+          {authLevel === 'admin' && <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party" title="Permanently delete party">
             🗑️
-          </button>
+          </button>}
           <button
             className="qr-panel-toggle"
             onClick={() => setQrPanelOpen(!qrPanelOpen)}
@@ -425,9 +450,9 @@ export default function OrganizerPage({ switchUserButton }) {
       {!party.is_active && (
         <div className="inactive-banner">
           <span>⚠️ This party has ended.</span>
-          <button className="btn btn-reactivate" onClick={handleReactivateParty}>
+          {authLevel === 'admin' && <button className="btn btn-reactivate" onClick={handleReactivateParty}>
             Reactivate Party
-          </button>
+          </button>}
         </div>
       )}
 
@@ -526,10 +551,6 @@ export default function OrganizerPage({ switchUserButton }) {
             />
 
             {/* Now playing info is shown in the header nav bar */}
-
-            <div className="next-up-hint">
-              <span>Guests can join at: <strong>{party.join_code}</strong></span>
-            </div>
           </div>
         </main>
 
@@ -539,7 +560,7 @@ export default function OrganizerPage({ switchUserButton }) {
             <span className="qr-panel-title">📱 Join Party</span>
           </div>
           <div className="qr-panel-body">
-            <QRCodeModal party={party} />
+            {qrPanelOpen && <QRCodeModal party={party} />}
           </div>
         </aside>
       </div>

@@ -2,7 +2,8 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const express = require('express');
-const { createSession, requireAuth } = require('../middleware/auth');
+const { randomUUID } = require('node:crypto');
+const { createAuth, hashToken } = require('../middleware/auth');
 const { generalLimiter } = require('../middleware/rateLimiter');
 const { createSsmusicClient } = require('../lib/ssmusicClient');
 const { createMediaTickets, mediaId } = require('../lib/ssmusicMedia');
@@ -12,6 +13,21 @@ let upstream;
 let backend;
 let baseUrl;
 let token;
+let session;
+const sessions = new Map();
+const database = { async query(sql, values) {
+  if (sql.includes('INSERT INTO auth_sessions')) {
+    sessions.set(values[0], { session_id: randomUUID(), user_id: values[1], party_id: values[2], member_id: values[3],
+      expires_at: values[6], name: 'Fixture account', role: 'member' });
+    return { rows: [] };
+  }
+  if (sql.includes('FROM auth_sessions session')) {
+    const row = values[0] ? sessions.get(values[0]) : [...sessions.values()].find((entry) => entry.session_id === values[1]);
+    return { rows: row ? [row] : [] };
+  }
+  return { rows: [] };
+} };
+const auth = createAuth({ database });
 let now = Date.now();
 let canceledStream = false;
 const outbound = [];
@@ -118,15 +134,16 @@ before(async () => {
   });
   const serverUrl = `${await listen(upstream)}/music`;
   const routes = createSsmusicRoutes({
-    client: createSsmusicClient({ serverUrl, apiKey: 'fixture-read-only-key' }), tickets,
+    client: createSsmusicClient({ serverUrl, apiKey: 'fixture-read-only-key' }), tickets, auth, database,
   });
   const app = express();
   app.use('/api/ssmusic/media', routes.mediaRouter);
-  app.use('/api', generalLimiter, requireAuth);
+  app.use('/api', generalLimiter, auth.requireAuth);
   app.use('/api/ssmusic', routes.apiRouter);
   backend = http.createServer(app);
   baseUrl = `${await listen(backend)}/api`;
-  token = createSession('member');
+  token = await auth.createSession({ userId: randomUUID() });
+  session = await auth.resolveSession(token);
 });
 
 after(async () => {
@@ -138,6 +155,22 @@ after(async () => {
 function api(path) {
   return fetch(`${baseUrl}${path}`, { headers: { Authorization: 'Bearer ' + token } });
 }
+
+test('media tickets stop working when their session is revoked and guests cannot stream outside their queue', async () => {
+  const ticket = tickets.issue(songPath, session);
+  const saved = sessions.get(hashToken(token));
+  const count = outbound.length;
+  sessions.delete(hashToken(token));
+  assert.equal((await fetch(`${baseUrl}/ssmusic/media?ticket=${ticket}`)).status, 401);
+  sessions.set(hashToken(token), { ...saved, user_id: null, party_id: randomUUID(), member_id: randomUUID() });
+  try {
+    assert.equal((await api(`/ssmusic/playback?path=${encodeURIComponent(songPath)}`)).status, 403);
+    assert.equal((await fetch(`${baseUrl}/ssmusic/media?ticket=${ticket}`)).status, 403);
+    assert.equal(outbound.length, count);
+  } finally {
+    sessions.set(hashToken(token), saved);
+  }
+});
 
 test('search and playback require bearer authentication before contacting ssMusic', async () => {
   const count = outbound.length;
@@ -329,7 +362,7 @@ test('native GET and HEAD stream byte ranges without bearer tokens or upstream c
 
 test('invalid, tampered and expired media tickets never reach upstream', async () => {
   const count = outbound.length;
-  const original = tickets.issue(songPath);
+  const original = tickets.issue(songPath, session);
   const [payload, signature] = original.split('.');
   const decoded = JSON.parse(Buffer.from(payload, 'base64url'));
   decoded.path = resource('private.mp3');
@@ -379,7 +412,7 @@ test('absolute paths, traversal and generic non-media files cannot obtain ticket
 
 test('media tickets cannot authorize other API endpoints or mutation methods', async () => {
   const count = outbound.length;
-  const ticket = tickets.issue(songPath);
+  const ticket = tickets.issue(songPath, session);
   assert.equal((await fetch(`${baseUrl}/ssmusic/search?ticket=${ticket}`)).status, 401);
   assert.equal((await fetch(`${baseUrl}/ssmusic/media?ticket=${ticket}`, { method: 'POST' })).status, 401);
   assert.equal((await fetch(`${baseUrl}/ssmusic/media/extra?ticket=${ticket}`)).status, 401);
@@ -388,7 +421,7 @@ test('media tickets cannot authorize other API endpoints or mutation methods', a
 
 test('media proxy rejects HTML and unexpectedly encoded upstream bodies', async () => {
   for (const name of ['html.mp3', 'compressed.mp3']) {
-    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue(resource(name))}`);
+    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue(resource(name), session)}`);
     assert.equal(response.status, 502);
     assert.match(response.headers.get('content-type'), /application\/json/);
     assert.deepEqual(await response.json(), { error: 'Invalid ssMusic media response' });
@@ -398,7 +431,7 @@ test('media proxy rejects HTML and unexpectedly encoded upstream bodies', async 
 test('streaming starts before the file completes and cancels upstream after browser disconnect', { timeout: 3000 }, async () => {
   const controller = new AbortController();
   try {
-    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue(resource('large.mp3'))}`, {
+    const response = await fetch(`${baseUrl}/ssmusic/media?ticket=${tickets.issue(resource('large.mp3'), session)}`, {
       signal: controller.signal,
     });
     const chunk = await response.body.getReader().read();

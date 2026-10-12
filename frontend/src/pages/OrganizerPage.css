@@ -1,7 +1,7 @@
 .organizer-layout {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh;
   background: var(--bg-dark);
 }
 
@@ -222,6 +222,7 @@
 /* Main content */
 .organizer-main {
   flex: 1;
+  min-width: 0;
   padding: 1rem;
   display: flex;
   flex-direction: column;
@@ -478,6 +479,18 @@
 
 .qr-panel-toggle:hover {
   background: var(--bg-surface);
+}
+
+@media (max-width: 900px) {
+  .organizer-header { padding: 10px 12px; gap: 8px; }
+  .header-left { flex: 1 1 100%; min-width: 0; gap: 8px; }
+  .header-title { flex: 1; overflow: hidden; }
+  .header-right { flex-wrap: wrap; flex: 1 1 100%; min-width: 0; gap: 6px; margin-left: 0; }
+  .member-name-badge { max-width: 120px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .organizer-body { position: relative; }
+  .organizer-body > .sidebar { position: absolute; inset: 0 auto 0 0; max-width: 100%; z-index: 20; }
+  .organizer-body > .qr-panel { position: absolute; inset: 0 0 0 auto; max-width: 100%; z-index: 30; }
+  .organizer-body > .sidebar:not(.open), .organizer-body > .qr-panel:not(.open) { visibility: hidden; }
 }
 
 .queue-count-row {

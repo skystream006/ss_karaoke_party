@@ -4,9 +4,9 @@ import { act, Simulate } from 'react-dom/test-utils';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getMemberNames, getParties, getPartyByCode, getPartyMembers, searchMembers, getAllParties, getQueue, updateQueueItemSinger } from '../services/api';
+import { getMemberNames, getParties, getPartyMembers, searchMembers, getAllParties, getQueue, updateQueueItemSinger } from '../services/api';
 import ThemePicker from './ThemePicker';
-import PasswordModal from './PasswordModal';
+import PasskeyModal from './PasskeyModal';
 import Playlist from './Playlist';
 import JoinPage from '../pages/JoinPage';
 import SettingsPage from '../pages/SettingsPage';
@@ -14,7 +14,7 @@ import SettingsPage from '../pages/SettingsPage';
 jest.mock('../contexts/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../contexts/ThemeContext', () => ({ useTheme: jest.fn() }));
 jest.mock('../services/api', () => ({
-  getMemberNames: jest.fn(), getParties: jest.fn(), getPartyByCode: jest.fn(),
+  getMemberNames: jest.fn(), getParties: jest.fn(),
   getPartyMembers: jest.fn(), searchMembers: jest.fn(), getAllParties: jest.fn(),
   getQueue: jest.fn(), updateQueueItemSinger: jest.fn(),
 }));
@@ -22,7 +22,7 @@ jest.mock('../services/api', () => ({
 let root;
 let container;
 let setTheme;
-let saveDefaultUsername;
+let register;
 const names = Object.freeze([{ name: 'zoe' }, { name: 'Bravo' }, { name: 'alice' }]);
 const members = Object.freeze(names.map((member, index) => ({ ...member, id: `member-${index}`, role: 'organizer' })));
 const party = { id: 'party-id', name: 'Friday', join_code: 'ABCDEF', is_active: true };
@@ -35,7 +35,8 @@ beforeEach(() => {
   document.body.appendChild(container);
   root = createRoot(container);
   setTheme = jest.fn();
-  saveDefaultUsername = jest.fn();
+  register = jest.fn().mockResolvedValue(true);
+  window.PublicKeyCredential = function PublicKeyCredential() {};
   useTheme.mockReturnValue({
     themeKey: 'third', setTheme,
     themes: {
@@ -45,13 +46,12 @@ beforeEach(() => {
     },
   });
   useAuth.mockReturnValue({
-    usernameRequired: true, defaultUsername: '', loading: false, error: '',
-    login: jest.fn(), clearError: jest.fn(), saveDefaultUsername,
+    defaultUsername: '', loading: false, error: '',
+    login: jest.fn(), clearError: jest.fn(), register,
   });
   getMemberNames.mockResolvedValue({ data: names });
   getParties.mockResolvedValue({ data: [party] });
   getAllParties.mockResolvedValue({ data: [party] });
-  getPartyByCode.mockResolvedValue({ data: party });
   getPartyMembers.mockResolvedValue({ data: members });
   searchMembers.mockResolvedValue({ data: members });
   getQueue.mockResolvedValue({ data: [song] });
@@ -74,22 +74,25 @@ test('theme options are alphabetical by label and retain their selection keys', 
   expect(setTheme).toHaveBeenCalledWith('first');
 });
 
-test('default username suggestions sort case-insensitively without mutating the response', async () => {
-  await act(async () => root.render(<PasswordModal />));
-  expect([...container.querySelectorAll('datalist option')].map(option => option.value)).toEqual(['alice', 'Bravo', 'zoe']);
-  expect(names.map(member => member.name)).toEqual(['zoe', 'Bravo', 'alice']);
+test('passkey registration asks for a new account name without listing existing identities', async () => {
+  await act(async () => root.render(<PasskeyModal />));
+  act(() => Simulate.click([...container.querySelectorAll('button')].find((button) => button.textContent === 'Create an account')));
+  expect(getMemberNames).not.toHaveBeenCalled();
+  expect(container.querySelector('datalist')).toBeNull();
   act(() => Simulate.change(container.querySelector('input'), { target: { value: 'Bravo' } }));
   await act(async () => Simulate.submit(container.querySelector('form')));
-  expect(saveDefaultUsername).toHaveBeenCalledWith('Bravo');
+  expect(register).toHaveBeenCalledWith('Bravo');
 });
 
 test('join-name suggestions are alphabetical and still select the displayed name', async () => {
   jest.useFakeTimers();
   await act(async () => root.render(
-    <MemoryRouter initialEntries={['/join/ABCDEF']}>
-      <Routes><Route path="/join/:joinCode" element={<JoinPage />} /></Routes>
+    <MemoryRouter initialEntries={['/join']}>
+      <Routes><Route path="/join" element={<JoinPage />} /></Routes>
     </MemoryRouter>
   ));
+  await act(async () => Simulate.click(container.querySelector('.party-join-btns button')));
+  act(() => Simulate.click(container.querySelector('.role-tab')));
   const input = container.querySelector('.name-autocomplete-wrapper input');
   act(() => Simulate.change(input, { target: { value: 'al' } }));
   await act(async () => jest.advanceTimersByTime(300));

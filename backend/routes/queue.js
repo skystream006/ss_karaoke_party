@@ -3,12 +3,35 @@ const router = express.Router();
 const axios = require('axios');
 const pool = require('../db/db');
 const { writeLimiter } = require('../middleware/rateLimiter');
-const { requireAdmin } = require('../middleware/auth');
+const { requireAdmin, requirePartyAccess, validId } = require('../middleware/auth');
 const { queueMedia } = require('../lib/ssmusicMedia');
 const { SsmusicError } = require('../lib/ssmusicClient');
 
 // Order all songs by position so completed songs remain in their original place
 const QUEUE_ORDER_BY = `position ASC`;
+
+router.use('/:partyId', requirePartyAccess, async (req, res, next) => {
+  try {
+    const adding = req.method === 'POST' && ['/', '/play-next'].includes(req.path);
+    if (adding && !req.partyAccess.isHost) {
+      if (req.body.member_id && req.body.member_id !== req.partyAccess.member_id) {
+        return res.status(403).json({ error: 'You cannot submit as another party member.' });
+      }
+      req.body.member_id = req.partyAccess.member_id;
+      req.body.singer_name = req.partyAccess.name;
+    } else if (req.body?.member_id) {
+      if (!validId(req.body.member_id)) return res.status(400).json({ error: 'Invalid party member.' });
+      const member = await pool.query('SELECT id FROM party_members WHERE id = $1 AND party_id = $2',
+        [req.body.member_id, req.params.partyId]);
+      if (!member.rows.length) return res.status(403).json({ error: 'Member does not belong to this party.' });
+    } else if (adding) {
+      req.body.member_id = req.partyAccess.member_id;
+    }
+    next();
+  } catch {
+    res.status(503).json({ error: 'Unable to verify party member.' });
+  }
+});
 
 async function processRestrictedVideo(req, item) {
   const apiKey = process.env.YOUTUBE_API_KEY;

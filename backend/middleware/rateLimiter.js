@@ -38,4 +38,13 @@ const searchLimiter = rateLimit({
   message: { error: 'Too many search requests, please wait a moment.' },
 });
 
-module.exports = { generalLimiter, writeLimiter, searchLimiter };
+const authLimiter = rateLimit({
+  validate: { xForwardedForHeader: false },
+  windowMs: 5 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many sign-in attempts. Please try again later.' },
+});
+
+module.exports = { generalLimiter, writeLimiter, searchLimiter, authLimiter };

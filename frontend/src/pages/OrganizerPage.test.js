@@ -3,13 +3,15 @@ import { createRoot } from 'react-dom/client';
 import { act, Simulate } from 'react-dom/test-utils';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getParty, getQueue, getMember, deleteParty, lockParty } from '../services/api';
+import { getParty, getQueue, getMember, endParty, deleteParty, lockParty } from '../services/api';
+import { useAuth } from '../contexts/AuthContext';
 import OrganizerPage from './OrganizerPage';
 
 jest.mock('socket.io-client', () => ({ io: jest.fn() }));
+jest.mock('../contexts/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../services/api', () => ({
   getParty: jest.fn(), getQueue: jest.fn(), getMember: jest.fn(),
-  deleteParty: jest.fn(), lockParty: jest.fn(),
+  endParty: jest.fn(), deleteParty: jest.fn(), lockParty: jest.fn(),
 }));
 jest.mock('../components/VideoPlayer', () => {
   const React = require('react');
@@ -28,6 +30,7 @@ let socket;
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   jest.resetAllMocks();
+  useAuth.mockReturnValue({ authLevel: 'admin' });
   sessionStorage.clear();
   sessionStorage.setItem('memberId', 'member-id');
   sessionStorage.setItem('memberName', 'Alex');
@@ -70,6 +73,7 @@ test('places the Home button immediately after the left menu toggle without chan
   expect(toggle.nextElementSibling).toBe(home);
   expect(home.title).toBe('Home');
   expect(home.type).toBe('button');
+  expect(container.textContent).not.toContain('ABCDEF');
   expect(container.querySelector('.sidebar').classList.contains('open')).toBe(true);
 
   act(() => { Simulate.click(toggle); });
@@ -97,4 +101,17 @@ test.each([true, false])('navigates home without deleting the party or clearing 
   expect(sessionStorage.getItem('memberName')).toBe('Alex');
   expect(socket.emit).toHaveBeenCalledWith('leave:party', 'party-id');
   expect(socket.disconnect).toHaveBeenCalledTimes(1);
+});
+
+test('non-admin hosts can end their party but do not get permanent deletion controls', async () => {
+  useAuth.mockReturnValue({ authLevel: 'member' });
+  endParty.mockResolvedValue({ data: { success: true } });
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+  await renderOrganizer();
+  expect(container.querySelector('[aria-label="Permanently delete party"]')).toBeNull();
+  await act(async () => Simulate.click(container.querySelector('[aria-label="End party"]')));
+  expect(endParty).toHaveBeenCalledWith('party-id');
+  expect(deleteParty).not.toHaveBeenCalled();
+  expect(container.textContent).toBe('Welcome home');
+  confirm.mockRestore();
 });

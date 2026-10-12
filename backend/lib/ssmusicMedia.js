@@ -65,32 +65,38 @@ function queueMedia(body) {
 
 function createMediaTickets({ now = Date.now, secret = crypto.randomBytes(32) } = {}) {
   const signature = (value) => crypto.createHmac('sha256', secret)
-    .update(`ssmusic-media:v1:${value}`).digest('base64url');
+    .update(`ssmusic-media:v2:${value}`).digest('base64url');
+
+  function claims(ticket) {
+    if (typeof ticket !== 'string' || ticket.length > 24000) return null;
+    const parts = ticket.split('.');
+    if (parts.length !== 2 || !/^[A-Za-z0-9_-]+$/.test(parts[0])) return null;
+    const expected = Buffer.from(signature(parts[0]));
+    const received = Buffer.from(parts[1]);
+    if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return null;
+    try {
+      const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+      if (!validMediaPath(payload.path) || !Number.isSafeInteger(payload.expires)
+          || payload.expires <= now() || payload.expires > now() + TICKET_TTL_MS) return null;
+      return payload;
+    } catch {
+      return null;
+    }
+  }
 
   return {
-    issue(mediaPath) {
+    issue(mediaPath, session) {
       if (!validMediaPath(mediaPath)) throw new Error('Invalid media path');
       const payload = Buffer.from(JSON.stringify({
         path: mediaPath,
-        expires: now() + TICKET_TTL_MS,
+        sessionId: session?.sessionId,
+        expires: Math.min(now() + TICKET_TTL_MS, session?.expiresAt ? new Date(session.expiresAt).getTime() : Infinity),
       })).toString('base64url');
       return `${payload}.${signature(payload)}`;
     },
+    claims,
     verify(ticket) {
-      if (typeof ticket !== 'string' || ticket.length > 24000) return null;
-      const parts = ticket.split('.');
-      if (parts.length !== 2 || !/^[A-Za-z0-9_-]+$/.test(parts[0])) return null;
-      const expected = Buffer.from(signature(parts[0]));
-      const received = Buffer.from(parts[1]);
-      if (expected.length !== received.length || !crypto.timingSafeEqual(expected, received)) return null;
-      try {
-        const payload = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
-        if (!validMediaPath(payload.path) || !Number.isSafeInteger(payload.expires)
-            || payload.expires <= now() || payload.expires > now() + TICKET_TTL_MS) return null;
-        return payload.path;
-      } catch {
-        return null;
-      }
+      return claims(ticket)?.path || null;
     },
   };
 }

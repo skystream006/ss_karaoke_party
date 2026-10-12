@@ -1,107 +1,121 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import axios from 'axios';
+import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 
 const AuthContext = createContext(null);
 
 const API_BASE = process.env.REACT_APP_API_URL || '/api';
 const SESSION_TOKEN_KEY = 'authToken';
 const SESSION_LEVEL_KEY = 'authLevel';
-const USERNAME_REQUIRED_KEY = 'usernameRequired';
 const DEFAULT_USERNAME_KEY = 'defaultUsername';
 
 export function AuthProvider({ children }) {
-  const [authToken, setAuthToken] = useState(() => sessionStorage.getItem(SESSION_TOKEN_KEY) || null);
-  const [authLevel, setAuthLevel] = useState(() => sessionStorage.getItem(SESSION_LEVEL_KEY) || 'none');
-  const [usernameRequired, setUsernameRequired] = useState(() => sessionStorage.getItem(USERNAME_REQUIRED_KEY) === 'true');
+  const [session, setSession] = useState(null);
+  const [initializing, setInitializing] = useState(() => Boolean(sessionStorage.getItem(SESSION_TOKEN_KEY)));
   const [defaultUsername, setDefaultUsername] = useState(() => localStorage.getItem(DEFAULT_USERNAME_KEY) || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
 
-  const persistAuth = useCallback((token, level) => {
-    sessionStorage.setItem(SESSION_TOKEN_KEY, token);
-    sessionStorage.setItem(SESSION_LEVEL_KEY, level);
-    setAuthToken(token);
-    setAuthLevel(level);
+  const clearSession = useCallback(() => {
+    for (const key of [SESSION_TOKEN_KEY, SESSION_LEVEL_KEY, 'usernameRequired', 'memberName', 'memberId', 'memberRole']) {
+      sessionStorage.removeItem(key);
+    }
+    setSession(null);
   }, []);
 
-  /**
-   * Validate a password against the backend and store the resulting token.
-   * Returns true on success, false on failure.
-   */
-  const login = useCallback(async (password) => {
+  const persistSession = useCallback((value) => {
+    sessionStorage.setItem(SESSION_TOKEN_KEY, value.token);
+    sessionStorage.setItem(SESSION_LEVEL_KEY, value.level);
+    setSession(value);
+    if (value.user?.name) {
+      localStorage.setItem(DEFAULT_USERNAME_KEY, value.user.name);
+      setDefaultUsername(value.user.name);
+    }
+  }, []);
+
+  useEffect(() => {
+    const token = sessionStorage.getItem(SESSION_TOKEN_KEY);
+    if (!token) return;
+    let active = true;
+    const current = () => active && sessionStorage.getItem(SESSION_TOKEN_KEY) === token;
+    axios.get(`${API_BASE}/auth/me`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(({ data }) => { if (current()) persistSession({ ...data, token }); })
+      .catch(() => { if (current()) clearSession(); })
+      .finally(() => { if (active) setInitializing(false); });
+    return () => { active = false; };
+  }, [clearSession, persistSession]);
+
+  useEffect(() => {
+    const expired = () => { clearSession(); setError('Your session ended. Sign in or scan a current host invitation.'); };
+    window.addEventListener('auth:expired', expired);
+    return () => window.removeEventListener('auth:expired', expired);
+  }, [clearSession]);
+
+  const ceremony = useCallback(async (kind, name) => {
     setLoading(true);
     setError('');
+    setNotice('');
     try {
-      const res = await axios.post(`${API_BASE}/auth`, { password });
-      sessionStorage.setItem(USERNAME_REQUIRED_KEY, 'true');
-      setUsernameRequired(true);
-      persistAuth(res.data.token, res.data.level);
+      const headers = kind === 'passkeys' ? { Authorization: `Bearer ${session?.token}` } : {};
+      const { data } = await axios.post(`${API_BASE}/auth/${kind}/options`, name ? { name } : {}, { headers });
+      const response = kind === 'login'
+        ? await startAuthentication({ optionsJSON: data.options })
+        : await startRegistration({ optionsJSON: data.options });
+      const result = await axios.post(`${API_BASE}/auth/${kind}/verify`, { requestId: data.requestId, response }, { headers });
+      if (result.data.token) persistSession(result.data);
+      if (result.data.pending) {
+        setNotice(result.data.message);
+        return 'pending';
+      }
       return true;
     } catch (err) {
-      const msg = err.response?.data?.error || 'Invalid password';
-      setError(msg);
+      setError(err.response?.data?.error || (err.name === 'NotAllowedError'
+        ? 'Passkey request was cancelled or timed out.' : 'Passkey request failed. Use the configured HTTPS hostname or localhost.'));
       return false;
     } finally {
       setLoading(false);
     }
-  }, [persistAuth]);
+  }, [persistSession, session?.token]);
 
-  /**
-   * Obtain a member-level session token automatically for QR-code access.
-   * No password required.
-   */
-  const loginWithQR = useCallback(async () => {
+  const login = useCallback(() => ceremony('login'), [ceremony]);
+  const register = useCallback((name) => ceremony('register', name), [ceremony]);
+  const addPasskey = useCallback(() => ceremony('passkeys'), [ceremony]);
+
+  const acceptInvitation = useCallback((result) => {
+    if (!result.token || result.level !== 'guest' || !result.partyId || !result.memberId) {
+      throw new Error('Invalid party session.');
+    }
+    setError('');
+    setNotice('');
+    setInitializing(false);
+    persistSession(result);
+  }, [persistSession]);
+
+  const logout = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const res = await axios.get(`${API_BASE}/auth/qr-session`);
-      sessionStorage.removeItem(USERNAME_REQUIRED_KEY);
-      setUsernameRequired(false);
-      persistAuth(res.data.token, res.data.level);
+      if (session?.token) await axios.post(`${API_BASE}/auth/logout`, {}, { headers: { Authorization: `Bearer ${session.token}` } });
     } catch (err) {
-      setError('Failed to establish QR session');
+      if (err.response?.status !== 401) {
+        setError('Sign-out failed. Retry to revoke this session and its invitations.');
+        return false;
+      }
     } finally {
       setLoading(false);
     }
-  }, [persistAuth]);
-
-  const logout = useCallback(() => {
-    sessionStorage.removeItem(SESSION_TOKEN_KEY);
-    sessionStorage.removeItem(SESSION_LEVEL_KEY);
-    sessionStorage.removeItem(USERNAME_REQUIRED_KEY);
-    setAuthToken(null);
-    setAuthLevel('none');
-    setUsernameRequired(false);
-  }, []);
-
-  const saveDefaultUsername = useCallback((username) => {
-    const name = username.trim();
-    if (!name || name.length > 60) {
-      setError('Please enter a username between 1 and 60 characters.');
-      return false;
-    }
-    localStorage.setItem(DEFAULT_USERNAME_KEY, name);
-    setDefaultUsername(name);
-    sessionStorage.removeItem(USERNAME_REQUIRED_KEY);
-    setUsernameRequired(false);
-    setError('');
+    clearSession();
+    setNotice('');
     return true;
-  }, []);
+  }, [clearSession, session?.token]);
 
   const clearError = useCallback(() => setError(''), []);
 
-  const switchUser = useCallback(() => {
-    if (!authToken) return;
-    sessionStorage.setItem(USERNAME_REQUIRED_KEY, 'true');
-    sessionStorage.removeItem('memberName');
-    sessionStorage.removeItem('memberId');
-    sessionStorage.removeItem('memberRole');
-    setUsernameRequired(true);
-    setError('');
-  }, [authToken]);
-
   return (
-    <AuthContext.Provider value={{ authToken, authLevel, defaultUsername, usernameRequired, loading, error, login, loginWithQR, logout, clearError, saveDefaultUsername, switchUser }}>
+    <AuthContext.Provider value={{ authToken: session?.token || null, authLevel: session?.level || 'none',
+      user: session?.user, partyId: session?.partyId, memberId: session?.memberId,
+      defaultUsername, initializing, loading, error, notice, login, register, addPasskey, acceptInvitation, logout, clearError }}>
       {children}
     </AuthContext.Provider>
   );

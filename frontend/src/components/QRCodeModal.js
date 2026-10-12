@@ -1,59 +1,57 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
-import { getServerInfo } from '../services/api';
+import { Copy, RefreshCw, Check } from 'lucide-react';
+import { createPartyInvitation } from '../services/api';
 import './QRCodeModal.css';
 
 export default function QRCodeModal({ party }) {
-  const joinUrl = `${window.location.origin}/join/${party.join_code}`;
-  const [ipJoinUrl, setIpJoinUrl] = useState(null);
-  const [activeQr, setActiveQr] = useState('hostname');
+  const [invitation, setInvitation] = useState(null);
+  const [generation, setGeneration] = useState(0);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [copied, setCopied] = useState(false);
+  const requestRef = useRef(null);
 
   useEffect(() => {
-    getServerInfo()
-      .then(({ data }) => {
-        if (data.ip) {
-          const { protocol, port } = window.location;
-          const isDefaultPort =
-            (protocol === 'http:' && port === '80') ||
-            (protocol === 'https:' && port === '443') ||
-            port === '';
-          const portSuffix = isDefaultPort ? '' : `:${port}`;
-          setIpJoinUrl(`${protocol}//${data.ip}${portSuffix}/join/${party.join_code}`);
-        }
-      })
-      .catch(() => { console.warn('Could not retrieve server IP address'); });
-  }, [party.join_code]);
+    let active = true;
+    setLoading(true);
+    setInvitation(null);
+    setError('');
+    setCopied(false);
+    if (requestRef.current?.partyId !== party.id || requestRef.current?.generation !== generation) {
+      requestRef.current = { partyId: party.id, generation, promise: createPartyInvitation(party.id) };
+    }
+    requestRef.current.promise
+      .then(({ data }) => { if (active) setInvitation(data); })
+      .catch((failure) => { if (active) setError(failure.response?.data?.error || 'Unable to create invitation.'); })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [party.id, generation]);
 
-  const activeUrl = activeQr === 'ip' && ipJoinUrl ? ipJoinUrl : joinUrl;
+  const joinUrl = invitation ? `${window.location.origin}/join/invite#invite=${invitation.token}` : '';
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(joinUrl);
+      setCopied(true);
+    } catch {
+      setError('Clipboard unavailable. Select the invitation link to copy it.');
+    }
+  };
 
   return (
-    <div>
+    <div className="party-invitation">
       <div className="modal-content">
         <div className="modal-header">
           <h2>Join "{party.name}"</h2>
         </div>
 
-        {ipJoinUrl && (
-          <div className="qr-toggle">
-            <button
-              className={`qr-toggle-btn${activeQr === 'hostname' ? ' active' : ''}`}
-              onClick={() => setActiveQr('hostname')}
-            >
-              Hostname
-            </button>
-            <button
-              className={`qr-toggle-btn${activeQr === 'ip' ? ' active' : ''}`}
-              onClick={() => setActiveQr('ip')}
-            >
-              IP Address
-            </button>
-          </div>
-        )}
-
-        <div className="qr-section">
+        {error && <p className="error-msg" role="alert">{error}</p>}
+        {loading && <p role="status">Creating invitation...</p>}
+        {invitation && <><div className="qr-section">
           <div className="qr-wrapper">
             <QRCodeSVG
-              value={activeUrl}
+              value={joinUrl}
               size={220}
               bgColor="#ffffff"
               fgColor="#1a1a2e"
@@ -61,31 +59,27 @@ export default function QRCodeModal({ party }) {
               includeMargin={true}
             />
           </div>
-          <p className="qr-hint">
-            {activeQr === 'ip' ? 'Scan to join via IP address' : 'Scan to join the party'}
-          </p>
-        </div>
-
-        <div className="code-section">
-          <p className="code-label">Party Code</p>
-          <div className="join-code-display">{party.join_code}</div>
+          <p className="qr-hint">Expires {new Date(invitation.expiresAt).toLocaleString()}</p>
         </div>
 
         <div className="url-section">
-          <p className="url-label">
-            {activeQr === 'ip' ? 'IP Address Link' : 'Direct Link'}
-          </p>
+          <p className="url-label">Invitation link</p>
           <div className="url-box">
-            <span className="url-text">{activeUrl}</span>
-            <button
-              className="copy-btn"
-              onClick={() => navigator.clipboard.writeText(activeUrl)}
-              title="Copy link"
-            >
-              📋 Copy
+            <span className="url-text">{joinUrl}</span>
+            <button className="copy-btn" onClick={copy} type="button" aria-label={copied ? 'Copied' : 'Copy invitation link'}
+              title={copied ? 'Copied' : 'Copy invitation link'}>
+              {copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
             </button>
           </div>
-        </div>
+        </div></>}
+        <button type="button" className="btn btn-ghost qr-regenerate" disabled={loading}
+          onClick={() => {
+            if (!invitation || window.confirm('Replace this QR code and disconnect guests who joined with it?')) {
+              setGeneration((current) => current + 1);
+            }
+          }}>
+          <RefreshCw size={17} aria-hidden="true" /> {invitation ? 'New QR code' : 'Retry'}
+        </button>
       </div>
     </div>
   );

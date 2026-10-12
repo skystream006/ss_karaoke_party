@@ -13,6 +13,19 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use((response) => response, (error) => {
+  const token = sessionStorage.getItem('authToken');
+  if (error.response?.status === 401 && token && error.config?.headers?.Authorization === `Bearer ${token}`) {
+    window.dispatchEvent(new Event('auth:expired'));
+  }
+  return Promise.reject(error);
+});
+
+export const getPasskeys = () => api.get('/auth/passkeys');
+export const removePasskey = (id) => api.delete(`/auth/passkeys/${encodeURIComponent(id)}`);
+export const getAuthUsers = () => api.get('/auth/users');
+export const updateAuthUser = (id, data) => api.patch(`/auth/users/${id}`, data);
+
 // Parties
 export const getParties = () => api.get('/parties');
 export const getAllParties = () => api.get('/parties/all');
@@ -20,7 +33,8 @@ export const createParty = (data) => api.post('/parties', data);
 export const getParty = (id) => api.get(`/parties/${id}`);
 export const updateParty = (id, data) => api.patch(`/parties/${id}`, data);
 export const joinParty = (partyId, data) => api.post(`/parties/${partyId}/join`, data);
-export const getPartyByCode = (code) => api.get(`/parties/join/${code}`);
+export const createPartyInvitation = (partyId) => api.post(`/parties/${partyId}/invitations`);
+export const resolvePartyInvitation = (invitation) => api.post('/parties/invitations/resolve', { invitation });
 export const endParty = (partyId) => api.delete(`/parties/${partyId}`);
 export const deleteParty = (partyId) => api.delete(`/parties/${partyId}/remove`);
 export const reactivateParty = (partyId) => api.patch(`/parties/${partyId}/reactivate`);

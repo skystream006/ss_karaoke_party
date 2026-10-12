@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
-import { getParties, getPartyByCode, joinParty, searchMembers, getPartyMembers } from '../services/api';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { getParties, joinParty, searchMembers, resolvePartyInvitation } from '../services/api';
+import { ArrowLeft } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 
 import ClearableInput from '../components/ClearableInput';
@@ -8,32 +9,24 @@ import './JoinPage.css';
 
 export default function JoinPage({ switchUserButton }) {
   const navigate = useNavigate();
-  const { joinCode: codeFromUrl } = useParams();
   const { defaultUsername } = useAuth();
 
   const [parties, setParties] = useState([]);
   const [loadingParties, setLoadingParties] = useState(true);
   const [selectedParty, setSelectedParty] = useState(null);
-  const [joinRole, setJoinRole] = useState('guest');
+  const [joinRole, setJoinRole] = useState('organizer');
   const [memberName, setMemberName] = useState(defaultUsername);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [nameFilter, setNameFilter] = useState(codeFromUrl || '');
+  const [nameFilter, setNameFilter] = useState('');
   const [nameSuggestions, setNameSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
-  const [partyMembers, setPartyMembers] = useState([]);
-  const [loadingMembers, setLoadingMembers] = useState(false);
-  const [membersError, setMembersError] = useState(false);
   const nameInputRef = useRef(null);
   const suggestionsRef = useRef(null);
   const searchTimeoutRef = useRef(null);
 
   useEffect(() => {
     fetchParties();
-    if (codeFromUrl) {
-      handleCodeLookup(codeFromUrl);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleCodeLookup is stable; we only want this effect to run once on mount
   }, []);
 
   // Close suggestions when clicking outside the name input / dropdown
@@ -75,32 +68,6 @@ export default function JoinPage({ switchUserButton }) {
     }
   }, []);
 
-  useEffect(() => {
-    if (!selectedParty) {
-      setPartyMembers([]);
-      setMembersError(false);
-      return;
-    }
-    let cancelled = false;
-    const load = async () => {
-      setLoadingMembers(true);
-      setMembersError(false);
-      try {
-        const res = await getPartyMembers(selectedParty.id);
-        if (!cancelled) setPartyMembers(res.data);
-      } catch {
-        if (!cancelled) {
-          setPartyMembers([]);
-          setMembersError(true);
-        }
-      } finally {
-        if (!cancelled) setLoadingMembers(false);
-      }
-    };
-    load();
-    return () => { cancelled = true; };
-  }, [selectedParty]);
-
   const fetchParties = async () => {
     try {
       const res = await getParties();
@@ -109,43 +76,6 @@ export default function JoinPage({ switchUserButton }) {
       // ignore
     } finally {
       setLoadingParties(false);
-    }
-  };
-
-  const handleCodeLookup = async (code) => {
-    if (!code.trim()) return;
-    try {
-      const res = await getPartyByCode(code.trim());
-      setSelectedParty(res.data);
-      setError('');
-    } catch {
-      setError('Party not found. Check your code.');
-    }
-  };
-
-  const handleMemberJoin = async (member) => {
-    if (!selectedParty) {
-      setError('Please select a party first.');
-      return;
-    }
-    setLoading(true);
-    setError('');
-    try {
-      const res = await joinParty(selectedParty.id, { name: member.name, role: member.role });
-      const joined = res.data;
-      sessionStorage.setItem('memberName', joined.name);
-      sessionStorage.setItem('memberId', joined.id);
-      sessionStorage.setItem('memberRole', joined.role);
-
-      if (joined.role === 'organizer') {
-        navigate(`/organizer/${selectedParty.id}/${joined.id}`);
-      } else {
-        navigate(`/guest/${selectedParty.id}/${joined.id}`);
-      }
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to join party.');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -167,7 +97,7 @@ export default function JoinPage({ switchUserButton }) {
     setLoading(true);
     setError('');
     try {
-      const res = await joinParty(selectedParty.id, { name: memberName.trim(), role: joinRole });
+      const res = await joinParty(selectedParty.id, { name: memberName.trim() || defaultUsername, role: joinRole });
       const member = res.data;
       sessionStorage.setItem('memberName', member.name);
       sessionStorage.setItem('memberId', member.id);
@@ -222,7 +152,6 @@ export default function JoinPage({ switchUserButton }) {
                   >
                     <div className="party-info">
                       <span className="party-name">{party.name}</span>
-                      <span className="party-code">Code: {party.join_code}</span>
                     </div>
                     <div className="party-join-btns">
                       <button
@@ -230,7 +159,7 @@ export default function JoinPage({ switchUserButton }) {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedParty(party);
-                          setJoinRole('guest');
+                          setJoinRole('organizer');
                           setError('');
                         }}
                       >
@@ -250,42 +179,11 @@ export default function JoinPage({ switchUserButton }) {
               <span>🎉</span>
               <div>
                 <strong>{selectedParty.name}</strong>
-                <span className="party-code">Code: {selectedParty.join_code}</span>
               </div>
               <button className="btn-icon" onClick={() => setSelectedParty(null)}>✕</button>
             </div>
 
             {error && <div className="error-msg">{error}</div>}
-
-            <div className="party-members-section">
-              <h3>Current Members</h3>
-              {loadingMembers ? (
-                <p className="muted">Loading members…</p>
-              ) : membersError ? (
-                <p className="muted">Could not load members.</p>
-              ) : partyMembers.length === 0 ? (
-                <p className="muted">No members yet — be the first!</p>
-              ) : (
-                <ul className="party-members-list">
-                  {partyMembers.map((m) => (
-                    <li key={m.id} className="party-member-item">
-                      <div className="member-info">
-                        <span className="member-name">{m.name}</span>
-                        <span className="member-role">{m.role === 'organizer' ? '👑' : '🎤'}</span>
-                      </div>
-                      <button
-                        type="button"
-                        className="btn btn-sm btn-primary"
-                        disabled={loading}
-                        onClick={() => handleMemberJoin(m)}
-                      >
-                        Join
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
 
             <form onSubmit={handleJoin}>
               {joinRole !== 'organizer' && <div className="form-group">
@@ -355,4 +253,72 @@ export default function JoinPage({ switchUserButton }) {
       )}
     </div>
   );
+}
+
+export function InvitationJoinPage() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { acceptInvitation } = useAuth();
+  const invitation = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
+  const [details, setDetails] = useState(null);
+  const [name, setName] = useState('');
+  const [checking, setChecking] = useState(true);
+  const [joining, setJoining] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    setDetails(null);
+    setError('');
+    if (!/^[A-Za-z0-9_-]{43}$/.test(invitation)) {
+      setError('This join link is no longer valid. Scan a current host QR code.');
+      setChecking(false);
+      return;
+    }
+    setChecking(true);
+    resolvePartyInvitation(invitation)
+      .then(({ data }) => { if (active) setDetails(data); })
+      .catch((failure) => { if (active) setError(failure.response?.data?.error || 'Unable to check invitation.'); })
+      .finally(() => { if (active) setChecking(false); });
+    return () => { active = false; };
+  }, [invitation]);
+
+  const join = async (event) => {
+    event.preventDefault();
+    if (!details || !name.trim()) return;
+    setJoining(true);
+    setError('');
+    try {
+      const { data } = await joinParty(details.party.id, { name: name.trim(), invitation });
+      acceptInvitation(data);
+      sessionStorage.setItem('memberName', data.member.name);
+      sessionStorage.setItem('memberId', data.member.id);
+      sessionStorage.setItem('memberRole', 'guest');
+      navigate(`/guest/${data.partyId}/${data.memberId}`, { replace: true });
+    } catch (failure) {
+      setError(failure.response?.data?.error || 'Unable to join. Ask your host for a new QR code.');
+    } finally {
+      setJoining(false);
+    }
+  };
+
+  return <main className="passkey-screen">
+    <section className="passkey-panel" aria-labelledby="invitation-title">
+      <h1 id="invitation-title">{details?.party.name || 'Party invitation'}</h1>
+      {checking && <p role="status">Checking invitation...</p>}
+      {error && <p className="error-msg" role="alert">{error}</p>}
+      {details && <>
+        <h2>Host: {details.host}</h2>
+        <form onSubmit={join}>
+          <div className="form-group">
+            <label htmlFor="guest-name">Your name</label>
+            <ClearableInput id="guest-name" value={name} maxLength={60} required autoComplete="nickname"
+              onChange={(event) => setName(event.target.value)} />
+          </div>
+          <button className="btn btn-primary" type="submit" disabled={joining || !name.trim()}>{joining ? 'Joining...' : 'Join party'}</button>
+        </form>
+      </>}
+      <button type="button" className="btn btn-ghost" onClick={() => navigate('/')}><ArrowLeft size={18} aria-hidden="true" /> Back</button>
+    </section>
+  </main>;
 }

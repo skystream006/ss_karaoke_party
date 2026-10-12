@@ -67,7 +67,7 @@ export default function WelcomePage({ switchUserButton }) {
           <button className="btn btn-secondary btn-large" onClick={() => navigate('/join')}>
             🎵 Join a Party
           </button>
-          <button className="btn btn-ghost btn-large" onClick={() => navigate('/settings')}>
+          <button className="btn btn-ghost btn-large" onClick={() => navigate('/account')}>
             ⚙️ Settings
           </button>
         </div>

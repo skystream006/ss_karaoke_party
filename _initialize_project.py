@@ -13,8 +13,6 @@ PLACEHOLDERS = {
     "SSMUSIC_API_KEY": "your_ssmusic_search_api_key_here",
     "SSMUSIC_CA_CERT_FILE": "/app/certs/ssmusic-ca.pem",
     "DB_PASSWORD": "change_me_database_password",
-    "API_ADMIN_PW": "change_me_admin_password",
-    "API_MEMBER_PW": "change_me_member_password",
 }
 
 

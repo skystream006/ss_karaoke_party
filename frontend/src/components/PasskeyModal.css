@@ -1,0 +1,23 @@
+.passkey-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--bg-dark);
+}
+
+.passkey-panel {
+  width: 100%;
+  max-width: 390px;
+  text-align: center;
+  color: var(--text-primary, #e0e0ff);
+}
+
+.passkey-brand { color: var(--accent, #6c63ff); }
+.passkey-panel h1 { font-size: 28px; margin: 16px 0 8px; letter-spacing: 0; }
+.passkey-panel h2 { font-size: 18px; font-weight: 500; margin: 0 0 28px; }
+.passkey-panel form { display: grid; gap: 12px; }
+.passkey-panel .form-group { text-align: left; margin: 0; min-width: 0; }
+.passkey-panel .btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; white-space: normal; }
+.passkey-panel .error-msg, .passkey-notice { overflow-wrap: anywhere; font-size: 14px; line-height: 1.5; }
+.passkey-notice { padding: 12px 0; border-block: 1px solid var(--border); }

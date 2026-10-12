@@ -10,6 +10,7 @@ let mockPlayerProps;
 let mockPlaylistProps;
 const mockControls = { playVideo: jest.fn(), pauseVideo: jest.fn(), seekTo: jest.fn() };
 jest.mock('socket.io-client', () => ({ io: jest.fn() }));
+jest.mock('../contexts/AuthContext', () => ({ useAuth: () => ({ authLevel: 'admin' }) }));
 jest.mock('../services/api', () => ({
   getParty: jest.fn(), getQueue: jest.fn(), updateQueueItemStatus: jest.fn(), sendQueueItemToSSMusic: jest.fn(),
   removeFromQueue: jest.fn(),
