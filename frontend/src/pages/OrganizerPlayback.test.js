@@ -231,3 +231,60 @@ test('removing the active item from another client stops its player', async () =
   expect(mockPlayerProps.videoId).toBeNull();
   expect(mockPlaylistProps.queue).toEqual([youtube]);
 });
+
+test('a playback restriction sends only the active queue entry and tracks processing through conversion', async () => {
+  const active = { ...youtube, source: 'youtube', status: 'playing' };
+  const duplicate = { ...active, id: 'duplicate-entry', status: 'queued', position: 3 };
+  getQueue.mockResolvedValueOnce({ data: [active, duplicate] });
+  let resolveRequest;
+  sendQueueItemToSSMusic.mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve; }));
+  await renderPage();
+  let pending;
+  act(() => {
+    pending = mockPlayerProps.onRestricted({ videoId: active.video_id, playbackKey: active.id });
+    mockPlayerProps.onRestricted({ videoId: active.video_id, playbackKey: active.id });
+  });
+  expect(sendQueueItemToSSMusic).toHaveBeenCalledTimes(1);
+  expect(sendQueueItemToSSMusic).toHaveBeenCalledWith('party-id', active.id, expect.any(AbortSignal));
+  expect(mockPlayerProps.processing).toBe(true);
+  expect(mockPlaylistProps.queue[1]).toEqual(duplicate);
+
+  await act(async () => {
+    resolveRequest({ data: { ...active, ssmusic_job_id: 'job', ssmusic_status: 'queued' } });
+    await pending;
+  });
+  await act(async () => mockPlayerProps.onRestricted({ videoId: active.video_id, playbackKey: active.id }));
+  expect(sendQueueItemToSSMusic).toHaveBeenCalledTimes(1);
+  expect(mockPlayerProps.processing).toBe(true);
+
+  const converted = { ...active, source: 'ssmusic', video_id: 'ssm_clip', media_path: 'job/clip.mp4',
+    media_type: 'video', ssmusic_status: 'completed', ssmusic_error: null };
+  act(() => handlers['queue:update']({ action: 'media', queue: [converted, duplicate] }));
+  expect(mockPlayerProps.processing).toBe(false);
+  expect(mockPlayerProps.mediaPath).toBe(converted.media_path);
+  expect(mockPlayerProps.playbackKey).toBe(active.id);
+});
+
+test('ignores restriction callbacks for another queue entry or an outdated video', async () => {
+  const active = { ...youtube, source: 'youtube', status: 'playing' };
+  const duplicate = { ...active, id: 'duplicate-entry', status: 'queued', position: 3 };
+  getQueue.mockResolvedValueOnce({ data: [active, duplicate] });
+  await renderPage();
+  await act(async () => {
+    await mockPlayerProps.onRestricted({ videoId: active.video_id, playbackKey: duplicate.id });
+    await mockPlayerProps.onRestricted({ videoId: 'old-video', playbackKey: active.id });
+  });
+  expect(sendQueueItemToSSMusic).not.toHaveBeenCalled();
+});
+
+test('a failed automatic submission keeps the queued video and exposes the error', async () => {
+  const active = { ...youtube, source: 'youtube', status: 'playing' };
+  getQueue.mockResolvedValueOnce({ data: [active] });
+  sendQueueItemToSSMusic.mockRejectedValueOnce({ response: { data: { error: 'ssMusic is unavailable' } } });
+  await renderPage();
+  await act(async () => mockPlayerProps.onRestricted({ videoId: active.video_id, playbackKey: active.id }));
+  expect(mockPlayerProps.processing).toBe(false);
+  expect(mockPlayerProps.processingError).toBe('ssMusic is unavailable');
+  expect(mockPlaylistProps.queue[0]).toMatchObject({ ...active, ssmusic_status: 'error' });
+  expect(updateQueueItemStatus).not.toHaveBeenCalled();
+});

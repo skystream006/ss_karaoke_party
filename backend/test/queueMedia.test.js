@@ -1,6 +1,7 @@
-const { test, before, after } = require('node:test');
+const { test, before, beforeEach, after } = require('node:test');
 const assert = require('node:assert/strict');
 const express = require('express');
+const axios = require('axios');
 const { mediaId } = require('../lib/ssmusicMedia');
 const { createSsmusicJobs } = require('../lib/ssmusicJobs');
 const { SsmusicError } = require('../lib/ssmusicClient');
@@ -12,9 +13,13 @@ let submitJob;
 let removalItem;
 let removeJob;
 let partyLocked = false;
+let checkedOutClients = 0;
 const statements = [];
 const fakePool = {
-  async connect() { return { query: fakePool.query, release() {} }; },
+  async connect() {
+    checkedOutClients += 1;
+    return { query: fakePool.query, release() { checkedOutClients -= 1; } };
+  },
   async query(sql, values) {
     statements.push({ sql, values });
     if (sql.includes('JOIN parties p')) return { rows: conversionItem ? [{ ...conversionItem }] : [] };
@@ -25,7 +30,9 @@ const fakePool = {
     if (sql.includes('AS anchor_pos')) return { rows: [{ anchor_pos: 2 }] };
     if (sql.includes('INSERT INTO queue')) {
       return { rows: [{
-        id: 'item', video_id: values[3], source: values[7], media_path: values[8], media_type: values[9],
+        id: 'item', party_id: values[0], member_id: values[1], singer_name: values[2],
+        video_id: values[3], video_title: values[4], video_thumbnail: values[5], position: values[6], status: 'queued',
+        source: values[7], media_path: values[8], media_type: values[9],
       }] };
     }
     return { rows: [] };
@@ -42,10 +49,20 @@ before(async () => {
     removeReference: (item, client) => removeJob(item, client),
   });
   app.use('/api/queue', require('../routes/queue'));
+  app.use('/api/youtube', require('../routes/youtube'));
   server = await new Promise((resolve) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
   });
   baseUrl = `http://127.0.0.1:${server.address().port}/api/queue/party`;
+});
+
+beforeEach((context) => {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  delete process.env.YOUTUBE_API_KEY;
+  context.after(() => {
+    if (apiKey === undefined) delete process.env.YOUTUBE_API_KEY;
+    else process.env.YOUTUBE_API_KEY = apiKey;
+  });
 });
 
 after(async () => {
@@ -102,6 +119,138 @@ test('queue reads include the persisted source and playback metadata', async () 
   assert.match(select, /q\.ssmusic_job_id, q\.ssmusic_status, q\.ssmusic_error/);
   assert.match(select, /q\."kpMedia", q\.youtube_video_id/);
 });
+
+test('YouTube searches return all results without embedding or category filters', async (context) => {
+  process.env.YOUTUBE_API_KEY = 'test-youtube-key';
+  const items = ['abcdefghijk', 'restricted1'].map((videoId) => ({
+    id: { videoId }, snippet: { title: videoId, channelTitle: 'Channel', thumbnails: {} },
+  }));
+  const lookup = context.mock.method(axios, 'get', async (url, options) => {
+    assert.equal(url, 'https://www.googleapis.com/youtube/v3/search');
+    assert.equal(options.params.type, 'video');
+    assert.equal(options.params.videoEmbeddable, undefined);
+    assert.equal(options.params.videoSyndicated, undefined);
+    assert.equal(options.params.videoCategoryId, undefined);
+    return { data: { items } };
+  });
+  for (const karaoke of ['false', 'true']) {
+    const url = new URL('/api/youtube/search', baseUrl);
+    url.search = new URLSearchParams({ q: 'song', karaoke, videoEmbeddable: 'true' }).toString();
+    const response = await fetch(url);
+    assert.equal(response.status, 200);
+    assert.deepEqual((await response.json()).map((item) => item.video_id), ['abcdefghijk', 'restricted1']);
+    assert.equal(lookup.mock.calls.at(-1).arguments[1].params.q, karaoke === 'true' ? 'song karaoke' : 'song');
+  }
+});
+
+for (const suffix of ['', '/play-next']) {
+  const payload = { member_id: 'member', singer_name: 'Guest', video_id: 'abcdefghijk', video_title: 'Song' };
+  const add = () => fetch(`${baseUrl}${suffix}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
+  });
+
+  test(`queue ${suffix || 'add'} sends restricted videos to ssMusic after saving the queued item`, async (context) => {
+    process.env.YOUTUBE_API_KEY = 'test-youtube-key';
+    let video;
+    context.mock.method(axios, 'get', async (url, options) => {
+      assert.equal(checkedOutClients, 0);
+      assert.equal(url, 'https://www.googleapis.com/youtube/v3/videos');
+      assert.equal(options.params.part, 'status,contentDetails');
+      assert.equal(options.params.id, payload.video_id);
+      assert.equal(options.timeout, 5000);
+      return { data: { items: video ? [video] : [] } };
+    });
+    let submitted;
+    submitJob = async (item) => {
+      assert.equal(checkedOutClients, 0);
+      assert.equal(statements.at(-1).sql, 'COMMIT');
+      submitted = item;
+      return { ...item, ssmusic_job_id: 'job', ssmusic_status: 'queued' };
+    };
+    for (const restricted of [
+      { status: { embeddable: false } },
+      { status: { embeddable: true, privacyStatus: 'private' } },
+      { contentDetails: { contentRating: { ytRating: 'ytAgeRestricted' } } },
+      { contentDetails: { regionRestriction: { blocked: ['US'] } } },
+      { contentDetails: { regionRestriction: { allowed: ['US'] } } },
+      { contentDetails: { regionRestriction: { allowed: [] } } },
+      null,
+    ]) {
+      video = restricted;
+      submitted = null;
+      const response = await add();
+      assert.equal(response.status, 201);
+      const result = await response.json();
+      assert.equal(submitted.id, 'item');
+      assert.equal(submitted.party_id, 'party');
+      assert.equal(submitted.video_id, payload.video_id);
+      assert.equal(result.id, submitted.id);
+      assert.equal(result.member_id, 'member');
+      assert.equal(result.singer_name, 'Guest');
+      assert.equal(result.status, 'queued');
+      assert.equal(result.position, suffix ? 3 : 1);
+      assert.equal(result.ssmusic_status, 'queued');
+      assert.equal(result.ssmusic_job_id, 'job');
+    }
+  });
+
+  test(`queue ${suffix || 'add'} leaves playable YouTube and library media unchanged`, async (context) => {
+    process.env.YOUTUBE_API_KEY = 'test-youtube-key';
+    const lookup = context.mock.method(axios, 'get', async () => ({ data: { items: [{
+      status: { embeddable: true, privacyStatus: 'public' }, contentDetails: { regionRestriction: { blocked: [] } },
+    }] } }));
+    submitJob = async () => assert.fail('Unexpected ssMusic submission');
+    const response = await add();
+    assert.equal(response.status, 201);
+    assert.equal((await response.json()).ssmusic_status, undefined);
+    const libraryResponse = await fetch(`${baseUrl}${suffix}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ...payload, source: 'ssmusic', video_id: mediaId('job/song.mp3'),
+        media_path: 'job/song.mp3', media_type: 'audio' }),
+    });
+    assert.equal(libraryResponse.status, 201);
+    assert.equal((await libraryResponse.json()).source, 'ssmusic');
+    assert.equal(lookup.mock.callCount(), 1);
+  });
+
+  test(`queue ${suffix || 'add'} keeps a saved item when restriction lookup or processing fails`, async (context) => {
+    let lookupFailed = true;
+    const lookup = context.mock.method(axios, 'get', async () => {
+      if (lookupFailed) throw new Error('YouTube quota exceeded');
+      return { data: { items: [{ status: { embeddable: false } }] } };
+    });
+    submitJob = async () => assert.fail('Unexpected ssMusic submission');
+    assert.equal((await add()).status, 201);
+    assert.equal(lookup.mock.callCount(), 0);
+    process.env.YOUTUBE_API_KEY = 'test-youtube-key';
+    const unchecked = await add();
+    assert.equal(unchecked.status, 201);
+    assert.equal((await unchecked.json()).ssmusic_status, undefined);
+    lookupFailed = false;
+    for (const failure of [new SsmusicError(503, 'ssMusic is unavailable'), new Error('private configuration')]) {
+      submitJob = async () => { throw failure; };
+      const start = statements.length;
+      const response = await add();
+      assert.equal(response.status, 201);
+      const result = await response.json();
+      assert.equal(result.id, 'item');
+      assert.equal(result.source, 'youtube');
+      assert.equal(result.ssmusic_status, 'error');
+      assert.equal(result.ssmusic_error, failure instanceof SsmusicError ? failure.message : 'Failed to send video to ssMusic');
+      assert.equal(statements.slice(start).some(({ sql }) => sql === 'ROLLBACK'), false);
+    }
+  });
+
+  test(`queue ${suffix || 'add'} does not check or submit restricted videos for a locked party`, async (context) => {
+    process.env.YOUTUBE_API_KEY = 'test-youtube-key';
+    partyLocked = true;
+    context.after(() => { partyLocked = false; });
+    const lookup = context.mock.method(axios, 'get', async () => assert.fail('Unexpected YouTube lookup'));
+    submitJob = async () => assert.fail('Unexpected ssMusic submission');
+    assert.equal((await add()).status, 423);
+    assert.equal(lookup.mock.callCount(), 0);
+  });
+}
 
 test('queue conversion endpoint returns pending and immediately ready items', async () => {
   conversionItem = { id: 'item', party_id: 'party', source: 'youtube', is_locked: false };

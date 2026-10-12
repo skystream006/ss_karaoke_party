@@ -96,7 +96,6 @@ router.get('/search', async (req, res) => {
         type: 'video',
         maxResults: 20,
         key: apiKey,
-        videoCategoryId: '10', // Music category
       },
     });
 

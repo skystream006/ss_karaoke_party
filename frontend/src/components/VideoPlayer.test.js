@@ -218,3 +218,91 @@ test('cancels a delayed YouTube initialization when switching to ssMusic', () =>
   act(() => delayedReady());
   expect(window.YT.Player).not.toHaveBeenCalled();
 });
+
+test.each([100, 101, 150])('reports YouTube restriction %s once for the queued item and stops progress', (code) => {
+  const onRestricted = jest.fn();
+  const onEnded = jest.fn();
+  const { player, options } = renderPlayer({ playbackKey: 'entry-one', onRestricted, onEnded });
+  act(() => options.events.onStateChange({ target: player, data: window.YT.PlayerState.PLAYING }));
+
+  act(() => {
+    options.events.onError({ data: code });
+    options.events.onError({ data: code });
+    options.events.onStateChange({ target: player, data: window.YT.PlayerState.PLAYING });
+    options.events.onStateChange({ target: player, data: window.YT.PlayerState.ENDED });
+  });
+
+  expect(onRestricted).toHaveBeenCalledTimes(1);
+  expect(onRestricted).toHaveBeenCalledWith({ videoId: 'first-song', playbackKey: 'entry-one' });
+  expect(onEnded).not.toHaveBeenCalled();
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+test.each([2, 5, 153])('does not treat YouTube error %s as a video restriction', (code) => {
+  const onRestricted = jest.fn();
+  const { options } = renderPlayer({ onRestricted });
+  act(() => options.events.onError({ data: code }));
+  expect(onRestricted).not.toHaveBeenCalled();
+});
+
+test('uses the latest restriction callback without recreating the player', () => {
+  const previous = jest.fn();
+  const current = jest.fn();
+  const { options } = renderPlayer({ onRestricted: previous });
+  renderPlayer({ onRestricted: current });
+
+  act(() => options.events.onError({ data: 101 }));
+
+  expect(players).toHaveLength(1);
+  expect(previous).not.toHaveBeenCalled();
+  expect(current).toHaveBeenCalledTimes(1);
+});
+
+test('ignores stale restriction events and reports each queue entry separately', () => {
+  const onRestricted = jest.fn();
+  const first = renderPlayer({ playbackKey: 'entry-one', onRestricted });
+  act(() => first.options.events.onError({ data: 150 }));
+  const next = renderPlayer({ playbackKey: 'entry-two', onRestricted });
+  act(() => {
+    first.options.events.onError({ data: 101 });
+    next.options.events.onError({ data: 150 });
+  });
+  expect(onRestricted).toHaveBeenCalledTimes(2);
+  expect(onRestricted).toHaveBeenLastCalledWith({ videoId: 'first-song', playbackKey: 'entry-two' });
+
+  renderPlayer({ videoId: 'ssmusic-song', mediaPath: 'owner/music/song.mp3' });
+  act(() => next.options.events.onError({ data: 101 }));
+  expect(onRestricted).toHaveBeenCalledTimes(2);
+});
+
+test('shows the processing message without recreating the YouTube player and clears it on conversion', () => {
+  renderPlayer();
+  renderPlayer({ processing: true });
+  expect(container.querySelector('[role="status"]').textContent).toBe('Video is processing, come back when done');
+  expect(container.querySelector('#yt-player').hidden).toBe(true);
+  expect(players).toHaveLength(1);
+
+  renderPlayer({ mediaPath: 'owner/music/song.mp3', processing: true });
+  expect(container.querySelector('.video-processing-message')).toBeNull();
+  expect(players[0].player.destroy).toHaveBeenCalledTimes(1);
+});
+
+test('shows a submission failure instead of claiming the video is still processing', () => {
+  renderPlayer({ processing: true });
+  renderPlayer({ processing: false, processingError: 'ssMusic is unavailable' });
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  expect(container.querySelector('[role="alert"]').textContent).toBe('ssMusic is unavailable');
+  expect(container.querySelector('#yt-player').hidden).toBe(true);
+});
+
+test('does not autoplay or resume YouTube audio behind the processing message', () => {
+  const ref = createRef();
+  const { player, options } = renderPlayer({ ref });
+  renderPlayer({ ref, processing: true });
+  act(() => {
+    options.events.onReady({ target: player });
+    ref.current.playVideo();
+  });
+  expect(player.pauseVideo).toHaveBeenCalled();
+  expect(player.playVideo).not.toHaveBeenCalled();
+});

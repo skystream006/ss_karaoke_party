@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const pool = require('../db/db');
 const { writeLimiter } = require('../middleware/rateLimiter');
 const { requireAdmin } = require('../middleware/auth');
@@ -8,6 +9,39 @@ const { SsmusicError } = require('../lib/ssmusicClient');
 
 // Order all songs by position so completed songs remain in their original place
 const QUEUE_ORDER_BY = `position ASC`;
+
+async function processRestrictedVideo(req, item) {
+  const apiKey = process.env.YOUTUBE_API_KEY;
+  if (item.source !== 'youtube' || !apiKey) return item;
+
+  let video;
+  try {
+    const response = await axios.get('https://www.googleapis.com/youtube/v3/videos', {
+      params: { part: 'status,contentDetails', id: item.video_id, key: apiKey },
+      timeout: 5000,
+    });
+    if (!Array.isArray(response.data?.items)) return item;
+    video = response.data.items[0];
+  } catch {
+    return item;
+  }
+
+  const regions = video?.contentDetails?.regionRestriction;
+  const restricted = !video || video.status?.embeddable === false || video.status?.privacyStatus === 'private'
+    || video.contentDetails?.contentRating?.ytRating === 'ytAgeRestricted'
+    || Array.isArray(regions?.allowed) || Boolean(regions?.blocked?.length);
+  if (!restricted) return item;
+
+  try {
+    return await req.app.get('ssmusicJobs').submit(item) || item;
+  } catch (error) {
+    return {
+      ...item,
+      ssmusic_status: 'error',
+      ssmusic_error: error instanceof SsmusicError ? error.message : 'Failed to send video to ssMusic',
+    };
+  }
+}
 
 // GET /api/queue/:partyId - Get the queue for a party
 router.get('/:partyId', async (req, res) => {
@@ -43,7 +77,7 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
-  const client = await pool.connect();
+  let client = await pool.connect();
   try {
     await client.query('BEGIN');
 
@@ -74,8 +108,10 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
     );
 
     await client.query('COMMIT');
+    client.release();
+    client = null;
 
-    const newItem = result.rows[0];
+    const newItem = await processRestrictedVideo(req, result.rows[0]);
     // Emit socket event with full updated queue so all clients refresh their list
     const io = req.app.get('io');
     if (io) {
@@ -89,11 +125,11 @@ router.post('/:partyId', writeLimiter, async (req, res) => {
 
     res.status(201).json(newItem);
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Failed to add song to queue' });
   } finally {
-    client.release();
+    client?.release();
   }
 });
 
@@ -110,7 +146,7 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
     return res.status(400).json({ error: err.message });
   }
 
-  const client = await pool.connect();
+  let client = await pool.connect();
   try {
     await client.query('BEGIN');
 
@@ -150,7 +186,10 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
     );
 
     await client.query('COMMIT');
+    client.release();
+    client = null;
 
+    const newItem = await processRestrictedVideo(req, result.rows[0]);
     const io = req.app.get('io');
     if (io) {
       const updatedQueue = await pool.query(
@@ -160,13 +199,13 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
       io.to(req.params.partyId).emit('queue:update', { action: 'add', queue: updatedQueue.rows });
     }
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(newItem);
   } catch (err) {
-    await client.query('ROLLBACK');
+    if (client) await client.query('ROLLBACK');
     console.error(err);
     res.status(500).json({ error: 'Failed to add song to queue' });
   } finally {
-    client.release();
+    client?.release();
   }
 });
 

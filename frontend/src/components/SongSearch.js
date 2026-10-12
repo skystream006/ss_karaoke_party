@@ -18,6 +18,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
   const [adding, setAdding] = useState(null);
   const [playingNext, setPlayingNext] = useState(null);
   const [error, setError] = useState('');
+  const [processingNotice, setProcessingNotice] = useState(false);
   const [successId, setSuccessId] = useState(null);
   const [playNextSuccessId, setPlayNextSuccessId] = useState(null);
 
@@ -59,6 +60,12 @@ export default function SongSearch({ partyId, member, onAdded }) {
 
   useEffect(() => () => { searchRequest.current += 1; }, []);
 
+  useEffect(() => {
+    if (!processingNotice) return;
+    const timer = setTimeout(() => setProcessingNotice(false), 5000);
+    return () => clearTimeout(timer);
+  }, [processingNotice]);
+
   const handleQueryChange = (e) => {
     setQuery(e.target.value);
     if (!e.target.value) {
@@ -89,10 +96,18 @@ export default function SongSearch({ partyId, member, onAdded }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [karaokeOnly, ssMusicSearch, noVocalsOnly]);
 
+  const handleAdded = (item, reportError) => {
+    setProcessingNotice(['submitting', 'queued', 'running'].includes(item?.ssmusic_status));
+    if (item?.ssmusic_error) reportError(`Song added, but processing failed: ${item.ssmusic_error}`);
+    if (onAdded) onAdded();
+  };
+
   const handleAdd = async (video) => {
     setAdding(video.video_id);
+    setError('');
+    setProcessingNotice(false);
     try {
-      await addToQueue(partyId, {
+      const { data } = await addToQueue(partyId, {
         member_id: member?.id || null,
         singer_name: member?.name || 'Guest',
         video_id: video.video_id,
@@ -104,7 +119,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
       });
       setSuccessId(video.video_id);
       setTimeout(() => setSuccessId(null), 2000);
-      if (onAdded) onAdded();
+      handleAdded(data, setError);
     } catch (err) {
       setError('Failed to add song. Please try again.');
     } finally {
@@ -114,8 +129,10 @@ export default function SongSearch({ partyId, member, onAdded }) {
 
   const handlePlayNext = async (video) => {
     setPlayingNext(video.video_id);
+    setError('');
+    setProcessingNotice(false);
     try {
-      await addNextToQueue(partyId, {
+      const { data } = await addNextToQueue(partyId, {
         member_id: member?.id || null,
         singer_name: member?.name || 'Guest',
         video_id: video.video_id,
@@ -127,7 +144,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
       });
       setPlayNextSuccessId(video.video_id);
       setTimeout(() => setPlayNextSuccessId(null), 2000);
-      if (onAdded) onAdded();
+      handleAdded(data, setError);
     } catch (err) {
       setError('Failed to add song. Please try again.');
     } finally {
@@ -161,8 +178,10 @@ export default function SongSearch({ partyId, member, onAdded }) {
   const handleUrlAdd = async () => {
     if (!urlVideo) return;
     setUrlAdding(true);
+    setUrlError('');
+    setProcessingNotice(false);
     try {
-      await addToQueue(partyId, {
+      const { data } = await addToQueue(partyId, {
         member_id: member?.id || null,
         singer_name: member?.name || 'Guest',
         video_id: urlVideo.video_id,
@@ -173,7 +192,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
       setUrlVideo(null);
       setUrlInput('');
       setTimeout(() => setUrlSuccess(false), 2000);
-      if (onAdded) onAdded();
+      handleAdded(data, setUrlError);
     } catch (err) {
       setUrlError('Failed to add song. Please try again.');
     } finally {
@@ -184,8 +203,10 @@ export default function SongSearch({ partyId, member, onAdded }) {
   const handleUrlPlayNext = async () => {
     if (!urlVideo) return;
     setUrlPlayingNext(true);
+    setUrlError('');
+    setProcessingNotice(false);
     try {
-      await addNextToQueue(partyId, {
+      const { data } = await addNextToQueue(partyId, {
         member_id: member?.id || null,
         singer_name: member?.name || 'Guest',
         video_id: urlVideo.video_id,
@@ -196,7 +217,7 @@ export default function SongSearch({ partyId, member, onAdded }) {
       setUrlVideo(null);
       setUrlInput('');
       setTimeout(() => setUrlPlayNextSuccess(false), 2000);
-      if (onAdded) onAdded();
+      handleAdded(data, setUrlError);
     } catch (err) {
       setUrlError('Failed to add song. Please try again.');
     } finally {
@@ -222,6 +243,8 @@ export default function SongSearch({ partyId, member, onAdded }) {
           🔗 YouTube URL
         </button>
       </div>
+
+      {processingNotice && <div className="success-msg" role="status">Video is processing, come back when done</div>}
 
       {tab === 'search' && (
         <>

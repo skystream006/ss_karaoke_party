@@ -222,6 +222,12 @@ export default function OrganizerPage({ switchUserButton }) {
     [partyId]
   );
 
+  const handleVideoRestricted = useCallback(({ videoId, playbackKey }) => {
+    if (currentItemIdRef.current !== playbackKey) return;
+    const item = queue.find((entry) => entry.id === playbackKey && entry.video_id === videoId);
+    if (item) return sendToSSMusic(item);
+  }, [queue, sendToSSMusic]);
+
   const handleVideoEnded = useCallback(async () => {
     // Find currently playing or paused item
     const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
@@ -506,7 +512,11 @@ export default function OrganizerPage({ switchUserButton }) {
               mediaType={currentMedia?.media_type}
               title={currentMedia?.video_title}
               paused={currentItem?.status === 'paused'}
+              processing={currentMedia?.source !== 'ssmusic' && Boolean(ssmusicState[currentItem?.id]?.pending
+                || ['submitting', 'queued', 'running'].includes(queuedCurrentItem?.ssmusic_status))}
+              processingError={queuedCurrentItem?.ssmusic_error || ssmusicState[currentItem?.id]?.error}
               onEnded={handleVideoEnded}
+              onRestricted={handleVideoRestricted}
               settings={settings}
               onPrev={handlePrevious}
               hasPrev={activeQueueItem ? queue.some((i) => i.position < activeQueueItem.position) : false}

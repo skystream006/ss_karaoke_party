@@ -72,6 +72,12 @@ Deleting a kpMedia row uses its retained YouTube ID and party ID for cleanup. Du
 | `GET` | `/api/youtube/search?q=` | member | Search YouTube (add `&karaoke=true` to filter karaoke versions) |
 | `GET` | `/api/youtube/video?url=` | member | Fetch video metadata by YouTube URL |
 
+Search includes all video categories and does not apply `videoEmbeddable` or `videoSyndicated` filters. Restricted results remain available to add.
+
+Both queue-add endpoints check YouTube `status` and `contentDetails` after saving the item. Disabled embedding, private or unavailable videos, age restrictions, and any declared regional restriction automatically send that queued item through the existing ssMusic job worker. This check needs `YOUTUBE_API_KEY` and times out after five seconds; an unavailable check does not prevent adding the video. YouTube playback errors 100, 101, and 150 also trigger the same per-item submission, without duplicate requests for pending jobs. Other player errors do not start processing.
+
+Pending items display "Video is processing, come back when done" in the playlist and player, with a notification after adding. The original queue identity is retained when ssMusic becomes ready. Failed processing leaves the song queued with an error and the existing "Send to ssMusic" retry action. Queue locks and upstream access restrictions still apply.
+
 ### ssMusic
 
 Configure `SSMUSIC_SERVER_URL` and `SSMUSIC_API_KEY` on the backend. The latter must match the upstream server's `SEARCH_API_KEY`, which permits catalog/media reads and KaraokeParty playlist add/remove actions. All upstream requests use `X-API-Key`; browser requests use this app's normal session authentication.

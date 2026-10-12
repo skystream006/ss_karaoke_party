@@ -1,7 +1,7 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { act, Simulate } from 'react-dom/test-utils';
-import { searchYouTube, searchSSMusic, getSSMusicArtwork, addToQueue, addNextToQueue } from '../services/api';
+import { searchYouTube, searchSSMusic, getYouTubeVideoByUrl, getSSMusicArtwork, addToQueue, addNextToQueue } from '../services/api';
 import SongSearch from './SongSearch';
 import Playlist from './Playlist';
 
@@ -208,4 +208,55 @@ test('shows server configuration errors without falling back to YouTube', async 
   await search();
   expect(container.textContent).toContain('ssMusic is not configured');
   expect(searchYouTube).not.toHaveBeenCalled();
+});
+
+async function findYouTubeVideo(tab) {
+  if (tab === 'url') {
+    getYouTubeVideoByUrl.mockResolvedValue({ data: { video_id: 'youtube-song', title: 'YouTube song' } });
+    act(() => Simulate.click([...container.querySelectorAll('.search-tab')].find(button => button.textContent.includes('YouTube URL'))));
+  }
+  await search(tab === 'url' ? 'https://youtu.be/abcdefghijk' : 'song');
+}
+
+test.each([
+  ['search', 'Add to queue'], ['search', 'Play next'], ['url', 'Add to queue'], ['url', 'Play next'],
+])('shows add-time processing feedback for %s / %s', async (tab, action) => {
+  const onAdded = jest.fn();
+  act(() => root.render(<SongSearch partyId="party" member={{ id: 'member', name: 'Singer' }} onAdded={onAdded} />));
+  const request = action === 'Add to queue' ? addToQueue : addNextToQueue;
+  request.mockResolvedValue({ data: { id: 'entry', source: 'youtube', ssmusic_status: 'queued' } });
+  await findYouTubeVideo(tab);
+  await act(async () => Simulate.click(container.querySelector(`button[title="${action}"]`)));
+  expect(container.querySelector('[role="status"]').textContent).toBe('Video is processing, come back when done');
+  expect(onAdded).toHaveBeenCalledTimes(1);
+  expect(request).toHaveBeenCalledTimes(1);
+  act(() => jest.advanceTimersByTime(5000));
+  expect(container.querySelector('[role="status"]')).toBeNull();
+});
+
+test.each([
+  ['search', 'Add to queue'], ['search', 'Play next'], ['url', 'Add to queue'], ['url', 'Play next'],
+])('keeps a successful addition distinct from a processing failure for %s / %s', async (tab, action) => {
+  const onAdded = jest.fn();
+  act(() => root.render(<SongSearch partyId="party" onAdded={onAdded} />));
+  const request = action === 'Add to queue' ? addToQueue : addNextToQueue;
+  request.mockResolvedValue({ data: { id: 'entry', source: 'youtube', ssmusic_status: 'error', ssmusic_error: 'ssMusic is unavailable' } });
+  await findYouTubeVideo(tab);
+  await act(async () => Simulate.click(container.querySelector(`button[title="${action}"]`)));
+  expect(container.textContent).toContain('Song added, but processing failed: ssMusic is unavailable');
+  expect(container.textContent).not.toContain('Failed to add song');
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  expect(onAdded).toHaveBeenCalledTimes(1);
+});
+
+test('playlist processing feedback lasts until conversion completes', async () => {
+  const item = { id: 'entry', video_id: 'youtube-song', source: 'youtube', video_title: 'YouTube song',
+    position: 1, singer_name: 'Singer', status: 'queued' };
+  for (const ssmusic_status of ['submitting', 'queued', 'running']) {
+    act(() => root.render(<Playlist queue={[{ ...item, ssmusic_status }]} />));
+    expect(container.querySelector('[role="status"]').textContent).toBe('Video is processing, come back when done');
+  }
+  await act(async () => root.render(<Playlist queue={[{ ...item, ...song, ssmusic_status: 'completed' }]} />));
+  expect(container.querySelector('[role="status"]')).toBeNull();
+  expect(container.querySelector('.playlist-media-status').textContent).toBe('ssMusic');
 });

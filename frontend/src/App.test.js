@@ -113,7 +113,7 @@ test('switches users without logging in again and updates both party form defaul
   await login();
   change('input[list]', 'Alex');
   await submit();
-  await click('Switch user');
+  await click('Change Alias');
   expect(container.querySelector('input[type="password"]')).toBeNull();
   expect(container.querySelector('input[list]').value).toBe('Alex');
   expect(container.querySelectorAll('datalist option')).toHaveLength(2);
@@ -141,7 +141,7 @@ test('switching from a party clears the local member identity while preserving a
   localStorage.setItem('defaultUsername', 'Alex');
   window.history.replaceState({}, '', '/organizer/party-id/old-member');
   await renderApp();
-  await click('Switch user');
+  await click('Change Alias');
   expect(window.location.pathname).toBe('/');
   expect(container.textContent).not.toContain('Organizer view');
   expect(sessionStorage.getItem('memberId')).toBeNull();
@@ -159,7 +159,7 @@ test('QR users can switch names without requesting another session', async () =>
   window.history.replaceState({}, '', '/join/ABCDEF');
   axios.get.mockResolvedValue({ data: { token: 'qr-token', level: 'member' } });
   await renderApp();
-  await click('Switch user');
+  await click('Change Alias');
   change('input[list]', 'Taylor');
   await submit();
   expect(localStorage.getItem('defaultUsername')).toBe('Taylor');

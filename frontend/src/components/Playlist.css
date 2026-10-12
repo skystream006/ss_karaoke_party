@@ -85,9 +85,10 @@
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  overflow-wrap: anywhere;
 }
 
 .playlist-singer {
@@ -235,11 +236,7 @@
   }
 
   .playlist-title {
-    white-space: normal;
-    overflow: visible;
-    text-overflow: unset;
     font-size: 0.82rem;
-    overflow-wrap: anywhere;
   }
 
   .playlist-singer {

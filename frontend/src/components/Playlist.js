@@ -239,8 +239,9 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                       {item.source === 'ssmusic' ? (
                         <div className="playlist-media-status">{item.kpMedia ? 'kpMedia' : 'ssMusic'}</div>
                       ) : ssmusicState[item.id]?.pending || SSMUSIC_PENDING_LABELS[item.ssmusic_status] ? (
-                        <div className="playlist-media-status" role="status">
-                          {SSMUSIC_PENDING_LABELS[item.ssmusic_status] || SSMUSIC_PENDING_LABELS.submitting}
+                        <div className="playlist-media-status" role="status"
+                          title={SSMUSIC_PENDING_LABELS[item.ssmusic_status] || SSMUSIC_PENDING_LABELS.submitting}>
+                          Video is processing, come back when done
                         </div>
                       ) : (ssmusicState[item.id]?.error || item.ssmusic_error) && (
                         <div className="playlist-media-error" role="alert">{ssmusicState[item.id]?.error || item.ssmusic_error}</div>

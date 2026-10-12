@@ -10,18 +10,22 @@ const disableCaptions = (player) => {
   }
 };
 
-const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, mediaPath, mediaType, title, paused = false, onEnded, settings, onPrev, hasPrev, onNext, hasNext, onTimeUpdate }, ref) {
+const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, mediaPath, mediaType, title, paused = false, processing = false, processingError, onEnded, onRestricted, settings, onPrev, hasPrev, onNext, hasNext, onTimeUpdate }, ref) {
   const playerRef = useRef(null);
   const nativePlayerRef = useRef(null);
   const pausedRef = useRef(paused);
   pausedRef.current = paused;
+  const processingRef = useRef(processing);
+  processingRef.current = processing;
   const containerRef = useRef(null);
   const wrapperRef = useRef(null);
   const mouseTimerRef = useRef(null);
   const progressIntervalRef = useRef(null);
   const onEndedRef = useRef(onEnded);
+  const onRestrictedRef = useRef(onRestricted);
   const onTimeUpdateRef = useRef(onTimeUpdate);
   useEffect(() => { onEndedRef.current = onEnded; }, [onEnded]);
+  useEffect(() => { onRestrictedRef.current = onRestricted; }, [onRestricted]);
   useEffect(() => { onTimeUpdateRef.current = onTimeUpdate; }, [onTimeUpdate]);
 
   // Expose seekTo/pauseVideo/playVideo so parent pages can programmatically control the player
@@ -37,6 +41,7 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, medi
       playerRef.current?.pauseVideo?.();
     },
     playVideo: () => {
+      if (processingRef.current) return;
       if (nativePlayerRef.current) return nativePlayerRef.current.playVideo();
       playerRef.current?.playVideo?.();
     },
@@ -57,6 +62,7 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, medi
   useEffect(() => {
     if (!videoId || mediaPath) return;
     let disposed = false;
+    let restrictionReported = false;
 
     const initPlayer = () => {
       if (disposed || !containerRef.current) return;
@@ -83,14 +89,21 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, medi
         events: {
           onReady: (event) => {
             disableCaptions(event.target);
-            if (pausedRef.current) event.target.pauseVideo();
+            if (pausedRef.current || processingRef.current) event.target.pauseVideo();
             else event.target.playVideo();
             applySettings(event.target);
           },
           onApiChange: (event) => {
             disableCaptions(event.target);
           },
+          onError: (event) => {
+            if (disposed || restrictionReported || ![100, 101, 150].includes(event.data)) return;
+            restrictionReported = true;
+            clearInterval(progressIntervalRef.current);
+            onRestrictedRef.current?.({ videoId, playbackKey });
+          },
           onStateChange: (event) => {
+            if (disposed || restrictionReported) return;
             if (event.data === window.YT.PlayerState.PLAYING) {
               disableCaptions(event.target);
               // Poll playback position every 2 seconds while playing
@@ -140,8 +153,8 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, medi
   }, [videoId, mediaPath, playbackKey]);
 
   useEffect(() => {
-    if (paused) playerRef.current?.pauseVideo?.();
-  }, [paused]);
+    if (paused || processing) playerRef.current?.pauseVideo?.();
+  }, [paused, processing]);
 
   const applySettings = (player) => {
     if (!player || !settings) return;
@@ -244,7 +257,12 @@ const VideoPlayer = forwardRef(function VideoPlayer({ videoId, playbackKey, medi
             onEnded={onEnded}
             onTimeUpdate={onTimeUpdate}
           />
-        ) : <div ref={containerRef} id="yt-player" />}
+        ) : <div ref={containerRef} id="yt-player" hidden={processing || Boolean(processingError)} />}
+        {!mediaPath && (processing || processingError) && (
+          <div className="video-processing-message" role={processing ? 'status' : 'alert'}>
+            {processing ? 'Video is processing, come back when done' : processingError}
+          </div>
+        )}
       </div>
 
       {/* Fullscreen overlay nav buttons */}

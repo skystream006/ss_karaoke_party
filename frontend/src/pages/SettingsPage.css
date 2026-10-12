@@ -1,8 +1,23 @@
 .settings-container {
+  --primary: #d4af37;
+  --primary-dark: #b89227;
+  --secondary: #222222;
+  --accent: #f0d37b;
+  --accent-dark: #c4a54e;
+  --bg-dark: #0a0a0a;
+  --bg-card: #121212;
+  --bg-surface: #1c1c1c;
+  --text-primary: #f2f2f2;
+  --text-secondary: #b9b9b9;
+  --border: rgba(212, 175, 55, 0.24);
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --settings-gold-tint: rgba(212, 175, 55, 0.1);
+  --settings-gold-hover: rgba(212, 175, 55, 0.18);
+  color-scheme: dark;
   height: 100vh;
   display: flex;
   flex-direction: column;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background: linear-gradient(135deg, var(--bg-dark), #181818);
   color: var(--text-primary);
 }
 
@@ -12,7 +27,7 @@
   align-items: center;
   gap: 1rem;
   padding: 1.25rem 1.5rem;
-  background: rgba(15, 52, 96, 0.6);
+  background: rgba(10, 10, 10, 0.94);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -37,7 +52,7 @@
 .settings-header-title h1 {
   font-size: 1.5rem;
   font-weight: 700;
-  color: var(--text-primary);
+  color: var(--primary);
   margin: 0;
 }
 
@@ -49,6 +64,7 @@
   margin: 0 auto;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  grid-auto-rows: max-content;
   gap: 2rem;
   align-items: start;
   overflow-y: auto;
@@ -68,14 +84,14 @@
   justify-content: space-between;
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-surface);
 }
 
 .settings-section-header h2 {
   font-size: 1.1rem;
   font-weight: 600;
   margin: 0;
-  color: var(--text-primary);
+  color: var(--accent);
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -103,6 +119,7 @@
 
 .settings-item {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
   gap: 1rem;
@@ -120,13 +137,13 @@
 }
 
 .settings-item--selected {
-  background: rgba(233, 69, 96, 0.08);
+  background: var(--settings-gold-tint);
   border-left: 3px solid var(--primary);
 }
 
 .settings-item-main {
   flex: 1;
-  min-width: 0;
+  min-width: min(12rem, 100%);
 }
 
 .settings-item-info {
@@ -161,33 +178,33 @@
 }
 
 .settings-badge--active {
-  background: rgba(80, 200, 120, 0.2);
-  color: #5ec87a;
-  border: 1px solid rgba(80, 200, 120, 0.4);
+  background: var(--settings-gold-tint);
+  color: var(--accent);
+  border: 1px solid var(--border);
 }
 
 .settings-badge--inactive {
-  background: rgba(160, 160, 176, 0.15);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border);
 }
 
 .settings-badge--organizer {
-  background: rgba(245, 166, 35, 0.2);
+  background: var(--settings-gold-tint);
   color: var(--accent);
-  border: 1px solid rgba(245, 166, 35, 0.4);
+  border: 1px solid var(--border);
 }
 
 .settings-badge--guest {
-  background: rgba(74, 144, 226, 0.2);
-  color: #7ab3f5;
-  border: 1px solid rgba(74, 144, 226, 0.4);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
 
 .settings-badge--locked {
-  background: rgba(245, 166, 35, 0.15);
+  background: var(--settings-gold-tint);
   color: var(--accent);
-  border: 1px solid rgba(245, 166, 35, 0.35);
+  border: 1px solid var(--border);
 }
 
 /* Item actions */
@@ -198,6 +215,7 @@
   flex-shrink: 0;
   flex-wrap: wrap;
   justify-content: flex-end;
+  max-width: 100%;
 }
 
 /* Inline edit */
@@ -285,6 +303,28 @@
   background: rgba(80, 200, 120, 0.35);
 }
 
+.settings-container .btn-primary {
+  color: var(--bg-dark);
+}
+
+.settings-container .btn-warning,
+.settings-container .btn-success {
+  background: var(--settings-gold-tint);
+  color: var(--accent);
+  border-color: var(--border);
+}
+
+.settings-container .btn-warning:hover,
+.settings-container .btn-success:hover {
+  background: var(--settings-gold-hover);
+  border-color: var(--primary);
+}
+
+.settings-container :is(button, input, select):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
 /* Status messages */
 .settings-loading,
 .settings-empty {
@@ -297,7 +337,7 @@
 .settings-error {
   margin: 1rem 1.5rem;
   background: rgba(233, 69, 96, 0.15);
-  border: 1px solid var(--primary);
+  border: 1px solid rgba(255, 107, 107, 0.4);
   border-radius: 8px;
   padding: 0.75rem 1rem;
   color: #ff6b6b;
@@ -427,32 +467,32 @@
 }
 
 .settings-singer-btn:hover {
-  background: rgba(233, 69, 96, 0.1);
+  background: var(--settings-gold-tint);
   color: var(--text-primary);
   border-color: var(--primary);
 }
 
 /* Song status badges */
 .settings-badge--status-queued {
-  background: rgba(74, 144, 226, 0.15);
-  color: #7ab3f5;
-  border: 1px solid rgba(74, 144, 226, 0.3);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
 }
 
 .settings-badge--status-playing {
-  background: rgba(80, 200, 120, 0.2);
-  color: #5ec87a;
-  border: 1px solid rgba(80, 200, 120, 0.4);
+  background: var(--settings-gold-tint);
+  color: var(--accent);
+  border: 1px solid var(--border);
 }
 
 .settings-badge--status-paused {
-  background: rgba(245, 166, 35, 0.15);
+  background: var(--settings-gold-tint);
   color: var(--accent);
-  border: 1px solid rgba(245, 166, 35, 0.35);
+  border: 1px solid var(--border);
 }
 
 .settings-badge--status-played {
-  background: rgba(160, 160, 176, 0.15);
+  background: var(--bg-surface);
   color: var(--text-secondary);
   border: 1px solid var(--border);
 }

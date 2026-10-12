@@ -213,7 +213,7 @@ test('playlist sends only YouTube items and disables only the item already being
   expect(triggers).toHaveLength(2);
   act(() => Simulate.click(triggers[0]));
   expect(document.querySelector('[role="menuitem"]').disabled).toBe(true);
-  expect(container.querySelector('[role="status"]').textContent).toBe('Sending to ssMusic...');
+  expect(container.querySelector('[role="status"]').textContent).toBe('Video is processing, come back when done');
   act(() => Simulate.click(triggers[1]));
   const send = document.querySelector('[role="menuitem"]');
   expect(send.disabled).toBe(false);

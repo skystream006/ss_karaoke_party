@@ -62,7 +62,7 @@ function AppRoutes() {
 
   const switchUserButton = (
     <button type="button" className="btn btn-ghost" onClick={handleSwitchUser}>
-      Switch user
+      Change Alias
     </button>
   );
 

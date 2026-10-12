@@ -83,12 +83,12 @@ test.each([false, true])('guest QR dialog opens, shows party links, closes and r
   expect(dialog.querySelector('svg')).toBeNull();
 });
 
-test('places the switch user action immediately after Status', async () => {
+test('places the Change Alias action immediately after Status', async () => {
   const switchUser = jest.fn();
-  await renderGuest(<button type="button" onClick={switchUser}>Switch user</button>);
+  await renderGuest(<button type="button" onClick={switchUser}>Change Alias</button>);
   const statusButton = container.querySelector('[aria-label="Toggle connection status"]');
   const switchButton = statusButton.nextElementSibling;
-  expect(switchButton.textContent).toBe('Switch user');
+  expect(switchButton.textContent).toBe('Change Alias');
   act(() => { Simulate.click(switchButton); });
   expect(switchUser).toHaveBeenCalledTimes(1);
 });
