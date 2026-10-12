@@ -7,6 +7,7 @@ import SongSearch from '../components/SongSearch';
 import CustomizationPanel from '../components/CustomizationPanel';
 import ThemePicker from '../components/ThemePicker';
 import QRCodeModal from '../components/QRCodeModal';
+import useSSMusicJobs from '../hooks/useSSMusicJobs';
 import './GuestPage.css';
 
 const SOCKET_URL =
@@ -21,6 +22,7 @@ export default function GuestPage({ switchUserButton }) {
 
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
+  const { sendToSSMusic, ssmusicState } = useSSMusicJobs(partyId, setQueue);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isLocked, setIsLocked] = useState(false);
@@ -47,13 +49,12 @@ export default function GuestPage({ switchUserButton }) {
   const member = { id: memberId, name: memberName };
 
   const handleRemove = async (itemId) => {
-    const previous = queue;
-    setQueue((prev) => prev.filter((item) => item.id !== itemId));
     try {
       await removeFromQueue(partyId, itemId);
-    } catch {
-      setQueue(previous);
-      setError('Failed to remove song.');
+      setQueue((current) => current.filter((item) => item.id !== itemId));
+      setError('');
+    } catch (error) {
+      setError(error.response?.data?.error || 'Failed to remove song.');
     }
   };
 
@@ -180,11 +181,18 @@ export default function GuestPage({ switchUserButton }) {
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
+    let hasConnected = false;
     socket.on('connect', () => {
       setConnected(true);
       setSocketId(socket.id);
       setReconnectAttempts(0);
       socket.emit('join:party', partyId);
+      if (hasConnected) {
+        getQueue(partyId).then(({ data }) => {
+          if (socketRef.current === socket) setQueue(data);
+        }).catch(() => {});
+      }
+      hasConnected = true;
     });
     socket.on('disconnect', () => {
       setConnected(false);
@@ -361,6 +369,8 @@ export default function GuestPage({ switchUserButton }) {
                 onReorder={handleReorder}
                 onPlay={handlePlay}
                 onPause={handlePause}
+                onSendToSSMusic={isLocked ? undefined : sendToSSMusic}
+                ssmusicState={ssmusicState}
                 isOrganizer={false}
                 canReorder={true}
                 canRemove={true}

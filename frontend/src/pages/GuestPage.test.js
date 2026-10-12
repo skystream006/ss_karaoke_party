@@ -3,20 +3,23 @@ import { createRoot } from 'react-dom/client';
 import { act, Simulate } from 'react-dom/test-utils';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getParty, getQueue, getMember, getServerInfo } from '../services/api';
+import { getParty, getQueue, getMember, getServerInfo, removeFromQueue } from '../services/api';
 import GuestPage from './GuestPage';
 
 jest.mock('socket.io-client', () => ({ io: jest.fn() }));
 jest.mock('../services/api', () => ({
   getParty: jest.fn(), getQueue: jest.fn(), getMember: jest.fn(), getServerInfo: jest.fn(),
+  removeFromQueue: jest.fn(),
 }));
-jest.mock('../components/Playlist', () => () => null);
+let mockPlaylistProps;
+jest.mock('../components/Playlist', () => (props) => { mockPlaylistProps = props; return null; });
 jest.mock('../components/CustomizationPanel', () => () => null);
 jest.mock('../components/SongSearch', () => () => null);
 jest.mock('../components/ThemePicker', () => () => null);
 
 let root;
 let container;
+let handlers;
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
@@ -25,7 +28,8 @@ beforeEach(() => {
   getQueue.mockResolvedValue({ data: [] });
   getMember.mockResolvedValue({ data: { id: 'member-id', name: 'Alex' } });
   getServerInfo.mockResolvedValue({ data: { ip: '192.168.1.10' } });
-  io.mockReturnValue({ on: jest.fn(), emit: jest.fn(), disconnect: jest.fn() });
+  handlers = {};
+  io.mockReturnValue({ on: jest.fn((event, handler) => { handlers[event] = handler; }), emit: jest.fn(), disconnect: jest.fn() });
   container = document.createElement('div');
   document.body.appendChild(container);
   root = createRoot(container);
@@ -94,4 +98,28 @@ test('does not offer QR sharing when the party cannot be loaded', async () => {
   await renderGuest();
   expect(container.querySelector('[aria-label="Show party QR code"]')).toBeNull();
   expect(getServerInfo).not.toHaveBeenCalled();
+});
+
+test('kpMedia stays queued when removal fails without undoing another conversion, and can be retried', async () => {
+  const first = { id: 'first', source: 'ssmusic', kpMedia: true, video_title: 'First', status: 'queued', position: 1 };
+  const second = { id: 'second', source: 'youtube', video_title: 'Second', status: 'queued', position: 2 };
+  getQueue.mockResolvedValueOnce({ data: [first, second] });
+  let rejectRemoval;
+  removeFromQueue.mockImplementationOnce(() => new Promise((resolve, reject) => { rejectRemoval = reject; }));
+  await renderGuest();
+  let removing;
+  act(() => { removing = mockPlaylistProps.onRemove(first.id); });
+  expect(mockPlaylistProps.queue).toEqual([first, second]);
+  const convertedSecond = { ...second, source: 'ssmusic', kpMedia: true, media_path: 'job/video.mp4' };
+  act(() => handlers['queue:update']({ action: 'media', queue: [first, convertedSecond] }));
+  await act(async () => {
+    rejectRemoval({ response: { status: 409, data: { error: 'ssMusic video is busy; try again after it finishes' } } });
+    await removing;
+  });
+  expect(mockPlaylistProps.queue).toEqual([first, convertedSecond]);
+  expect(container.textContent).toContain('ssMusic video is busy; try again after it finishes');
+  removeFromQueue.mockResolvedValueOnce({ data: { success: true } });
+  await act(async () => mockPlaylistProps.onRemove(first.id));
+  expect(mockPlaylistProps.queue).toEqual([convertedSecond]);
+  expect(container.textContent).not.toContain('ssMusic video is busy');
 });

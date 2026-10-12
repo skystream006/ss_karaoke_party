@@ -7,6 +7,7 @@ import { useTheme } from '../contexts/ThemeContext';
 import { getMemberNames, getParties, getPartyByCode, getPartyMembers, searchMembers, getAllParties, getQueue, updateQueueItemSinger } from '../services/api';
 import ThemePicker from './ThemePicker';
 import PasswordModal from './PasswordModal';
+import Playlist from './Playlist';
 import JoinPage from '../pages/JoinPage';
 import SettingsPage from '../pages/SettingsPage';
 
@@ -116,4 +117,88 @@ test('settings roles and singer options are alphabetical while keeping placehold
   await act(async () => Simulate.click([...container.querySelectorAll('.settings-inline-actions button')].find(button => button.textContent === 'Save')));
   expect(updateQueueItemSinger).toHaveBeenCalledWith('party-id', 'song-id', { singer_name: 'alice', member_id: 'member-2' });
   expect(members.map(member => member.name)).toEqual(['zoe', 'Bravo', 'alice']);
+});
+
+test('playlist actions are hidden in a three-dot menu and preserve play, pause, resume, and remove callbacks', () => {
+  const onPlay = jest.fn();
+  const onPause = jest.fn();
+  const onRemove = jest.fn();
+  const onSendToSSMusic = jest.fn();
+  const renderPlaylist = (status = 'queued') => act(() => root.render(
+    <Playlist queue={[{ ...song, status }]} isOrganizer onPlay={onPlay} onPause={onPause}
+      onRemove={onRemove} onSendToSSMusic={onSendToSSMusic} />
+  ));
+  const openMenu = () => act(() => Simulate.click(container.querySelector('[aria-haspopup="menu"]')));
+  const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')];
+  renderPlaylist();
+  expect(container.querySelectorAll('.playlist-actions button')).toHaveLength(1);
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  openMenu();
+  expect(menuItems().map(button => button.textContent)).toEqual(['Play now', 'Send to ssMusic', 'Remove']);
+  expect(document.activeElement).toBe(menuItems()[0]);
+  act(() => Simulate.click(menuItems()[0]));
+  expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ id: song.id }));
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  openMenu();
+  act(() => Simulate.click(menuItems()[2]));
+  expect(onRemove).toHaveBeenCalledWith(song.id);
+  renderPlaylist('playing');
+  openMenu();
+  expect(menuItems()[0].textContent).toBe('Pause');
+  act(() => Simulate.click(menuItems()[0]));
+  expect(onPause).toHaveBeenCalledWith(expect.objectContaining({ id: song.id }));
+  renderPlaylist('paused');
+  openMenu();
+  expect(menuItems()[0].textContent).toBe('Resume');
+});
+
+test('playlist sends only YouTube items and disables only the item already being sent', () => {
+  const onSendToSSMusic = jest.fn();
+  const queue = [song, { ...song, id: 'second', video_title: 'Second', position: 2 },
+    { ...song, id: 'ssmusic', video_title: 'Library', source: 'ssmusic', position: 3 }];
+  act(() => root.render(<Playlist queue={queue} onPlay={jest.fn()} onSendToSSMusic={onSendToSSMusic}
+    ssmusicState={{ [song.id]: { pending: true } }} />));
+  const triggers = container.querySelectorAll('[aria-haspopup="menu"]');
+  act(() => Simulate.click(triggers[0]));
+  expect(document.querySelectorAll('[role="menuitem"]')[1].disabled).toBe(true);
+  expect(container.querySelector('[role="status"]').textContent).toBe('Sending to ssMusic...');
+  act(() => Simulate.click(triggers[1]));
+  const send = document.querySelectorAll('[role="menuitem"]')[1];
+  expect(send.disabled).toBe(false);
+  act(() => Simulate.click(send));
+  expect(onSendToSSMusic).toHaveBeenCalledWith(queue[1]);
+  act(() => Simulate.click(triggers[2]));
+  expect(document.querySelector('[role="menu"]').textContent).not.toContain('Send to ssMusic');
+});
+
+test('playlist menus support keyboard navigation, Escape focus return, and outside dismissal', () => {
+  act(() => root.render(<Playlist queue={[song]} isOrganizer onPlay={jest.fn()} onRemove={jest.fn()} />));
+  const trigger = container.querySelector('[aria-haspopup="menu"]');
+  act(() => Simulate.keyDown(trigger, { key: 'ArrowDown' }));
+  const menu = document.querySelector('[role="menu"]');
+  const buttons = menu.querySelectorAll('button');
+  expect(document.activeElement).toBe(buttons[0]);
+  act(() => Simulate.keyDown(menu, { key: 'ArrowDown' }));
+  expect(document.activeElement).toBe(buttons[1]);
+  act(() => Simulate.keyDown(menu, { key: 'Escape' }));
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(document.activeElement).toBe(trigger);
+  act(() => Simulate.click(trigger));
+  act(() => document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+});
+
+test('read-only playlist rows have no menu and persisted job errors remain visible', () => {
+  act(() => root.render(<Playlist queue={[{ ...song, ssmusic_status: 'error', ssmusic_error: 'ssMusic job failed' }]} />));
+  expect(container.querySelector('[aria-haspopup="menu"]')).toBeNull();
+  expect(container.querySelector('[role="alert"]').textContent).toBe('ssMusic job failed');
+});
+
+test('converted rows are marked kpMedia while regular library rows remain ssMusic', () => {
+  act(() => root.render(<Playlist queue={[
+    { ...song, source: 'ssmusic', kpMedia: true },
+    { ...song, id: 'library', source: 'ssmusic', position: 2 },
+  ]} onSendToSSMusic={jest.fn()} />));
+  expect([...container.querySelectorAll('.playlist-media-status')].map(element => element.textContent)).toEqual(['kpMedia', 'ssMusic']);
+  expect(container.querySelector('[aria-haspopup="menu"]')).toBeNull();
 });

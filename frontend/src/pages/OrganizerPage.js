@@ -20,6 +20,7 @@ import QRCodeModal from '../components/QRCodeModal';
 import CustomizationPanel from '../components/CustomizationPanel';
 import SongSearch from '../components/SongSearch';
 import ThemePicker from '../components/ThemePicker';
+import useSSMusicJobs from '../hooks/useSSMusicJobs';
 import './OrganizerPage.css';
 
 const SOCKET_URL =
@@ -34,8 +35,11 @@ export default function OrganizerPage({ switchUserButton }) {
 
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
+  const { sendToSSMusic, ssmusicState } = useSSMusicJobs(partyId, setQueue);
   const [currentItem, setCurrentItem] = useState(null);
-  const currentVideoId = currentItem?.video_id || null;
+  const queuedCurrentItem = queue.find((item) => item.id === currentItem?.id);
+  const currentMedia = queuedCurrentItem?.source === 'ssmusic' ? queuedCurrentItem : currentItem;
+  const currentVideoId = currentMedia?.video_id || null;
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [sidebarTab, setSidebarTab] = useState('playlist'); // 'playlist' | 'search' | 'settings'
   const [qrPanelOpen, setQrPanelOpen] = useState(true);
@@ -62,7 +66,7 @@ export default function OrganizerPage({ switchUserButton }) {
   useEffect(() => {
     setVideoCurrentTime(0);
     setVideoDuration(0);
-  }, [currentItem?.id]);
+  }, [currentItem?.id, currentVideoId]);
 
   // Load party data
   useEffect(() => {
@@ -105,12 +109,22 @@ export default function OrganizerPage({ switchUserButton }) {
   useEffect(() => {
     const socket = io(SOCKET_URL, { transports: ['websocket', 'polling'] });
     socketRef.current = socket;
+    let hasConnected = false;
     socket.on('connect', () => {
       socket.emit('join:party', partyId);
+      if (hasConnected) {
+        getQueue(partyId).then(({ data }) => {
+          if (socketRef.current === socket) setQueue(data);
+        }).catch(() => {});
+      }
+      hasConnected = true;
     });
     socket.on('queue:update', ({ action, queue: updatedQueue }) => {
       if (updatedQueue) {
         setQueue(updatedQueue);
+        if (action === 'remove') {
+          setCurrentItem((current) => current && !updatedQueue.some((item) => item.id === current.id) ? null : current);
+        }
         if (action === 'status') {
           const playing = updatedQueue.find((i) => i.status === 'playing');
           const paused = updatedQueue.find((i) => i.status === 'paused');
@@ -149,9 +163,11 @@ export default function OrganizerPage({ switchUserButton }) {
     async (itemId) => {
       try {
         await removeFromQueue(partyId, itemId);
-        // Queue will update via socket
-      } catch {
-        setError('Failed to remove song.');
+        setQueue((current) => current.filter((item) => item.id !== itemId));
+        setCurrentItem((current) => current?.id === itemId ? null : current);
+        setError('');
+      } catch (error) {
+        setError(error.response?.data?.error || 'Failed to remove song.');
       }
     },
     [partyId]
@@ -458,6 +474,8 @@ export default function OrganizerPage({ switchUserButton }) {
                   onReorder={handleReorder}
                   onPlay={handlePlay}
                   onPause={handlePause}
+                  onSendToSSMusic={isLocked ? undefined : sendToSSMusic}
+                  ssmusicState={ssmusicState}
                   isOrganizer={true}
                   currentTime={videoCurrentTime}
                   duration={videoDuration}
@@ -484,9 +502,9 @@ export default function OrganizerPage({ switchUserButton }) {
               ref={videoPlayerRef}
               videoId={currentVideoId}
               playbackKey={currentItem?.id}
-              mediaPath={currentItem?.source === 'ssmusic' ? currentItem.media_path : null}
-              mediaType={currentItem?.media_type}
-              title={currentItem?.video_title}
+              mediaPath={currentMedia?.source === 'ssmusic' ? currentMedia.media_path : null}
+              mediaType={currentMedia?.media_type}
+              title={currentMedia?.video_title}
               paused={currentItem?.status === 'paused'}
               onEnded={handleVideoEnded}
               settings={settings}

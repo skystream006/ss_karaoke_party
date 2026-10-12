@@ -8,6 +8,7 @@ const pool = require('./db/db');
 const { generalLimiter, writeLimiter, searchLimiter } = require('./middleware/rateLimiter');
 const { requireAuth } = require('./middleware/auth');
 const ssmusic = require('./routes/ssmusic').createSsmusicRoutes();
+const { createSsmusicJobs } = require('./lib/ssmusicJobs');
 
 const app = express();
 const server = http.createServer(app);
@@ -27,6 +28,9 @@ const io = new Server(server, {
 });
 
 app.set('io', io);
+const ssmusicJobs = createSsmusicJobs({ pool, io });
+app.set('ssmusicJobs', ssmusicJobs);
+server.on('close', () => ssmusicJobs.close());
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());
@@ -125,4 +129,5 @@ const PORT = process.env.PORT || 5000;
 
 server.listen(PORT, () => {
   console.log(`Karaoke Party backend listening on port ${PORT}`);
+  ssmusicJobs.resume().catch(() => console.error('Failed to resume pending ssMusic jobs'));
 });

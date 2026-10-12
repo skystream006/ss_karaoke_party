@@ -93,14 +93,14 @@ cd /to/folder && git pull && docker compose up --build -d
 
 ### Optional: ssMusic Server
 
-Use an [ssMusic Server](https://github.com/skystream006/ssMusic_Server) version containing [PR #21](https://github.com/skystream006/ssMusic_Server/pull/21). Configure `SEARCH_API_KEY` on that server, then set these **backend-only** variables in this app's root `.env` for Docker Compose (or `backend/.env` for local development):
+Use an [ssMusic Server](https://github.com/skystream006/ssMusic_Server) version containing [PR #21](https://github.com/skystream006/ssMusic_Server/pull/21) for search and [the playlist-aware KaraokeParty jobs API](https://github.com/skystream006/ssMusic_Server/commit/06ea037343d9b312f8bd2684ac95b97a404dbf11) for video add/remove actions. Configure `SEARCH_API_KEY` on that server and keep its KaraokeParty ExtServer account approved; provisioning requires an approved administrator. Set these **backend-only** variables in this app's root `.env` for Docker Compose (or `backend/.env` for local development):
 
 ```dotenv
 SSMUSIC_SERVER_URL=https://music.example.com
 SSMUSIC_API_KEY=replace_with_the_server_search_api_key
 ```
 
-The URL must be reachable from the backend container; `localhost` inside Docker refers to that container, not another server. Restart/rebuild the backend after changing configuration. Flyway applies the queue media-source migration automatically with Docker Compose; local installations must also apply new migrations before starting.
+The URL must be reachable from the backend container; `localhost` inside Docker refers to that container, not another server. Restart/rebuild the backend after changing configuration. Flyway applies the queue migrations automatically with Docker Compose, including [V3__Queue_ssmusic_jobs.sql](backend/db/migrations/V3__Queue_ssmusic_jobs.sql) for pending downloads and [V4__Queue_kp_media.sql](backend/db/migrations/V4__Queue_kp_media.sql) for removable playlist references; local installations must also apply new migrations before starting.
 
 For a self-signed certificate or private CA, obtain the **public certificate** from the ssMusic administrator through a trusted channel. Put it in `certs/ssmusic-ca.pem` and set `SSMUSIC_CA_CERT_FILE=/app/certs/ssmusic-ca.pem` in the root `.env`. Compose mounts `certs` read-only. Native Node users should set an absolute local file path instead. Leave this setting unset for certificates already trusted by Node. Never copy the server's private key.
 
@@ -108,11 +108,15 @@ The hostname or IP in `SSMUSIC_SERVER_URL` must also appear in the certificate's
 
 In either search panel, check **ssMusic Search** and search normally. **No vocals only** appears beside it and is checked by default; uncheck it to include songs with vocals. This filter requires an ssMusic Server version supporting the `NoVocalsOnly` search parameter. Unchecking **ssMusic Search** hides the filter and restores YouTube search; **Karaoke versions only** is a YouTube-only filter. Use **Load more** for additional library results. Both **Add to queue** and **Play next** support ssMusic songs.
 
+Playlist rows have a three-dot menu for **Play now / Resume**, **Pause**, and **Remove**, according to the available controls. For YouTube rows in unlocked parties, **Send to ssMusic** registers the video using this party's ID. Multiple rows can be sent independently. Each stays playable on YouTube while downloading, then becomes an ssMusic video marked **kpMedia**, retaining its queue position, singer, and playback status. Ready duplicates switch immediately. Pending jobs survive browser disconnects and resume after backend restarts. Errors remain on the affected row; failed upstream jobs must be rerun on ssMusic before trying again.
+
+Removing a **kpMedia** row releases the party's video reference on ssMusic before deleting the local row. Multiple copies in one party share a reference, which is released only when the last copy is removed. ssMusic decides whether the underlying video can be deleted; other playlists, owners, library memberships, and protected legacy references can keep it. Busy or inaccessible jobs leave the row in place with an error so removal can be retried. Ordinary YouTube rows and ssMusic search results are not marked kpMedia and do not send remove actions upstream.
+
 The search API introduced by PR #21 currently returns **audio files only**. The player also supports video files when supplied by the server. Videos use native browser playback; audio uses the SYLT lyric screen, including in fullscreen. Click a timed lyric line to seek; instrumental cues display as ♪. Plain USLT lyrics are shown when SYLT is absent. ssMusic currently reads embedded lyrics from MP3 files only.
 
 Pause/resume, seek, tempo, volume, guest progress and automatic next-song playback work with both sources. If the browser blocks autoplay, click **Play song**. Media codecs must be supported by the browser; this app does not transcode media or generate missing lyrics.
 
-Search, lyric retrieval and streaming are proxied through the backend using `X-API-Key`; the ssMusic key is never sent to the browser. Media URLs use expiring, file-scoped playback tickets instead of the key or login token. Only files accessible to the server's read-only search key are available; private media remains subject to ssMusic Server's access checks. Use HTTPS when accessing a remote server.
+Search, video add/remove actions, job status, lyric retrieval and streaming are proxied through the backend using `X-API-Key`; the ssMusic key is never sent to the browser. Media URLs use expiring, file-scoped playback tickets instead of the key or login token. Only files accessible to the server's search/playlist key are available; private media remains subject to ssMusic Server's access checks. Use HTTPS when accessing a remote server.
 
 ### 3. Open on your phone
 

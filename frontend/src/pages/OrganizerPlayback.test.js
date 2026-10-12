@@ -3,14 +3,16 @@ import { createRoot } from 'react-dom/client';
 import { act } from 'react-dom/test-utils';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { getParty, getQueue, updateQueueItemStatus } from '../services/api';
+import { getParty, getQueue, updateQueueItemStatus, sendQueueItemToSSMusic, removeFromQueue } from '../services/api';
 import OrganizerPage from './OrganizerPage';
 
 let mockPlayerProps;
+let mockPlaylistProps;
 const mockControls = { playVideo: jest.fn(), pauseVideo: jest.fn(), seekTo: jest.fn() };
 jest.mock('socket.io-client', () => ({ io: jest.fn() }));
 jest.mock('../services/api', () => ({
-  getParty: jest.fn(), getQueue: jest.fn(), updateQueueItemStatus: jest.fn(),
+  getParty: jest.fn(), getQueue: jest.fn(), updateQueueItemStatus: jest.fn(), sendQueueItemToSSMusic: jest.fn(),
+  removeFromQueue: jest.fn(),
 }));
 jest.mock('../components/VideoPlayer', () => {
   const React = require('react');
@@ -20,7 +22,7 @@ jest.mock('../components/VideoPlayer', () => {
     return null;
   });
 });
-jest.mock('../components/Playlist', () => () => null);
+jest.mock('../components/Playlist', () => (props) => { mockPlaylistProps = props; return null; });
 jest.mock('../components/QRCodeModal', () => () => null);
 jest.mock('../components/CustomizationPanel', () => () => null);
 jest.mock('../components/SongSearch', () => () => null);
@@ -117,4 +119,115 @@ test('routes guest seek, settings and progress through the shared controls', asy
   expect(mockControls.seekTo).toHaveBeenCalledWith(22);
   expect(mockPlayerProps.settings).toMatchObject({ tempo: 1.5, vocalLevel: 70 });
   expect(socket.emit).toHaveBeenCalledWith('video:progress', { partyId: 'party-id', currentTime: 22, duration: 100 });
+});
+
+test('media updates switch a playing or paused YouTube item to ssMusic without changing its queue identity', async () => {
+  getQueue.mockResolvedValueOnce({ data: [{ ...youtube, source: 'youtube', status: 'paused' }] });
+  await renderPage();
+  const converted = { ...youtube, status: 'paused', source: 'ssmusic', video_id: 'ssm_video',
+    media_path: 'video-job/Party clip.mp4', media_type: 'video' };
+  act(() => handlers['queue:update']({ action: 'media', queue: [converted] }));
+  expect(mockPlayerProps).toMatchObject({
+    videoId: 'ssm_video', playbackKey: youtube.id, mediaPath: converted.media_path, mediaType: 'video', paused: true,
+  });
+});
+
+test('multiple sends stay independent and late HTTP responses cannot undo completed socket conversions', async () => {
+  const first = { ...youtube, source: 'youtube', status: 'playing' };
+  const second = { ...youtube, id: 'second', video_id: 'second-video', source: 'youtube', position: 3 };
+  getQueue.mockResolvedValueOnce({ data: [first, second] });
+  const responses = [];
+  sendQueueItemToSSMusic.mockImplementation(() => new Promise((resolve) => responses.push(resolve)));
+  await renderPage();
+  let firstRequest;
+  let secondRequest;
+  act(() => {
+    firstRequest = mockPlaylistProps.onSendToSSMusic(first);
+    secondRequest = mockPlaylistProps.onSendToSSMusic(second);
+    mockPlaylistProps.onSendToSSMusic(first);
+  });
+  expect(sendQueueItemToSSMusic).toHaveBeenCalledTimes(2);
+  expect(sendQueueItemToSSMusic).toHaveBeenNthCalledWith(1, 'party-id', first.id, expect.any(AbortSignal));
+  expect(mockPlaylistProps.ssmusicState[first.id].pending).toBe(true);
+  expect(mockPlaylistProps.ssmusicState[second.id].pending).toBe(true);
+  const convertedSecond = { ...second, source: 'ssmusic', video_id: 'ssm_second',
+    media_path: 'second-job/clip.mp4', media_type: 'video', ssmusic_status: 'completed', kpMedia: true, youtube_video_id: 'RTcsY6aIoEc' };
+  await act(async () => { responses[1]({ data: convertedSecond }); await secondRequest; });
+  expect(mockPlaylistProps.queue.find(item => item.id === first.id).source).toBe('youtube');
+  expect(mockPlaylistProps.queue.find(item => item.id === second.id).source).toBe('ssmusic');
+  expect(mockPlaylistProps.queue.find(item => item.id === second.id).kpMedia).toBe(true);
+  expect(mockPlaylistProps.queue.find(item => item.id === second.id).youtube_video_id).toBe('RTcsY6aIoEc');
+  expect(mockPlaylistProps.ssmusicState[first.id].pending).toBe(true);
+  expect(mockPlaylistProps.ssmusicState[second.id].pending).toBe(false);
+  const convertedFirst = { ...first, source: 'ssmusic', video_id: 'ssm_first',
+    media_path: 'first-job/clip.mp4', media_type: 'video', ssmusic_status: 'completed', singer_name: 'Updated singer' };
+  act(() => handlers['queue:update']({ action: 'media', queue: [convertedFirst, convertedSecond] }));
+  await act(async () => { responses[0]({ data: { ...first, ssmusic_status: 'queued' } }); await firstRequest; });
+  expect(mockPlaylistProps.queue).toEqual([convertedFirst, convertedSecond]);
+  expect(mockPlayerProps.mediaPath).toBe(convertedFirst.media_path);
+});
+
+test('conversion errors are isolated per item and failed sends can be retried', async () => {
+  const first = { ...youtube, source: 'youtube' };
+  const second = { ...youtube, id: 'second', video_id: 'second-video', source: 'youtube', position: 3 };
+  getQueue.mockResolvedValueOnce({ data: [first, second] });
+  sendQueueItemToSSMusic.mockRejectedValueOnce({ response: { data: { error: 'ssMusic is unavailable' } } });
+  await renderPage();
+  await act(async () => mockPlaylistProps.onSendToSSMusic(first));
+  expect(mockPlaylistProps.ssmusicState[first.id]).toEqual({ pending: false, error: 'ssMusic is unavailable' });
+  expect(mockPlaylistProps.queue[0].source).toBe('youtube');
+  expect(mockPlaylistProps.ssmusicState[second.id]).toBeUndefined();
+  sendQueueItemToSSMusic.mockResolvedValueOnce({ data: { ...first, ssmusic_job_id: 'job', ssmusic_status: 'queued', ssmusic_error: null } });
+  await act(async () => mockPlaylistProps.onSendToSSMusic(mockPlaylistProps.queue[0]));
+  expect(mockPlaylistProps.ssmusicState[first.id]).toEqual({ pending: false, error: '' });
+  expect(mockPlaylistProps.queue[0].ssmusic_status).toBe('queued');
+});
+
+test('late conversion responses do not restore deleted items and pending requests abort on unmount', async () => {
+  let resolveRequest;
+  sendQueueItemToSSMusic.mockImplementation(() => new Promise((resolve) => { resolveRequest = resolve; }));
+  await renderPage();
+  let pending;
+  act(() => { pending = mockPlaylistProps.onSendToSSMusic(youtube); });
+  act(() => handlers['queue:update']({ action: 'remove', queue: [audio] }));
+  await act(async () => {
+    resolveRequest({ data: { ...youtube, source: 'ssmusic', video_id: 'converted' } });
+    await pending;
+  });
+  expect(mockPlaylistProps.queue).toEqual([audio]);
+  act(() => { mockPlaylistProps.onSendToSSMusic(youtube); });
+  const signal = sendQueueItemToSSMusic.mock.calls.at(-1)[2];
+  act(() => root.render(null));
+  expect(signal.aborted).toBe(true);
+  await act(async () => resolveRequest({ data: { ...youtube, source: 'youtube' } }));
+});
+
+test('reconnecting refreshes jobs completed offline and locked parties cannot submit', async () => {
+  getParty.mockResolvedValueOnce({ data: { id: 'party-id', name: 'Party', join_code: 'ABCDEF', is_active: true, is_locked: true } });
+  await renderPage();
+  expect(mockPlaylistProps.onSendToSSMusic).toBeUndefined();
+  const converted = { ...youtube, source: 'ssmusic', media_path: 'job/clip.mp4', media_type: 'video' };
+  getQueue.mockResolvedValueOnce({ data: [audio, converted] });
+  await act(async () => { handlers.connect(); handlers.connect(); });
+  expect(mockPlaylistProps.queue[1].source).toBe('ssmusic');
+});
+
+test('organizer keeps media on a refused removal and stops it only after successful removal', async () => {
+  await renderPage();
+  removeFromQueue.mockRejectedValueOnce({ response: { data: { error: 'ssMusic could not remove this video yet' } } });
+  await act(async () => mockPlaylistProps.onRemove(audio.id));
+  expect(mockPlaylistProps.queue).toEqual([audio, youtube]);
+  expect(mockPlayerProps.videoId).toBe(audio.video_id);
+  expect(container.textContent).toContain('ssMusic could not remove this video yet');
+  removeFromQueue.mockResolvedValueOnce({ data: { success: true } });
+  await act(async () => mockPlaylistProps.onRemove(audio.id));
+  expect(mockPlaylistProps.queue).toEqual([youtube]);
+  expect(mockPlayerProps.videoId).toBeNull();
+});
+
+test('removing the active item from another client stops its player', async () => {
+  await renderPage();
+  act(() => handlers['queue:update']({ action: 'remove', queue: [youtube] }));
+  expect(mockPlayerProps.videoId).toBeNull();
+  expect(mockPlaylistProps.queue).toEqual([youtube]);
 });

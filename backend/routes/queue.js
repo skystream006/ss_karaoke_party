@@ -4,6 +4,7 @@ const pool = require('../db/db');
 const { writeLimiter } = require('../middleware/rateLimiter');
 const { requireAdmin } = require('../middleware/auth');
 const { queueMedia } = require('../lib/ssmusicMedia');
+const { SsmusicError } = require('../lib/ssmusicClient');
 
 // Order all songs by position so completed songs remain in their original place
 const QUEUE_ORDER_BY = `position ASC`;
@@ -14,7 +15,9 @@ router.get('/:partyId', async (req, res) => {
     const result = await pool.query(
       `SELECT q.id, q.party_id, q.member_id, q.singer_name, q.video_id,
               q.video_title, q.video_thumbnail, q.position, q.status, q.added_at,
-              q.source, q.media_path, q.media_type
+              q.source, q.media_path, q.media_type,
+              q.ssmusic_job_id, q.ssmusic_status, q.ssmusic_error,
+              q."kpMedia", q.youtube_video_id
        FROM queue q
        WHERE q.party_id = $1
        ORDER BY ${QUEUE_ORDER_BY}`,
@@ -167,64 +170,89 @@ router.post('/:partyId/play-next', writeLimiter, async (req, res) => {
   }
 });
 
-// DELETE /api/queue/:partyId/:itemId - Remove a song from the queue
-router.delete('/:partyId/:itemId', writeLimiter, async (req, res) => {
-  const client = await pool.connect();
+router.post('/:partyId/:itemId/ssmusic', writeLimiter, async (req, res) => {
+  res.setHeader('Cache-Control', 'private, no-store');
   try {
-    await client.query('BEGIN');
-
-    const partyResult = await client.query(
-      'SELECT is_locked FROM parties WHERE id = $1',
-      [req.params.partyId]
-    );
-    if (partyResult.rows[0]?.is_locked) {
-      await client.query('ROLLBACK');
-      return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
-    }
-
-    const deleted = await client.query(
-      'DELETE FROM queue WHERE id = $1 AND party_id = $2 RETURNING *',
+    const result = await pool.query(
+      `SELECT q.*, p.is_locked FROM queue q JOIN parties p ON p.id = q.party_id
+       WHERE q.id = $1 AND q.party_id = $2`,
       [req.params.itemId, req.params.partyId]
     );
+    const item = result.rows[0];
+    if (!item) return res.status(404).json({ error: 'Queue item not found' });
+    if (item.is_locked) return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
+    if (item.source !== 'youtube') return res.status(400).json({ error: 'Only YouTube items can be sent to ssMusic' });
+    const updated = await req.app.get('ssmusicJobs').submit(item);
+    if (!updated) return res.status(404).json({ error: 'Queue item not found' });
+    res.status(updated.source === 'ssmusic' ? 200 : 202).json(updated);
+  } catch (error) {
+    res.status(error instanceof SsmusicError ? error.status : 500).json({
+      error: error instanceof SsmusicError ? error.message : 'Failed to send video to ssMusic',
+    });
+  }
+});
 
-    if (deleted.rows.length === 0) {
-      await client.query('ROLLBACK');
-      return res.status(404).json({ error: 'Queue item not found' });
-    }
-
-    // Renumber positions for all remaining songs
-    await client.query(
-      `WITH ordered AS (
-        SELECT id, ROW_NUMBER() OVER (ORDER BY position ASC) AS new_pos
-        FROM queue
-        WHERE party_id = $1
-      )
-      UPDATE queue SET position = ordered.new_pos
-      FROM ordered WHERE queue.id = ordered.id`,
-      [req.params.partyId]
+// DELETE /api/queue/:partyId/:itemId - Remove a song from the queue
+router.delete('/:partyId/:itemId', writeLimiter, async (req, res) => {
+  try {
+    const existing = await pool.query(
+      'SELECT * FROM queue WHERE id = $1 AND party_id = $2',
+      [req.params.itemId, req.params.partyId]
     );
+    if (!existing.rows[0]) return res.status(404).json({ error: 'Queue item not found' });
+    const jobs = req.app.get('ssmusicJobs');
+    await jobs.withPlaylistVideo(existing.rows[0], async () => {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+        const partyResult = await client.query('SELECT is_locked FROM parties WHERE id = $1', [req.params.partyId]);
+        if (partyResult.rows[0]?.is_locked) {
+          await client.query('ROLLBACK');
+          return res.status(423).json({ error: 'Party is locked. Queue edits are not allowed.' });
+        }
+        const current = await client.query(
+          'SELECT * FROM queue WHERE id = $1 AND party_id = $2 FOR UPDATE',
+          [req.params.itemId, req.params.partyId]
+        );
+        const item = current.rows[0];
+        if (!item) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ error: 'Queue item not found' });
+        }
+        if (item.kpMedia) await jobs.removeReference(item, client);
+        await client.query('DELETE FROM queue WHERE id = $1 AND party_id = $2', [item.id, item.party_id]);
+        await client.query(
+          `WITH ordered AS (
+            SELECT id, ROW_NUMBER() OVER (ORDER BY position ASC) AS new_pos
+            FROM queue
+            WHERE party_id = $1
+          )
+          UPDATE queue SET position = ordered.new_pos
+          FROM ordered WHERE queue.id = ordered.id`,
+          [req.params.partyId]
+        );
+        await client.query('COMMIT');
+      } catch (error) {
+        await client.query('ROLLBACK');
+        throw error;
+      } finally {
+        client.release();
+      }
 
-    await client.query('COMMIT');
-
-    // Emit socket event
-    const io = req.app.get('io');
-    if (io) {
-      // Fetch updated queue
-      const updatedQueue = await pool.query(
-        `SELECT * FROM queue WHERE party_id = $1
-         ORDER BY ${QUEUE_ORDER_BY}`,
-        [req.params.partyId]
-      );
-      io.to(req.params.partyId).emit('queue:update', { action: 'remove', queue: updatedQueue.rows });
-    }
-
-    res.json({ success: true });
-  } catch (err) {
-    await client.query('ROLLBACK');
-    console.error(err);
-    res.status(500).json({ error: 'Failed to remove song from queue' });
-  } finally {
-    client.release();
+      const io = req.app.get('io');
+      if (io) {
+        const updatedQueue = await pool.query(
+          `SELECT * FROM queue WHERE party_id = $1 ORDER BY ${QUEUE_ORDER_BY}`,
+          [req.params.partyId]
+        );
+        io.to(req.params.partyId).emit('queue:update', { action: 'remove', queue: updatedQueue.rows });
+      }
+      res.json({ success: true });
+    });
+  } catch (error) {
+    res.status(error instanceof SsmusicError ? error.status : 500).json({
+      error: error instanceof SsmusicError ? error.message : 'Failed to remove song from queue',
+    });
   }
 });
 

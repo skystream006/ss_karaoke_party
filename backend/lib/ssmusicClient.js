@@ -12,10 +12,13 @@ class SsmusicError extends Error {
 
 function upstreamError(status) {
   const messages = {
+    400: 'ssMusic rejected the request',
     403: 'ssMusic access denied',
     404: 'ssMusic media not found',
+    409: 'ssMusic video submission conflicts with an existing job',
     416: 'Requested media range is not available',
     429: 'ssMusic is busy; please try again later',
+    503: 'ssMusic is unavailable; please try again later',
   };
   return new SsmusicError(messages[status] ? status : 502,
     messages[status] || 'ssMusic server request failed');
@@ -38,7 +41,7 @@ function createSsmusicClient({
     baseUrl = null;
   }
 
-  async function request(endpoint, { signal, method = 'GET', params, headers = {}, stream = false } = {}) {
+  async function request(endpoint, { signal, method = 'GET', params, data, headers = {}, stream = false } = {}) {
     if (!baseUrl || !apiKey) throw new SsmusicError(503, 'ssMusic server is not configured');
     if (caFile && !httpsAgent) {
       try {
@@ -52,6 +55,7 @@ function createSsmusicClient({
         url: `${baseUrl}${endpoint}`,
         method,
         params,
+        data,
         httpsAgent,
         headers: { ...headers, 'X-API-Key': apiKey, 'Accept-Encoding': 'identity' },
         maxRedirects: 0,

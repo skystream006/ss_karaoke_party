@@ -51,12 +51,19 @@ Session tokens are valid for **24 hours**. Endpoints marked **🔐 admin** requi
 |--------|------|------|-------------|
 | `GET` | `/api/queue/:partyId` | member | Get party queue |
 | `POST` | `/api/queue/:partyId` | member | Add song to queue |
-| `DELETE` | `/api/queue/:partyId/:itemId` | member | Remove song from queue |
+| `POST` | `/api/queue/:partyId/:itemId/ssmusic` | member | Submit a YouTube queue item to ssMusic; returns the item (202 pending, 200 ready) |
+| `DELETE` | `/api/queue/:partyId/:itemId` | member | Remove song, releasing its ssMusic reference first when marked `kpMedia` |
 | `PUT` | `/api/queue/:partyId/reorder` | member | Reorder queue |
 | `PATCH` | `/api/queue/:partyId/:itemId/status` | member | Update song status (`queued` / `playing` / `paused` / `played`) |
 | `PATCH` | `/api/queue/:partyId/reset` | member | Reset all non-playing songs to `queued` |
 
 Queue entries retain the existing `video_id`, `video_title`, and `video_thumbnail` fields. `source` defaults to `youtube` for existing clients and rows. ssMusic search results additionally supply `source: "ssmusic"`, `media_path` (the opaque `jobId/filename` identity), and `media_type` (`audio` or `video`). Send these fields unchanged when adding a result through either `POST /api/queue/:partyId` or `POST /api/queue/:partyId/play-next`. The backend validates the path and derives its media ID/type; playback tickets are never persisted in the queue.
+
+The ssMusic submission route needs no request body: it derives `videoURL` from the stored YouTube ID and `playlistId` from the party ID. Locked parties return 423; non-YouTube items return 400. Job fields `ssmusic_job_id`, `ssmusic_status` (`submitting`, `queued`, `running`, `completed`, or `error`), and `ssmusic_error` are separate from playback `status` and are included in queue reads. The backend sets `kpMedia: true` and retains `youtube_video_id` before submitting, so cleanup remains possible after conversion or an ambiguous network failure. These are server-owned fields, not caller-supplied flags. Apply [V3__Queue_ssmusic_jobs.sql](db/migrations/V3__Queue_ssmusic_jobs.sql) and [V4__Queue_kp_media.sql](db/migrations/V4__Queue_kp_media.sql) before starting this backend.
+
+Each item has an independent background worker; repeated submissions for a pending row share its worker. The backend polls every three seconds and resumes persisted pending jobs at startup. Changes are broadcast as `queue:update` with `action: "media"`. Conversion updates media fields only, preserving queue ID, singer, position, and playback status. Adds, polls, and removals for the same video in one party are serialized, while different videos continue concurrently. Pending jobs from before reference tracking register a named reference when resumed; ordinary existing ssMusic rows are not retroactively marked kpMedia.
+
+Deleting a kpMedia row uses its retained YouTube ID and party ID for cleanup. Duplicate kpMedia rows in one party share the upstream reference, so only the last local copy sends a remove action. Successful or already-removed references allow local deletion; blocked/failed requests leave the row intact and return the sanitized upstream status and error. A busy final video returns 409; retry after the upstream job is idle. Ordinary unmarked rows never request upstream deletion.
 
 ### YouTube
 
@@ -67,7 +74,13 @@ Queue entries retain the existing `video_id`, `video_title`, and `video_thumbnai
 
 ### ssMusic
 
-Configure `SSMUSIC_SERVER_URL` and `SSMUSIC_API_KEY` on the backend. The latter must match the upstream server's read-only `SEARCH_API_KEY`. All upstream requests use `X-API-Key`; browser requests use this app's normal session authentication.
+Configure `SSMUSIC_SERVER_URL` and `SSMUSIC_API_KEY` on the backend. The latter must match the upstream server's `SEARCH_API_KEY`, which permits catalog/media reads and KaraokeParty playlist add/remove actions. All upstream requests use `X-API-Key`; browser requests use this app's normal session authentication.
+
+Playlist video actions require [ssMusic commit 06ea037](https://github.com/skystream006/ssMusic_Server/commit/06ea037343d9b312f8bd2684ac95b97a404dbf11) or later. The backend sends `POST /api/karaoke/jobs` with `{ "action": "add", "videoURL": "https://www.youtube.com/watch?v=cMoRYP8EDUk", "playlistId": "party-id" }`. New and pending duplicate jobs return 202 with `{ jobId, status, duplicate, action, playlistId, playlistCount, ready, statusUrl, playUrl, playerUrl }`; ready duplicates return 200. Status is fetched using `GET /api/karaoke/jobs/:jobId` with the same key. Only `ready: true` with a validated video `playUrl` triggers conversion. The direct stream path becomes `media_path`; `playerUrl` is not used because it requires a signed-in ssMusic browser session. Returned URLs are never followed to another origin.
+
+Removal uses the same endpoint and key with `{ "action": "remove", "videoURL": "https://www.youtube.com/watch?v=cMoRYP8EDUk", "playlistId": "party-id" }`. HTTP 200 contains `{ action, playlistId, removed, videoDeleted, playlistCount }` and may include `jobId` and `retainedReason`. `removed: false` is an idempotent success; `videoDeleted: false` can mean other playlist references, another owner, library memberships, or protected legacy references retain the media. The backend never calls the general job-deletion endpoint or forces deletion of shared media.
+
+Failed jobs, completed jobs without a playable file, access conflicts, and request failures leave the row as YouTube and expose a sanitized per-item error. A new menu submission retries the request; ssMusic deduplicates by video ID and does not automatically rerun failed jobs. An ssMusic administrator must rerun those jobs first. The upstream KaraokeParty account must remain an approved ExtServer account.
 
 | Method | Path | Auth | Description |
 |--------|------|------|-------------|

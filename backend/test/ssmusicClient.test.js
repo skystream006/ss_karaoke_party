@@ -13,15 +13,40 @@ const requests = [];
 
 before(async () => {
   server = http.createServer((req, res) => {
-    requests.push({ url: req.url, key: req.headers['x-api-key'] });
+    const recorded = { url: req.url, key: req.headers['x-api-key'], method: req.method, contentType: req.headers['content-type'] };
+    requests.push(recorded);
     if (req.url === '/prefix/redirect') {
       res.writeHead(302, { Location: '/leaked-key' });
       res.end();
     } else if (req.url === '/prefix/forbidden') {
       res.writeHead(403);
       res.end('upstream secret configuration');
+    } else if (req.url === '/prefix/conflict') {
+      res.writeHead(409);
+      res.end('private upstream job identity');
     } else if (req.url === '/prefix/slow') {
       req.on('close', () => res.destroy());
+    } else if (req.url === '/prefix/api/karaoke/jobs' && req.method === 'POST') {
+      let body = '';
+      req.on('data', (chunk) => { body += chunk; });
+      req.on('end', () => {
+        recorded.body = JSON.parse(body);
+        if (recorded.body.action === 'remove') {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ action: 'remove', playlistId: recorded.body.playlistId, jobId: 'fixture-job',
+            removed: true, videoDeleted: false, playlistCount: 1, retainedReason: 'playlist_references' }));
+          return;
+        }
+        res.writeHead(202, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ jobId: 'fixture-job', status: 'queued', ready: false, duplicate: false,
+          action: 'add', playlistId: recorded.body.playlistId, playlistCount: 2,
+          statusUrl: '/api/karaoke/jobs/fixture-job', playUrl: null, playerUrl: null }));
+      });
+    } else if (req.url === '/prefix/api/karaoke/jobs/fixture-job') {
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ jobId: 'fixture-job', status: 'completed', ready: true, duplicate: true,
+        statusUrl: '/api/karaoke/jobs/fixture-job', playUrl: '/api/jobs/fixture-job/stream/Party%20clip.mp4',
+        playerUrl: '/job/fixture-job/player?song=Party+clip.mp4&play=1' }));
     } else {
       res.setHeader('Content-Type', 'application/json');
       res.end(JSON.stringify({ ok: true }));
@@ -45,6 +70,32 @@ test('upstream requests stay beneath the configured URL path and authenticate wi
     'api/jobs/job/stream/%E6%AD%8C%E6%89%8B%2FSong%20%231.mp3');
 });
 
+test('karaoke add and remove actions send playlist-scoped JSON and poll authenticated job status', async () => {
+  const client = createSsmusicClient({ serverUrl, apiKey: 'fixture-api-key' });
+  const videoURL = 'https://www.youtube.com/watch?v=cMoRYP8EDUk';
+  const submitted = await client.request('api/karaoke/jobs', { method: 'POST', data: { action: 'add', videoURL, playlistId: 'party' } });
+  assert.equal(submitted.status, 202);
+  assert.equal(submitted.data.ready, false);
+  assert.equal(submitted.data.jobId, 'fixture-job');
+  assert.deepEqual(requests.at(-1).body, { action: 'add', videoURL, playlistId: 'party' });
+  assert.equal(requests.at(-1).method, 'POST');
+  assert.match(requests.at(-1).contentType, /^application\/json/);
+  assert.equal(requests.at(-1).key, 'fixture-api-key');
+
+  const ready = await client.request(`api/karaoke/jobs/${submitted.data.jobId}`);
+  assert.equal(requests.at(-1).method, 'GET');
+  assert.equal(requests.at(-1).key, 'fixture-api-key');
+  assert.equal(ready.data.ready, true);
+  assert.equal(ready.data.playUrl, '/api/jobs/fixture-job/stream/Party%20clip.mp4');
+  const removed = await client.request('api/karaoke/jobs', { method: 'POST', data: { action: 'remove', videoURL, playlistId: 'party' } });
+  assert.deepEqual(requests.at(-1).body, { action: 'remove', videoURL, playlistId: 'party' });
+  assert.equal(requests.at(-1).key, 'fixture-api-key');
+  assert.equal(removed.status, 200);
+  assert.equal(removed.data.removed, true);
+  assert.equal(removed.data.videoDeleted, false);
+  assert.equal(removed.data.playlistCount, 1);
+});
+
 test('redirects are not followed and failures never include API keys or upstream bodies', async () => {
   const client = createSsmusicClient({ serverUrl, apiKey: 'fixture-api-key' });
   const count = requests.length;
@@ -56,6 +107,7 @@ test('redirects are not followed and failures never include API keys or upstream
   });
   assert.equal(requests.length, count + 1);
   await assert.rejects(client.request('forbidden'), { status: 403, message: 'ssMusic access denied' });
+  await assert.rejects(client.request('conflict'), { status: 409, message: 'ssMusic video submission conflicts with an existing job' });
 });
 
 test('invalid or missing server configuration is unavailable without making requests', async () => {

@@ -28,9 +28,17 @@ CREATE TABLE IF NOT EXISTS queue (
   source VARCHAR(20) NOT NULL DEFAULT 'youtube' CHECK (source IN ('youtube', 'ssmusic')),
   media_path TEXT,
   media_type VARCHAR(10),
+  ssmusic_job_id TEXT,
+  ssmusic_status VARCHAR(20),
+  ssmusic_error TEXT,
+  "kpMedia" BOOLEAN NOT NULL DEFAULT FALSE,
+  youtube_video_id VARCHAR(11),
   position INTEGER NOT NULL,
   status VARCHAR(20) DEFAULT 'queued', -- 'queued', 'playing'
   added_at TIMESTAMP DEFAULT NOW(),
+  CONSTRAINT queue_kp_media_check CHECK (
+    NOT "kpMedia" OR (youtube_video_id IS NOT NULL AND youtube_video_id ~ '^[A-Za-z0-9_-]{11}$')
+  ),
   CONSTRAINT queue_media_check CHECK (
     (source = 'youtube' AND media_path IS NULL AND media_type IS NULL)
     OR

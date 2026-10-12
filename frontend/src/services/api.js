@@ -48,6 +48,8 @@ export const updateQueueItemStatus = (partyId, itemId, status) =>
 export const updateQueueItemSinger = (partyId, itemId, data) =>
   api.patch(`/queue/${partyId}/${itemId}`, data);
 export const resetQueue = (partyId) => api.patch(`/queue/${partyId}/reset`);
+export const sendQueueItemToSSMusic = (partyId, itemId, signal) =>
+  api.post(`/queue/${partyId}/${itemId}/ssmusic`, undefined, { signal });
 
 // YouTube search
 export const searchYouTube = (query, karaoke = false) =>
