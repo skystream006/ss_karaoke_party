@@ -17,13 +17,10 @@ function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pen
   const triggerRef = useRef(null);
   const menuRef = useRef(null);
   const menuId = useId();
+  const isPlaying = item.status === 'playing';
+  const onPlayback = isPlaying ? onPause : onPlay;
+  const playbackLabel = isPlaying ? 'Pause' : item.status === 'paused' ? 'Resume' : 'Play now';
   const actions = [];
-  if (onPlay && item.status !== 'playing') {
-    actions.push({ label: item.status === 'paused' ? 'Resume' : 'Play now', icon: Play, run: () => onPlay(item) });
-  }
-  if (onPause && item.status === 'playing') {
-    actions.push({ label: 'Pause', icon: Pause, run: () => onPause(item) });
-  }
   if (onSendToSSMusic && (!item.source || item.source === 'youtube')) {
     actions.push({ label: pending ? 'Sending to ssMusic...' : 'Send to ssMusic', icon: pending ? LoaderCircle : Send,
       disabled: pending, run: () => onSendToSSMusic(item) });
@@ -32,6 +29,10 @@ function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pen
 
   useLayoutEffect(() => {
     if (!open) return;
+    if (!actions.length) {
+      setOpen(false);
+      return;
+    }
     const anchor = triggerRef.current.getBoundingClientRect();
     const menu = menuRef.current.getBoundingClientRect();
     setPosition({
@@ -86,10 +87,16 @@ function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pen
     buttons[next]?.focus();
   };
 
-  if (!actions.length) return null;
+  if (!actions.length && !onPlayback) return null;
   return (
     <div className="playlist-actions">
-      <button type="button" ref={triggerRef} className="playlist-menu-trigger"
+      {onPlayback && (
+        <button type="button" className="playlist-playback-button"
+          title={playbackLabel} aria-label={playbackLabel} onClick={() => onPlayback(item)}>
+          {isPlaying ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
+        </button>
+      )}
+      {actions.length > 0 && <button type="button" ref={triggerRef} className="playlist-menu-trigger"
         title="More actions" aria-label={`Actions for ${item.video_title}`}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
         onClick={() => { setPosition(null); setOpen(!open); }}
@@ -100,8 +107,8 @@ function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pen
           } else if (event.key === 'Escape') close();
         }}>
         <EllipsisVertical size={20} aria-hidden="true" />
-      </button>
-      {open && createPortal(
+      </button>}
+      {open && actions.length > 0 && createPortal(
         <div id={menuId} ref={menuRef} role="menu" tabIndex={-1} aria-label={`Actions for ${item.video_title}`}
           className="playlist-menu" style={position || { top: 0, left: 0, visibility: 'hidden' }}
           onKeyDown={handleMenuKeyDown}>
@@ -277,4 +284,3 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
     </DragDropContext>
   );
 }
-

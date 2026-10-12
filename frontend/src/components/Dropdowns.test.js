@@ -119,7 +119,7 @@ test('settings roles and singer options are alphabetical while keeping placehold
   expect(members.map(member => member.name)).toEqual(['zoe', 'Bravo', 'alice']);
 });
 
-test('playlist actions are hidden in a three-dot menu and preserve play, pause, resume, and remove callbacks', () => {
+test('playlist playback stays inline while secondary actions remain in the three-dot menu', () => {
   const onPlay = jest.fn();
   const onPause = jest.fn();
   const onRemove = jest.fn();
@@ -131,25 +131,76 @@ test('playlist actions are hidden in a three-dot menu and preserve play, pause, 
   const openMenu = () => act(() => Simulate.click(container.querySelector('[aria-haspopup="menu"]')));
   const menuItems = () => [...document.querySelectorAll('[role="menuitem"]')];
   renderPlaylist();
-  expect(container.querySelectorAll('.playlist-actions button')).toHaveLength(1);
+  expect(container.querySelectorAll('.playlist-actions button')).toHaveLength(2);
   expect(document.querySelector('[role="menu"]')).toBeNull();
+  const play = container.querySelector('button[aria-label="Play now"]');
+  expect(play.title).toBe('Play now');
+  expect(play.type).toBe('button');
+  expect(play.nextElementSibling.getAttribute('aria-haspopup')).toBe('menu');
+  act(() => Simulate.click(play));
+  expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ id: song.id, status: 'queued' }));
   openMenu();
-  expect(menuItems().map(button => button.textContent)).toEqual(['Play now', 'Send to ssMusic', 'Remove']);
+  expect(menuItems().map(button => button.textContent)).toEqual(['Send to ssMusic', 'Remove']);
   expect(document.activeElement).toBe(menuItems()[0]);
   act(() => Simulate.click(menuItems()[0]));
-  expect(onPlay).toHaveBeenCalledWith(expect.objectContaining({ id: song.id }));
+  expect(onSendToSSMusic).toHaveBeenCalledWith(expect.objectContaining({ id: song.id }));
   expect(document.querySelector('[role="menu"]')).toBeNull();
   openMenu();
-  act(() => Simulate.click(menuItems()[2]));
+  act(() => Simulate.click(menuItems()[1]));
   expect(onRemove).toHaveBeenCalledWith(song.id);
   renderPlaylist('playing');
+  act(() => Simulate.click(container.querySelector('button[aria-label="Pause"]')));
+  expect(onPause).toHaveBeenCalledWith(expect.objectContaining({ id: song.id, status: 'playing' }));
   openMenu();
-  expect(menuItems()[0].textContent).toBe('Pause');
-  act(() => Simulate.click(menuItems()[0]));
-  expect(onPause).toHaveBeenCalledWith(expect.objectContaining({ id: song.id }));
+  expect(menuItems().map(button => button.textContent)).toEqual(['Send to ssMusic', 'Remove']);
+  act(() => Simulate.keyDown(document.querySelector('[role="menu"]'), { key: 'Escape' }));
   renderPlaylist('paused');
+  act(() => Simulate.click(container.querySelector('button[aria-label="Resume"]')));
+  expect(onPlay).toHaveBeenLastCalledWith(expect.objectContaining({ id: song.id, status: 'paused' }));
   openMenu();
-  expect(menuItems()[0].textContent).toBe('Resume');
+  expect(menuItems().map(button => button.textContent)).toEqual(['Send to ssMusic', 'Remove']);
+});
+
+test.each([
+  ['queued', 'Play now'],
+  ['playing', 'Pause'],
+  ['paused', 'Resume'],
+  ['played', 'Play now'],
+])('playlist %s playback works without any menu actions', (status, label) => {
+  const onPlay = jest.fn();
+  const onPause = jest.fn();
+  const item = { ...song, source: 'ssmusic', status };
+  act(() => root.render(<Playlist queue={[item]} onPlay={onPlay} onPause={onPause}
+    onSendToSSMusic={jest.fn()} />));
+  expect(container.querySelectorAll('.playlist-actions button')).toHaveLength(1);
+  expect(container.querySelector('[aria-haspopup="menu"]')).toBeNull();
+  act(() => Simulate.click(container.querySelector(`button[aria-label="${label}"]`)));
+  expect(status === 'playing' ? onPause : onPlay).toHaveBeenCalledWith(item);
+  expect(status === 'playing' ? onPlay : onPause).not.toHaveBeenCalled();
+});
+
+test.each(['queued', 'playing', 'paused', 'played'])('playlist %s playback requires its callback', (status) => {
+  const playbackProps = status === 'playing' ? { onPlay: jest.fn() } : { onPause: jest.fn() };
+  act(() => root.render(<Playlist queue={[{ ...song, status }]} {...playbackProps}
+    isOrganizer canRemove={false} onRemove={jest.fn()} />));
+  expect(container.querySelector('.playlist-actions')).toBeNull();
+});
+
+test('playlist closes an open menu when conversion leaves only inline playback', () => {
+  const onPlay = jest.fn();
+  const onSendToSSMusic = jest.fn();
+  const renderPlaylist = (item) => act(() => root.render(
+    <Playlist queue={[item]} onPlay={onPlay} onSendToSSMusic={onSendToSSMusic} />
+  ));
+  renderPlaylist(song);
+  act(() => Simulate.click(container.querySelector('[aria-haspopup="menu"]')));
+  expect(document.querySelector('[role="menu"]')).not.toBeNull();
+  const converted = { ...song, source: 'ssmusic' };
+  renderPlaylist(converted);
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector('[aria-haspopup="menu"]')).toBeNull();
+  act(() => Simulate.click(container.querySelector('button[aria-label="Play now"]')));
+  expect(onPlay).toHaveBeenCalledWith(converted);
 });
 
 test('playlist sends only YouTube items and disables only the item already being sent', () => {
@@ -159,20 +210,23 @@ test('playlist sends only YouTube items and disables only the item already being
   act(() => root.render(<Playlist queue={queue} onPlay={jest.fn()} onSendToSSMusic={onSendToSSMusic}
     ssmusicState={{ [song.id]: { pending: true } }} />));
   const triggers = container.querySelectorAll('[aria-haspopup="menu"]');
+  expect(triggers).toHaveLength(2);
   act(() => Simulate.click(triggers[0]));
-  expect(document.querySelectorAll('[role="menuitem"]')[1].disabled).toBe(true);
+  expect(document.querySelector('[role="menuitem"]').disabled).toBe(true);
   expect(container.querySelector('[role="status"]').textContent).toBe('Sending to ssMusic...');
   act(() => Simulate.click(triggers[1]));
-  const send = document.querySelectorAll('[role="menuitem"]')[1];
+  const send = document.querySelector('[role="menuitem"]');
   expect(send.disabled).toBe(false);
   act(() => Simulate.click(send));
   expect(onSendToSSMusic).toHaveBeenCalledWith(queue[1]);
-  act(() => Simulate.click(triggers[2]));
-  expect(document.querySelector('[role="menu"]').textContent).not.toContain('Send to ssMusic');
+  const libraryRow = container.querySelectorAll('.playlist-item')[2];
+  expect(libraryRow.querySelector('[aria-haspopup="menu"]')).toBeNull();
+  expect(libraryRow.querySelector('button[aria-label="Play now"]')).not.toBeNull();
 });
 
 test('playlist menus support keyboard navigation, Escape focus return, and outside dismissal', () => {
-  act(() => root.render(<Playlist queue={[song]} isOrganizer onPlay={jest.fn()} onRemove={jest.fn()} />));
+  act(() => root.render(<Playlist queue={[song]} isOrganizer onPlay={jest.fn()} onRemove={jest.fn()}
+    onSendToSSMusic={jest.fn()} />));
   const trigger = container.querySelector('[aria-haspopup="menu"]');
   act(() => Simulate.keyDown(trigger, { key: 'ArrowDown' }));
   const menu = document.querySelector('[role="menu"]');
@@ -191,6 +245,7 @@ test('playlist menus support keyboard navigation, Escape focus return, and outsi
 test('read-only playlist rows have no menu and persisted job errors remain visible', () => {
   act(() => root.render(<Playlist queue={[{ ...song, ssmusic_status: 'error', ssmusic_error: 'ssMusic job failed' }]} />));
   expect(container.querySelector('[aria-haspopup="menu"]')).toBeNull();
+  expect(container.querySelector('.playlist-playback-button')).toBeNull();
   expect(container.querySelector('[role="alert"]').textContent).toBe('ssMusic job failed');
 });
 
