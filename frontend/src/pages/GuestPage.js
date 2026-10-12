@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { Home } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus, getMember } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
@@ -15,6 +17,7 @@ const SOCKET_URL =
 export default function GuestPage({ switchUserButton }) {
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
+  const { authLevel } = useAuth();
 
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -252,6 +255,17 @@ export default function GuestPage({ switchUserButton }) {
           <span className="member-badge">👤 {memberName}</span>
         </div>
         <div className="guest-header-actions">
+          {authLevel !== 'guest' && authLevel !== 'none' && (
+            <button
+              type="button"
+              className="home-button"
+              onClick={() => navigate('/')}
+              aria-label="Home"
+              title="Home"
+            >
+              <Home size={20} aria-hidden="true" />
+            </button>
+          )}
           <ThemePicker />
           <button
             className="btn-audio-toggle"

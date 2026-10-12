@@ -9,6 +9,7 @@ import SettingsPage from './pages/SettingsPage';
 import AccountPage from './pages/AccountPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import PasskeyModal from './components/PasskeyModal';
+import ActionsMenu from './components/ActionsMenu';
 import packageJson from '../package.json';
 import './App.css';
 const { version } = packageJson;
@@ -36,11 +37,8 @@ function AppRoutes() {
     if (await logout()) navigate('/', { replace: true });
   };
 
-  const switchUserButton = (
-    <button type="button" className="btn btn-ghost" onClick={handleSwitchUser} disabled={loading}>
-      <LogOut size={17} aria-hidden="true" /> Sign out
-    </button>
-  );
+  const signOutAction = { label: 'Sign out', icon: LogOut, run: handleSwitchUser, disabled: loading };
+  const switchUserButton = <ActionsMenu label="Account actions" actions={[signOutAction]} />;
 
   return (
     <>
@@ -49,7 +47,7 @@ function AppRoutes() {
         <Route path="/" element={<ProtectedRoute accountOnly><WelcomePage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/join" element={<ProtectedRoute accountOnly><JoinPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/join/:joinCode" element={<InvitationJoinPage />} />
-        <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute accountOnly><OrganizerPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
+        <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute accountOnly><OrganizerPage signOutAction={signOutAction} /></ProtectedRoute>} />
         <Route path="/guest/:partyId/:memberId" element={<ProtectedRoute><GuestPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/account" element={<ProtectedRoute accountOnly><AccountPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute requiredLevel="admin"><SettingsPage switchUserButton={switchUserButton} /></ProtectedRoute>} />

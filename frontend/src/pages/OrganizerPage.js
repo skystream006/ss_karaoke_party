@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { CircleStop } from 'lucide-react';
+import { CircleStop, Lock, Trash2, Unlock } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   getParty,
@@ -23,13 +23,14 @@ import QRCodeModal from '../components/QRCodeModal';
 import CustomizationPanel from '../components/CustomizationPanel';
 import SongSearch from '../components/SongSearch';
 import ThemePicker from '../components/ThemePicker';
+import ActionsMenu from '../components/ActionsMenu';
 import useSSMusicJobs from '../hooks/useSSMusicJobs';
 import './OrganizerPage.css';
 
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
-export default function OrganizerPage({ switchUserButton }) {
+export default function OrganizerPage({ signOutAction }) {
   const { authLevel } = useAuth();
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
@@ -413,21 +414,6 @@ export default function OrganizerPage({ switchUserButton }) {
         )}
         <div className="header-right">
           <ThemePicker />
-          {switchUserButton}
-          <button
-            className={`btn btn-sm ${isLocked ? 'btn-lock-active' : 'btn-lock'}`}
-            onClick={handleToggleLock}
-            aria-label={isLocked ? 'Unlock party queue' : 'Lock party queue'}
-            title={isLocked ? 'Unlock party queue' : 'Lock party queue'}
-          >
-            {isLocked ? '🔓' : '🔒'}
-          </button>
-          {party.is_active && <button className="btn btn-delete-sm" onClick={handleEndParty} aria-label="End party" title="End party">
-            <CircleStop size={18} aria-hidden="true" />
-          </button>}
-          {authLevel === 'admin' && <button className="btn btn-delete-sm" onClick={handleDeleteParty} aria-label="Permanently delete party" title="Permanently delete party">
-            🗑️
-          </button>}
           <button
             className="qr-panel-toggle"
             onClick={() => setQrPanelOpen(!qrPanelOpen)}
@@ -435,6 +421,12 @@ export default function OrganizerPage({ switchUserButton }) {
           >
             {qrPanelOpen ? '✕' : '📱'}
           </button>
+          <ActionsMenu label="Party actions" actions={[
+            { label: isLocked ? 'Unlock party queue' : 'Lock party queue', icon: isLocked ? Unlock : Lock, run: handleToggleLock },
+            party.is_active && { label: 'End party', icon: CircleStop, danger: true, run: handleEndParty },
+            authLevel === 'admin' && { label: 'Delete party', ariaLabel: 'Permanently delete party', icon: Trash2, danger: true, run: handleDeleteParty },
+            signOutAction && { ...signOutAction, separated: true },
+          ]} />
         </div>
       </header>
 

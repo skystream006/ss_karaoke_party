@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Users } from 'lucide-react';
+import { CircleStop, Lock, Play, Trash2, Unlock, Users } from 'lucide-react';
 import {
   getAllParties,
   updateParty,
@@ -17,6 +17,7 @@ import {
 } from '../services/api';
 import ClearableInput from '../components/ClearableInput';
 import MediaThumbnail from '../components/MediaThumbnail';
+import ActionsMenu from '../components/ActionsMenu';
 import './SettingsPage.css';
 
 export default function SettingsPage({ switchUserButton }) {
@@ -418,35 +419,20 @@ export default function SettingsPage({ switchUserButton }) {
                         ✏️
                       </button>
                       <button
-                        className={`btn btn-sm ${party.is_locked ? 'btn-success' : 'btn-warning'}`}
-                        onClick={() => handleTogglePartyLock(party)}
-                        title={party.is_locked ? 'Unlock party queue' : 'Lock party queue'}
-                      >
-                        {party.is_locked ? '🔓 Unlock' : '🔒 Lock'}
-                      </button>
-                      <button
-                        className={`btn btn-sm ${party.is_active ? 'btn-warning' : 'btn-success'}`}
-                        onClick={() => handleTogglePartyStatus(party)}
-                        title={party.is_active ? 'End party' : 'Reactivate party'}
-                      >
-                        {party.is_active ? '⏹ End' : '▶ Reactivate'}
-                      </button>
-                      <button
                         className="btn btn-ghost btn-sm"
                         onClick={() => handleDuplicateParty(party)}
                         title="Duplicate party"
                       >
                         📋 Duplicate
                       </button>
-                      <button
-                        className="btn btn-danger btn-sm"
-                        onClick={() =>
-                          setConfirmDelete({ type: 'party', id: party.id, name: party.name })
-                        }
-                        title="Permanently delete party"
-                      >
-                        🗑
-                      </button>
+                      <ActionsMenu label={`Actions for ${party.name}`} actions={[
+                        { label: party.is_locked ? 'Unlock party queue' : 'Lock party queue',
+                          icon: party.is_locked ? Unlock : Lock, run: () => handleTogglePartyLock(party) },
+                        { label: party.is_active ? 'End party' : 'Reactivate party',
+                          icon: party.is_active ? CircleStop : Play, danger: party.is_active, run: () => handleTogglePartyStatus(party) },
+                        { label: 'Delete party', ariaLabel: 'Permanently delete party', icon: Trash2, danger: true,
+                          run: () => setConfirmDelete({ type: 'party', id: party.id, name: party.name }) },
+                      ]} />
                     </div>
                   )}
                 </div>

@@ -52,13 +52,13 @@ afterEach(() => {
   sessionStorage.clear();
 });
 
-async function renderOrganizer() {
+async function renderOrganizer(signOutAction) {
   await act(async () => {
     root.render(
       <MemoryRouter initialEntries={['/organizer/party-id/member-id']}>
         <Routes>
           <Route path="/" element={<div>Welcome home</div>} />
-          <Route path="/organizer/:partyId/:memberId" element={<OrganizerPage />} />
+          <Route path="/organizer/:partyId/:memberId" element={<OrganizerPage signOutAction={signOutAction} />} />
         </Routes>
       </MemoryRouter>
     );
@@ -103,13 +103,74 @@ test.each([true, false])('navigates home without deleting the party or clearing 
   expect(socket.disconnect).toHaveBeenCalledTimes(1);
 });
 
+test('groups party controls and sign-out in one three-dot menu', async () => {
+  const signOut = jest.fn();
+  await renderOrganizer({ label: 'Sign out', run: signOut });
+  expect(container.querySelector('[aria-label="Lock party queue"]')).toBeNull();
+  expect(container.querySelector('[aria-label="End party"]')).toBeNull();
+  expect(container.querySelector('[aria-label="Permanently delete party"]')).toBeNull();
+  expect(container.textContent).not.toContain('Sign out');
+  const trigger = container.querySelector('[aria-label="Party actions"]');
+  expect(trigger).not.toBeNull();
+  expect(container.querySelectorAll('.header-right [aria-haspopup="menu"]')).toHaveLength(1);
+  act(() => Simulate.click(trigger));
+  const menu = document.querySelector('[role="menu"]');
+  const actions = [...menu.querySelectorAll('[role="menuitem"]')];
+  expect(actions.map(button => button.textContent)).toEqual(['Lock party queue', 'End party', 'Delete party', 'Sign out']);
+  act(() => Simulate.click(actions[3]));
+  expect(signOut).toHaveBeenCalledTimes(1);
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+});
+
+test.each([false, true])('party menu toggles the queue lock when initially locked: %s', async (isLocked) => {
+  getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', is_active: true, is_locked: isLocked } });
+  lockParty.mockResolvedValue({ data: { is_locked: !isLocked } });
+  await renderOrganizer();
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
+  const label = isLocked ? 'Unlock party queue' : 'Lock party queue';
+  await act(async () => Simulate.click(document.querySelector(`[aria-label="${label}"]`)));
+  expect(lockParty).toHaveBeenCalledWith('party-id', !isLocked, 'member-id');
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
+  expect(document.querySelector(`[aria-label="${isLocked ? 'Lock party queue' : 'Unlock party queue'}"]`)).not.toBeNull();
+});
+
+test.each([
+  ['End party', endParty, 'End this party and disconnect invited guests?'],
+  ['Permanently delete party', deleteParty, 'Permanently delete this party and all its data? This cannot be undone.'],
+])('%s still requires confirmation from the menu', async (label, action, message) => {
+  action.mockResolvedValue({ data: { success: true } });
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+  await renderOrganizer();
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
+  await act(async () => Simulate.click(document.querySelector(`[aria-label="${label}"]`)));
+  expect(confirm).toHaveBeenCalledWith(message);
+  expect(action).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  confirm.mockReturnValue(true);
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
+  await act(async () => Simulate.click(document.querySelector(`[aria-label="${label}"]`)));
+  expect(action).toHaveBeenCalledWith('party-id');
+  expect(container.textContent).toBe('Welcome home');
+  confirm.mockRestore();
+});
+
+test('ended parties do not offer the end action in their menu', async () => {
+  getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', is_active: false } });
+  await renderOrganizer();
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
+  expect(document.querySelector('[aria-label="End party"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Permanently delete party"]')).not.toBeNull();
+});
+
 test('non-admin hosts can end their party but do not get permanent deletion controls', async () => {
   useAuth.mockReturnValue({ authLevel: 'member' });
   endParty.mockResolvedValue({ data: { success: true } });
   const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
   await renderOrganizer();
-  expect(container.querySelector('[aria-label="Permanently delete party"]')).toBeNull();
-  await act(async () => Simulate.click(container.querySelector('[aria-label="End party"]')));
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
+  expect(document.querySelector('[aria-label="Permanently delete party"]')).toBeNull();
+  await act(async () => Simulate.click(document.querySelector('[aria-label="End party"]')));
   expect(endParty).toHaveBeenCalledWith('party-id');
   expect(deleteParty).not.toHaveBeenCalled();
   expect(container.textContent).toBe('Welcome home');

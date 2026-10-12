@@ -14,9 +14,12 @@ jest.mock('./services/api', () => ({
   getPasskeys: jest.fn(), getAuthUsers: jest.fn(), updateAuthUser: jest.fn(), removePasskey: jest.fn(),
 }));
 jest.mock('./components/ThemePicker', () => () => null);
-jest.mock('./pages/OrganizerPage', () => ({ switchUserButton }) => <div>Organizer view{switchUserButton}</div>);
-jest.mock('./pages/GuestPage', () => () => <div>Guest view</div>);
-jest.mock('./pages/SettingsPage', () => () => <div>Settings view</div>);
+jest.mock('./pages/OrganizerPage', () => ({ signOutAction }) => {
+  const ActionsMenu = require('./components/ActionsMenu').default;
+  return <div>Organizer view<ActionsMenu label="Party actions" actions={[signOutAction]} /></div>;
+});
+jest.mock('./pages/GuestPage', () => ({ switchUserButton }) => <div>Guest view{switchUserButton}</div>);
+jest.mock('./pages/SettingsPage', () => ({ switchUserButton }) => <div>Settings view{switchUserButton}</div>);
 
 let root;
 let container;
@@ -60,7 +63,7 @@ async function submit() {
 }
 
 async function click(label) {
-  const button = [...container.querySelectorAll('button')].find((element) => element.textContent.includes(label));
+  const button = [...document.querySelectorAll('button')].find((element) => element.textContent.includes(label));
   await act(async () => { Simulate.click(button); });
 }
 
@@ -159,6 +162,29 @@ test('a revoked or expired invitation cannot be joined', async () => {
   expect(sessionStorage.getItem('authToken')).toBeNull();
 });
 
+test.each(['/', '/join', '/account', '/settings', '/guest/party-id/guest-id'])(
+  'sign-out is tucked into the account menu on %s', async (pathname) => {
+    sessionStorage.setItem('authToken', 'token');
+    axios.get.mockResolvedValue({ data: pathname.startsWith('/guest/')
+      ? { level: 'guest', partyId: 'party-id', memberId: 'guest-id' }
+      : { ...session, level: 'admin', user: { ...session.user, role: 'admin' } } });
+    getPasskeys.mockResolvedValue({ data: [] });
+    getAuthUsers.mockResolvedValue({ data: [] });
+    window.history.replaceState({}, '', pathname);
+    await renderApp();
+    expect(container.textContent).not.toContain('Sign out');
+    const trigger = container.querySelector('[aria-label="Account actions"]');
+    expect(trigger).not.toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    act(() => Simulate.click(trigger));
+    expect(document.querySelector('[role="menuitem"]').textContent).toBe('Sign out');
+    expect(axios.post).not.toHaveBeenCalled();
+    act(() => Simulate.keyDown(document.querySelector('[role="menu"]'), { key: 'Escape' }));
+    expect(document.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  }
+);
+
 test('sign-out revokes the host session and removes the local member identity', async () => {
   sessionStorage.setItem('authToken', 'token');
   sessionStorage.setItem('memberName', 'Alex');
@@ -166,6 +192,8 @@ test('sign-out revokes the host session and removes the local member identity', 
   sessionStorage.setItem('memberRole', 'organizer');
   window.history.replaceState({}, '', '/organizer/party-id/old-member');
   await renderApp();
+  expect(container.textContent).not.toContain('Sign out');
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
   await click('Sign out');
   expect(axios.post).toHaveBeenCalledWith('/api/auth/logout', {}, { headers: { Authorization: 'Bearer token' } });
   expect(window.location.pathname).toBe('/');

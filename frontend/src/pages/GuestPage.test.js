@@ -3,10 +3,12 @@ import { createRoot } from 'react-dom/client';
 import { act, Simulate } from 'react-dom/test-utils';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import { useAuth } from '../contexts/AuthContext';
 import { getParty, getQueue, getMember, getServerInfo, removeFromQueue } from '../services/api';
 import GuestPage from './GuestPage';
 
 jest.mock('socket.io-client', () => ({ io: jest.fn() }));
+jest.mock('../contexts/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../services/api', () => ({
   getParty: jest.fn(), getQueue: jest.fn(), getMember: jest.fn(), getServerInfo: jest.fn(),
   removeFromQueue: jest.fn(),
@@ -24,6 +26,7 @@ let handlers;
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   jest.resetAllMocks();
+  useAuth.mockReturnValue({ authLevel: 'guest' });
   getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', join_code: 'ABCDEF' } });
   getQueue.mockResolvedValue({ data: [] });
   getMember.mockResolvedValue({ data: { id: 'member-id', name: 'Alex' } });
@@ -45,6 +48,7 @@ async function renderGuest(switchUserButton) {
     root.render(
       <MemoryRouter initialEntries={['/guest/party-id/member-id']}>
         <Routes>
+          <Route path="/" element={<div>Home page</div>} />
           <Route path="/guest/:partyId/:memberId" element={<GuestPage switchUserButton={switchUserButton} />} />
         </Routes>
       </MemoryRouter>
@@ -59,6 +63,25 @@ test.each([false, true])('guests cannot create or share host invitations (locked
   expect(container.querySelector('[aria-label="Show party QR code"]')).toBeNull();
   expect(container.querySelector('dialog')).toBeNull();
   expect(container.textContent).not.toContain('ABCDEF');
+});
+
+test('passkey-signed-in guests can go home without signing out', async () => {
+  useAuth.mockReturnValue({ authLevel: 'admin' });
+  const switchUser = jest.fn();
+  await renderGuest(<button type="button" onClick={switchUser}>Sign out</button>);
+  const homeButton = container.querySelector('.guest-header-actions [aria-label="Home"]');
+  expect(homeButton).not.toBeNull();
+  expect(homeButton.classList.contains('home-button')).toBe(true);
+  expect(homeButton.title).toBe('Home');
+  act(() => { Simulate.click(homeButton); });
+  expect(container.textContent).toBe('Home page');
+  expect(switchUser).not.toHaveBeenCalled();
+});
+
+test.each(['guest', 'none'])('does not show the header Home button for %s sessions', async (authLevel) => {
+  useAuth.mockReturnValue({ authLevel });
+  await renderGuest();
+  expect(container.querySelector('.guest-header-actions [aria-label="Home"]')).toBeNull();
 });
 
 test('places the sign-out action immediately after Status', async () => {

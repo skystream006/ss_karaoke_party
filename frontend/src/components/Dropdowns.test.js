@@ -4,7 +4,7 @@ import { act, Simulate } from 'react-dom/test-utils';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTheme } from '../contexts/ThemeContext';
-import { getMemberNames, getParties, getPartyMembers, searchMembers, getAllParties, getQueue, updateQueueItemSinger } from '../services/api';
+import { getMemberNames, getParties, getPartyMembers, searchMembers, getAllParties, getQueue, updateQueueItemSinger, lockParty, endParty, reactivateParty, deleteParty } from '../services/api';
 import ThemePicker from './ThemePicker';
 import PasskeyModal from './PasskeyModal';
 import Playlist from './Playlist';
@@ -17,6 +17,7 @@ jest.mock('../services/api', () => ({
   getMemberNames: jest.fn(), getParties: jest.fn(),
   getPartyMembers: jest.fn(), searchMembers: jest.fn(), getAllParties: jest.fn(),
   getQueue: jest.fn(), updateQueueItemSinger: jest.fn(),
+  lockParty: jest.fn(), endParty: jest.fn(), reactivateParty: jest.fn(), deleteParty: jest.fn(),
 }));
 
 let root;
@@ -120,6 +121,47 @@ test('settings roles and singer options are alphabetical while keeping placehold
   await act(async () => Simulate.click([...container.querySelectorAll('.settings-inline-actions button')].find(button => button.textContent === 'Save')));
   expect(updateQueueItemSinger).toHaveBeenCalledWith('party-id', 'song-id', { singer_name: 'alice', member_id: 'member-2' });
   expect(members.map(member => member.name)).toEqual(['zoe', 'Bravo', 'alice']);
+});
+
+test('settings party menus keep lock, status, and confirmed deletion actions working', async () => {
+  lockParty.mockResolvedValue({ data: { ...party, is_locked: true } });
+  endParty.mockResolvedValue({ data: { success: true } });
+  reactivateParty.mockResolvedValue({ data: { ...party, is_locked: true } });
+  deleteParty.mockResolvedValue({ data: { success: true } });
+  await act(async () => root.render(<MemoryRouter><SettingsPage /></MemoryRouter>));
+  const openMenu = () => act(() => Simulate.click(container.querySelector('[aria-label="Actions for Friday"]')));
+  const selectAction = (label) => act(async () => Simulate.click(document.querySelector(`[role="menuitem"][aria-label="${label}"]`)));
+  expect(container.querySelector('[title="Lock party queue"]')).toBeNull();
+  expect(container.querySelector('[title="End party"]')).toBeNull();
+  expect(container.querySelector('[title="Permanently delete party"]')).toBeNull();
+  expect(container.querySelector('[title="Manage members"]')).not.toBeNull();
+  expect(container.querySelector('[title="Rename party"]')).not.toBeNull();
+  expect(container.querySelector('[title="Duplicate party"]')).not.toBeNull();
+  openMenu();
+  expect([...document.querySelectorAll('[role="menuitem"]')].map(button => button.textContent))
+    .toEqual(['Lock party queue', 'End party', 'Delete party']);
+  await selectAction('Lock party queue');
+  expect(lockParty).toHaveBeenCalledWith(party.id, true);
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  openMenu();
+  expect(document.querySelector('[aria-label="Unlock party queue"]')).not.toBeNull();
+  await selectAction('End party');
+  expect(endParty).toHaveBeenCalledWith(party.id);
+  openMenu();
+  await selectAction('Reactivate party');
+  expect(reactivateParty).toHaveBeenCalledWith(party.id);
+  openMenu();
+  await selectAction('Permanently delete party');
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  expect(container.querySelector('.settings-modal-overlay').textContent).toContain(party.name);
+  expect(deleteParty).not.toHaveBeenCalled();
+  act(() => Simulate.click(container.querySelector('.settings-modal-overlay .btn-ghost')));
+  expect(container.querySelector('.settings-modal-overlay')).toBeNull();
+  openMenu();
+  await selectAction('Permanently delete party');
+  await act(async () => Simulate.click(container.querySelector('.settings-modal-overlay .btn-danger')));
+  expect(deleteParty).toHaveBeenCalledWith(party.id);
+  expect(container.querySelector('[aria-label="Actions for Friday"]')).toBeNull();
 });
 
 test.each([true, false])('playlist titles appear above details and controls (organizer: %s)', (isOrganizer) => {

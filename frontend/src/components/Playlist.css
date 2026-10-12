@@ -117,7 +117,6 @@
   flex-shrink: 0;
 }
 
-.playlist-menu-trigger,
 .playlist-playback-button {
   display: inline-flex;
   align-items: center;
@@ -132,83 +131,15 @@
   cursor: pointer;
 }
 
-.playlist-menu-trigger:hover,
-.playlist-menu-trigger[aria-expanded="true"],
 .playlist-playback-button:hover {
   color: var(--text-primary);
   background: var(--bg-card);
   border-color: var(--border);
 }
 
-.playlist-menu {
-  position: fixed;
-  z-index: 1200;
-  width: 218px;
-  max-width: calc(100vw - 16px);
-  max-height: calc(100vh - 16px);
-  overflow-y: auto;
-  padding: 4px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
-}
-
-.playlist-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 44px;
-  padding: 8px 10px;
-  border: none;
-  border-radius: 4px;
-  color: var(--text-primary);
-  background: transparent;
-  text-align: left;
-  font: inherit;
-  font-size: 0.85rem;
-  cursor: pointer;
-  overflow-wrap: anywhere;
-}
-
-.playlist-menu-item svg {
-  flex-shrink: 0;
-}
-
-.playlist-menu-item:hover:not(:disabled),
-.playlist-menu-item:focus-visible {
-  background: var(--bg-surface);
-}
-
-.playlist-menu-trigger:focus-visible,
-.playlist-playback-button:focus-visible,
-.playlist-menu-item:focus-visible {
+.playlist-playback-button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
-}
-
-.playlist-menu-item:disabled {
-  color: var(--text-secondary);
-  cursor: default;
-}
-
-.playlist-menu-danger {
-  color: var(--primary);
-}
-
-.playlist-sending-icon {
-  animation: playlist-send-spin 1s linear infinite;
-}
-
-@keyframes playlist-send-spin {
-  to { transform: rotate(360deg); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .playlist-sending-icon {
-    animation: none;
-  }
 }
 
 @media (max-width: 768px) {

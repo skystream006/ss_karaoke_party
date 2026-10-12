@@ -1,7 +1,7 @@
-import React, { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import React, { useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { EllipsisVertical, LoaderCircle, Pause, Play, Send, Trash2 } from 'lucide-react';
+import { LoaderCircle, Pause, Play, Send, Trash2 } from 'lucide-react';
+import ActionsMenu from './ActionsMenu';
 import MediaThumbnail from './MediaThumbnail';
 import './Playlist.css';
 
@@ -12,80 +12,15 @@ const SSMUSIC_PENDING_LABELS = {
 };
 
 function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pending }) {
-  const [open, setOpen] = useState(false);
-  const [position, setPosition] = useState(null);
-  const triggerRef = useRef(null);
-  const menuRef = useRef(null);
-  const menuId = useId();
   const isPlaying = item.status === 'playing';
   const onPlayback = isPlaying ? onPause : onPlay;
   const playbackLabel = isPlaying ? 'Pause' : item.status === 'paused' ? 'Resume' : 'Play now';
   const actions = [];
   if (onSendToSSMusic && (!item.source || item.source === 'youtube')) {
     actions.push({ label: pending ? 'Sending to ssMusic...' : 'Send to ssMusic', icon: pending ? LoaderCircle : Send,
-      disabled: pending, run: () => onSendToSSMusic(item) });
+      disabled: pending, spinning: pending, run: () => onSendToSSMusic(item) });
   }
   if (onRemove) actions.push({ label: 'Remove', icon: Trash2, danger: true, run: () => onRemove(item.id) });
-
-  useLayoutEffect(() => {
-    if (!open) return;
-    if (!actions.length) {
-      setOpen(false);
-      return;
-    }
-    const anchor = triggerRef.current.getBoundingClientRect();
-    const menu = menuRef.current.getBoundingClientRect();
-    setPosition({
-      left: Math.max(8, Math.min(anchor.right - menu.width, window.innerWidth - menu.width - 8)),
-      top: Math.max(8, anchor.bottom + menu.height + 12 <= window.innerHeight
-        ? anchor.bottom + 4 : Math.min(anchor.top - menu.height - 4, window.innerHeight - menu.height - 8)),
-    });
-  }, [open, actions.length]);
-
-  useEffect(() => {
-    if (open && position) {
-      const target = menuRef.current?.querySelector('button:not(:disabled)') || menuRef.current;
-      target?.focus();
-    }
-  }, [open, position]);
-
-  useEffect(() => {
-    if (!open) return;
-    const dismissOutside = (event) => {
-      if (!menuRef.current?.contains(event.target) && !triggerRef.current?.contains(event.target)) setOpen(false);
-    };
-    const dismiss = () => setOpen(false);
-    document.addEventListener('pointerdown', dismissOutside);
-    document.addEventListener('focusin', dismissOutside);
-    window.addEventListener('resize', dismiss);
-    window.addEventListener('scroll', dismiss, true);
-    return () => {
-      document.removeEventListener('pointerdown', dismissOutside);
-      document.removeEventListener('focusin', dismissOutside);
-      window.removeEventListener('resize', dismiss);
-      window.removeEventListener('scroll', dismiss, true);
-    };
-  }, [open]);
-
-  const close = () => {
-    setOpen(false);
-    triggerRef.current?.focus();
-  };
-
-  const handleMenuKeyDown = (event) => {
-    if (event.key === 'Escape' || event.key === 'Tab') {
-      if (event.key === 'Escape') event.preventDefault();
-      close();
-      return;
-    }
-    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
-    event.preventDefault();
-    const buttons = [...menuRef.current.querySelectorAll('button:not(:disabled)')];
-    const index = buttons.indexOf(document.activeElement);
-    const next = event.key === 'Home' ? 0 : event.key === 'End' ? buttons.length - 1
-      : (index + (event.key === 'ArrowDown' ? 1 : -1) + buttons.length) % buttons.length;
-    buttons[next]?.focus();
-  };
 
   if (!actions.length && !onPlayback) return null;
   return (
@@ -96,32 +31,7 @@ function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pen
           {isPlaying ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
         </button>
       )}
-      {actions.length > 0 && <button type="button" ref={triggerRef} className="playlist-menu-trigger"
-        title="More actions" aria-label={`Actions for ${item.video_title}`}
-        aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
-        onClick={() => { setPosition(null); setOpen(!open); }}
-        onKeyDown={(event) => {
-          if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
-            event.preventDefault();
-            setOpen(true);
-          } else if (event.key === 'Escape') close();
-        }}>
-        <EllipsisVertical size={20} aria-hidden="true" />
-      </button>}
-      {open && actions.length > 0 && createPortal(
-        <div id={menuId} ref={menuRef} role="menu" tabIndex={-1} aria-label={`Actions for ${item.video_title}`}
-          className="playlist-menu" style={position || { top: 0, left: 0, visibility: 'hidden' }}
-          onKeyDown={handleMenuKeyDown}>
-          {actions.map(({ label, icon: Icon, run, disabled, danger }) => (
-            <button type="button" role="menuitem" key={label} disabled={disabled}
-              className={`playlist-menu-item${danger ? ' playlist-menu-danger' : ''}`}
-              onClick={() => { close(); run(); }}>
-              <Icon size={16} aria-hidden="true" className={disabled ? 'playlist-sending-icon' : undefined} />
-              <span>{label}</span>
-            </button>
-          ))}
-        </div>, document.body
-      )}
+      <ActionsMenu label={`Actions for ${item.video_title}`} actions={actions} />
     </div>
   );
 }
