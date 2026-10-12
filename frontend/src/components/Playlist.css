@@ -82,6 +82,7 @@
 }
 
 .playlist-title {
+  margin-bottom: 0.4rem;
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--text-primary);

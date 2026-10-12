@@ -207,6 +207,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                     {...dragProvided.draggableProps}
                     className={`playlist-item ${item.status === 'playing' ? 'playing' : ''} ${item.status === 'played' ? 'played' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
                   >
+                    <div className="playlist-title">{item.video_title}</div>
                     <div className="playlist-item-row">
                     {/* Position number */}
                     <div className="playlist-pos">
@@ -234,7 +235,6 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
 
                     {/* Song info */}
                     <div className="playlist-info">
-                      <div className="playlist-title">{item.video_title}</div>
                       <div className="playlist-singer">🎤 {item.singer_name}</div>
                       {item.source === 'ssmusic' ? (
                         <div className="playlist-media-status">{item.kpMedia ? 'kpMedia' : 'ssMusic'}</div>

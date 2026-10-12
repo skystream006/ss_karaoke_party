@@ -119,6 +119,20 @@ test('settings roles and singer options are alphabetical while keeping placehold
   expect(members.map(member => member.name)).toEqual(['zoe', 'Bravo', 'alice']);
 });
 
+test.each([true, false])('playlist titles appear above details and controls (organizer: %s)', (isOrganizer) => {
+  act(() => root.render(<Playlist queue={[{ ...song, video_thumbnail: '/thumbnail.jpg' }]}
+    isOrganizer={isOrganizer} onPlay={jest.fn()} />));
+  const item = container.querySelector('.playlist-item');
+  const title = item.querySelector('.playlist-title');
+  const row = item.querySelector('.playlist-item-row');
+  expect(item.firstElementChild).toBe(title);
+  expect(title.textContent).toBe(song.video_title);
+  expect(title.nextElementSibling).toBe(row);
+  expect(row.querySelector('.playlist-singer').textContent).toContain(song.singer_name);
+  expect(row.querySelector('.playlist-thumb')).not.toBeNull();
+  expect(row.querySelector('button[aria-label="Play now"]')).not.toBeNull();
+});
+
 test('playlist playback stays inline while secondary actions remain in the three-dot menu', () => {
   const onPlay = jest.fn();
   const onPause = jest.fn();
