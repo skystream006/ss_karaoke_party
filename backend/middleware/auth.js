@@ -132,7 +132,19 @@ function createAuth({ database = pool } = {}) {
 }
 
 function requireAccount(req, res, next) {
-  if (!req.auth?.userId) return res.status(403).json({ error: 'An approved passkey account is required.' });
+  if (!req.auth?.userId || !['admin', 'member'].includes(req.auth.level)) {
+    return res.status(403).json({ error: 'An approved passkey account is required.' });
+  }
+  next();
+}
+
+function requireOrganizerAccount(req, res, next) {
+  if (req.auth?.userId && req.auth.level === 'hostscreen') return next();
+  return requireAccount(req, res, next);
+}
+
+function forbidHostscreen(req, res, next) {
+  if (req.auth?.level === 'hostscreen') return res.status(403).json({ error: 'HOSTSCREEN cannot execute searches.' });
   next();
 }
 
@@ -141,5 +153,5 @@ function requireAdmin(req, res, next) {
   next();
 }
 
-module.exports = { ...createAuth(), createAuth, requireAccount, requireAdmin, publicSession,
+module.exports = { ...createAuth(), createAuth, requireAccount, requireOrganizerAccount, forbidHostscreen, requireAdmin, publicSession,
   hashToken, newToken, validToken, validId };

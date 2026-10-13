@@ -30,7 +30,7 @@ import './OrganizerPage.css';
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
-export default function OrganizerPage({ signOutAction }) {
+export default function OrganizerPage({ signOutAction, accountInfoAction }) {
   const { authLevel } = useAuth();
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
@@ -422,8 +422,9 @@ export default function OrganizerPage({ signOutAction }) {
             {qrPanelOpen ? '✕' : '📱'}
           </button>
           <ActionsMenu label="Party actions" actions={[
-            { label: isLocked ? 'Unlock party queue' : 'Lock party queue', icon: isLocked ? Unlock : Lock, run: handleToggleLock },
-            party.is_active && { label: 'End party', icon: CircleStop, danger: true, run: handleEndParty },
+            accountInfoAction,
+            authLevel !== 'hostscreen' && { label: isLocked ? 'Unlock party queue' : 'Lock party queue', icon: isLocked ? Unlock : Lock, run: handleToggleLock },
+            authLevel !== 'hostscreen' && party.is_active && { label: 'End party', icon: CircleStop, danger: true, run: handleEndParty },
             authLevel === 'admin' && { label: 'Delete party', ariaLabel: 'Permanently delete party', icon: Trash2, danger: true, run: handleDeleteParty },
             signOutAction && { ...signOutAction, separated: true },
           ]} />
@@ -460,12 +461,12 @@ export default function OrganizerPage({ signOutAction }) {
               >
                 🎵 Playlist
               </button>
-              <button
+              {authLevel !== 'hostscreen' && <button
                 className={`sidebar-tab ${sidebarTab === 'search' ? 'active' : ''}`}
                 onClick={() => setSidebarTab('search')}
               >
                 🔍 Search
-              </button>
+              </button>}
               <button
                 className={`sidebar-tab ${sidebarTab === 'settings' ? 'active' : ''}`}
                 onClick={() => setSidebarTab('settings')}
@@ -506,7 +507,7 @@ export default function OrganizerPage({ signOutAction }) {
                 />
               </>
             )}
-            {sidebarTab === 'search' && (
+            {authLevel !== 'hostscreen' && sidebarTab === 'search' && (
               <SongSearch
                 partyId={partyId}
                 member={{ name: memberName }}

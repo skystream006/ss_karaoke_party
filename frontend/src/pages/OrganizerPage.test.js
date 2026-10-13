@@ -65,6 +65,28 @@ async function renderOrganizer(signOutAction) {
   });
 }
 
+test.each([false, true])('HOSTSCREEN retains playback without search or party changes when locked: %s', async (isLocked) => {
+  useAuth.mockReturnValue({ authLevel: 'hostscreen' });
+  getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', is_active: true, is_locked: isLocked } });
+  const signOut = jest.fn();
+  await renderOrganizer({ label: 'Sign out', run: signOut });
+  const tabs = [...container.querySelectorAll('.sidebar-tab')].map((button) => button.textContent);
+  expect(tabs.some((text) => text.includes('Playlist'))).toBe(true);
+  expect(tabs.some((text) => text.includes('Settings'))).toBe(true);
+  expect(tabs.some((text) => text.includes('Search'))).toBe(false);
+  act(() => Simulate.click(container.querySelector('[aria-label="Party actions"]')));
+  expect(document.querySelector('[aria-label="Lock party queue"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Unlock party queue"]')).toBeNull();
+  expect(document.querySelector('[aria-label="End party"]')).toBeNull();
+  expect(document.querySelector('[aria-label="Permanently delete party"]')).toBeNull();
+  expect([...document.querySelectorAll('[role="menuitem"]')].map((button) => button.textContent)).toEqual(['Sign out']);
+  act(() => Simulate.click(document.querySelector('[aria-label="Sign out"]')));
+  expect(signOut).toHaveBeenCalledTimes(1);
+  expect(lockParty).not.toHaveBeenCalled();
+  expect(endParty).not.toHaveBeenCalled();
+  expect(deleteParty).not.toHaveBeenCalled();
+});
+
 test('places the Home button immediately after the left menu toggle without changing menu behavior', async () => {
   await renderOrganizer();
   const toggle = container.querySelector('button[aria-label="Toggle playlist"]');

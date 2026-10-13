@@ -57,6 +57,38 @@ test('pending registration stores no login token and displays its approval statu
   expect(auth.notice).toBe('Awaiting approval.');
 });
 
+test.each(['login', 'register'])('app %s performs fresh WebAuthn without replacing an existing browser session', async (kind) => {
+  const appLogin = { redirect_uri: 'com.sskaraoke.player:/oauth/callback', code_challenge_method: 'S256',
+    code_challenge: 'c'.repeat(43), state: 's'.repeat(43) };
+  const result = { redirectUrl: `${appLogin.redirect_uri}?code=${'a'.repeat(43)}&state=${appLogin.state}` };
+  act(() => auth.acceptInvitation({ token: 'browser-guest', level: 'guest', partyId: 'party', memberId: 'guest' }));
+  startAuthentication.mockResolvedValue({ id: 'credential' });
+  startRegistration.mockResolvedValue({ id: 'credential' });
+  axios.post.mockResolvedValueOnce({ data: { requestId: 'request', options: {} } }).mockResolvedValueOnce({ data: result });
+  await act(async () => {
+    expect(await (kind === 'login' ? auth.login(appLogin) : auth.register('Alex', appLogin))).toEqual(result);
+  });
+  expect(kind === 'login' ? startAuthentication : startRegistration).toHaveBeenCalledTimes(1);
+  expect(axios.post).toHaveBeenNthCalledWith(1, `/api/auth/${kind}/options`,
+    kind === 'login' ? { appLogin } : { name: 'Alex', appLogin }, { headers: {} });
+  expect(axios.post).toHaveBeenLastCalledWith(`/api/auth/${kind}/verify`,
+    { requestId: 'request', response: { id: 'credential' } }, { headers: {} });
+  expect(auth.authToken).toBe('browser-guest');
+  expect(auth.authLevel).toBe('guest');
+  expect(sessionStorage.getItem('authToken')).toBe('browser-guest');
+  expect(JSON.stringify({ ...sessionStorage })).not.toContain(result.redirectUrl);
+});
+
+test('an app handoff cannot fall back to storing a regular session from an outdated server', async () => {
+  startAuthentication.mockResolvedValue({ id: 'credential' });
+  axios.post.mockResolvedValueOnce({ data: { requestId: 'request', options: {} } })
+    .mockResolvedValueOnce({ data: { token: 'unexpected-token', level: 'admin', user: { name: 'Alex' } } });
+  await act(async () => { expect(await auth.login({ state: 's'.repeat(43) })).toBe(false); });
+  expect(sessionStorage.getItem('authToken')).toBeNull();
+  expect(auth.authLevel).toBe('none');
+  expect(auth.error).toContain('did not return an app sign-in code');
+});
+
 test('a verified QR join retains guest party and member scope and sign-out revokes the server session', async () => {
   act(() => auth.acceptInvitation({ token: 'guest-token', level: 'guest', partyId: 'party', memberId: 'guest' }));
   expect(auth.authLevel).toBe('guest');

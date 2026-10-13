@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, KeyRound, Plus, RefreshCw, Settings, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Eye, EyeOff, KeyRound, Plus, RefreshCw, Settings, Trash2, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getPasskeys, removePasskey, getAuthUsers, updateAuthUser } from '../services/api';
+import { getAccountInfo, getPasskeys, removePasskey, getAuthUsers, updateAuthUser } from '../services/api';
 import './AccountPage.css';
 
 export default function AccountPage({ switchUserButton }) {
@@ -13,15 +13,22 @@ export default function AccountPage({ switchUserButton }) {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [hostKey, setHostKey] = useState(null);
+  const [keyVisible, setKeyVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
   const isAdmin = authLevel === 'admin';
 
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
+    setKeyVisible(false);
+    setCopied(false);
+    setHostKey(null);
     try {
-      const [keys, accounts] = await Promise.all([getPasskeys(), isAdmin ? getAuthUsers() : Promise.resolve({ data: [] })]);
+      const [keys, accounts, info] = await Promise.all([getPasskeys(), isAdmin ? getAuthUsers() : Promise.resolve({ data: [] }), getAccountInfo()]);
       setPasskeys(keys.data);
       setUsers(accounts.data);
+      setHostKey(info.data.HOST_SCREEN_LOGIN_KEY);
     } catch (failure) {
       setError(failure.response?.data?.error || 'Unable to load account settings.');
     } finally {
@@ -64,6 +71,14 @@ export default function AccountPage({ switchUserButton }) {
   };
 
   const disabled = busy || loading || authenticating;
+  const copyKey = async () => {
+    try {
+      await navigator.clipboard.writeText(hostKey);
+      setCopied(true);
+    } catch {
+      setError('Unable to copy the HOST key.');
+    }
+  };
   const date = (value) => value ? new Date(value).toLocaleString() : 'Never';
 
   return <main className="account-page">
@@ -77,6 +92,25 @@ export default function AccountPage({ switchUserButton }) {
     </header>
     {error && <p className="error-msg" role="alert">{error}</p>}
     {loading && <p role="status">Loading accounts...</p>}
+    <section className="account-section" aria-labelledby="account-info-heading">
+      <div className="account-section-heading"><h2 id="account-info-heading">Account Info</h2></div>
+      <dl className="account-info-details">
+        <div><dt>Account</dt><dd>{user?.name}</dd></div>
+        <div><dt>Role</dt><dd>{authLevel === 'admin' ? 'Admin' : 'Member'}</dd></div>
+      </dl>
+      <label className="account-host-key-label" htmlFor="account-host-key">HOST_SCREEN_LOGIN_KEY</label>
+      {hostKey ? <div className="account-host-key">
+        <input id="account-host-key" type={keyVisible ? 'text' : 'password'} value={hostKey} readOnly autoComplete="off" />
+        <button className="account-icon-button" onClick={() => setKeyVisible(!keyVisible)}
+          title={keyVisible ? 'Hide HOST key' : 'Show HOST key'} aria-label={keyVisible ? 'Hide HOST key' : 'Show HOST key'}>
+          {keyVisible ? <EyeOff size={18} aria-hidden="true" /> : <Eye size={18} aria-hidden="true" />}
+        </button>
+        <button className="account-icon-button" onClick={copyKey} title="Copy HOST key" aria-label="Copy HOST key">
+          {copied ? <Check size={18} aria-hidden="true" /> : <Copy size={18} aria-hidden="true" />}
+        </button>
+      </div> : !loading && <p className="muted">HOST login is not configured.</p>}
+      {copied && <p role="status">Key copied.</p>}
+    </section>
     <section className="account-section" aria-labelledby="passkeys-heading">
       <div className="account-section-heading">
         <h2 id="passkeys-heading"><KeyRound size={20} aria-hidden="true" /> Passkeys</h2>
@@ -112,13 +146,14 @@ export default function AccountPage({ switchUserButton }) {
         {users.map((account) => <div key={account.id} className="account-user-row">
           <strong>{account.name}</strong>
           <label>Role
-            <select aria-label={`Role for ${account.name}`} value={account.role} disabled={disabled || account.id === user?.id}
+            <select aria-label={`Role for ${account.name}`} value={account.role} disabled={disabled || account.id === user?.id || account.role === 'hostscreen'}
               onChange={(event) => update(account, { role: event.target.value })}>
               <option value="member">Host</option><option value="admin">Admin</option>
+              {account.role === 'hostscreen' && <option value="hostscreen">HOSTSCREEN</option>}
             </select>
           </label>
           <label>Access
-            <select aria-label={`Access for ${account.name}`} value={account.status} disabled={disabled || account.id === user?.id}
+            <select aria-label={`Access for ${account.name}`} value={account.status} disabled={disabled || account.id === user?.id || account.role === 'hostscreen'}
               onChange={(event) => update(account, { status: event.target.value })}>
               <option value="pending">Pending approval</option><option value="approved">Approved</option><option value="revoked">Revoked</option>
             </select>

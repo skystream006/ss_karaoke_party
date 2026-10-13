@@ -79,7 +79,7 @@ function createSsmusicRoutes({ client = createSsmusicClient(), tickets = createM
     }
   }
 
-  apiRouter.get('/search', cancellable(async (req, res, signal) => {
+  apiRouter.get('/search', defaultAuth.forbidHostscreen, cancellable(async (req, res, signal) => {
     const q = req.query.q === undefined ? '' : req.query.q;
     const rawOffset = req.query.offset === undefined ? '0' : req.query.offset;
     const noVocalsOnly = req.query.NoVocalsOnly === undefined ? 'false' : req.query.NoVocalsOnly;

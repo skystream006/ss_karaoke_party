@@ -2,11 +2,11 @@
 
 ## Authentication
 
-API endpoints require `Authorization: Bearer <token>`, except passkey enrollment/login, invitation resolution/redemption, the public health check, and ticket-authenticated media streaming. Password login and anonymous QR session issuance have been removed (legacy auth endpoints return 410).
+API endpoints require `Authorization: Bearer <token>`, except passkey enrollment/login, HOST key login, PKCE app code exchange, invitation resolution/redemption, the public health check, and ticket-authenticated media streaming. Legacy password login and anonymous QR session issuance have been removed (legacy auth endpoints return 410).
 
 `admin` and `member` are approved passkey accounts; `member` accounts can host parties. `guest` sessions come only from valid host invitations and are restricted to their assigned party and member. Account sessions last 24 hours and are stored as hashes in PostgreSQL. Guest access ends no later than the invitation or host session. Every protected request rechecks account approval, membership and invitation validity. Auth/API responses are non-cacheable.
 
-Apply all Flyway migrations, including [V5__Passkeys_and_party_invitations.sql](db/migrations/V5__Passkeys_and_party_invitations.sql), before starting. Set `PASSKEY_RP_ID` and the exact `PASSKEY_ORIGIN`. HTTPS is required outside localhost; raw IP RP IDs are rejected. Optional secondary settings must be supplied together. Register the first administrator locally before exposing the service. Later registrations require admin approval. Use Node.js 22+.
+Apply all Flyway migrations, including [V5__Passkeys_and_party_invitations.sql](db/migrations/V5__Passkeys_and_party_invitations.sql) and [V6__App_login_codes.sql](db/migrations/V6__App_login_codes.sql), before starting. Set `PASSKEY_RP_ID` and the exact `PASSKEY_ORIGIN`. HTTPS is required outside localhost; raw IP RP IDs are rejected. Optional secondary settings must be supplied together. Register the first administrator locally before exposing the service. Later registrations require admin approval. Use Node.js 22+.
 
 ---
 
@@ -20,6 +20,9 @@ Apply all Flyway migrations, including [V5__Passkeys_and_party_invitations.sql](
 | `POST` | `/api/auth/register/verify` | Configured Origin | `{ requestId, response }`; first verified account is admin, later accounts are pending |
 | `POST` | `/api/auth/login/options` | Configured Origin | Discoverable passkey login options |
 | `POST` | `/api/auth/login/verify` | Configured Origin | `{ requestId, response }`; verifies signature, UV, RP, origin and counter |
+| `POST` | `/api/auth/hostscreen/login` | Shared HOST key | `{ key }`; rate-limited login returning a `hostscreen` session |
+| `GET` | `/api/auth/account-info` | approved admin/member | Returns `{ user, HOST_SCREEN_LOGIN_KEY }`; key is null when unset |
+| `POST` | `/api/auth/app/token` | One-time code + S256 verifier | Native app exchange; no Origin, cookie or bearer token required |
 | `GET` | `/api/auth/me` | session | Authoritative `{ level, user, partyId, memberId, expiresAt }` |
 | `POST` | `/api/auth/logout` | session | Revoke this session and dependent guest sessions; 204 |
 | `GET` | `/api/auth/passkeys` | account | Public credential metadata for your account |
@@ -31,7 +34,31 @@ Apply all Flyway migrations, including [V5__Passkeys_and_party_invitations.sql](
 
 Options endpoints return `{ requestId, options }`. A successful sign-in returns `{ token, level, user, partyId, memberId, expiresAt }`. Pending registration returns 201 with `{ pending: true, message }`, without a token. Role is assigned server-side; registration cannot request admin access. Names are case-insensitively unique, 2-60 characters. Challenges expire after five minutes, are consumed on the first verification attempt, and do not survive restart. `Origin` must match a configured origin exactly; credentials are verified against that ceremony's RP ID. Passkey ceremonies are rate-limited to 30 requests per five minutes per client IP and challenge storage is bounded.
 
-Roles are `admin` or `member`; account status is `pending`, `approved` or `revoked`. Account changes invalidate all of the target's sessions and dependent invitations/guests. Self-revocation and removing the last approved admin are rejected. Passkey removal does not revoke existing sessions; logout or account revocation does.
+Passkey roles are `admin` or `member`; account status is `pending`, `approved` or `revoked`. Account changes invalidate all of the target's sessions, outstanding app codes and dependent invitations/guests. Self-revocation and removing the last approved admin are rejected. Passkey removal does not revoke existing sessions; logout or account revocation does.
+
+Apply [V7__Hostscreen_account.sql](db/migrations/V7__Hostscreen_account.sql) for the dedicated `HOSTSCREEN` account and `hostscreen` role. Configure the backend-only `HOST_SCREEN_LOGIN_KEY` with a long random secret; blank disables login (503), invalid keys return 401. This shared account can list active parties and join as organizer, then use queue/playback/invitation controls. It cannot create, rename, lock, unlock, end, delete, duplicate or reactivate parties, administer party members, join as guest (including authenticated invitation redemption), execute YouTube/ssMusic/member searches, enroll passkeys, read account info, or administer accounts. Party mutation routes return 403 even when HOSTSCREEN has organizer membership. Its role cannot be changed through `/auth/users/:id`. HOST sessions use the normal hashed tokens and 24-hour expiry. Each screen has a separate session but shares party membership with other screens. Changing the key requires a backend restart and does not revoke existing sessions. Never log login request bodies or account-info responses.
+
+### Android App Handoff
+
+`GET /app-login` is a frontend route on the configured HTTPS origin. It accepts exactly `redirect_uri=com.sskaraoke.player:/oauth/callback`, `code_challenge_method=S256`, `code_challenge`, and `state`. The latter two are 43-character unpadded base64url values. Unsupported callbacks/methods, missing or duplicate parameters, and fragments are rejected. The page requires a fresh passkey ceremony regardless of browser session state and offers registration, pending-approval feedback, cancellation and a **Return to app** fallback.
+
+For app sign-in, `/api/auth/login/options` receives `{ appLogin: { redirect_uri, code_challenge, code_challenge_method, state } }`; `/api/auth/register/options` also receives `name`. The server validates the app parameters and HTTPS origin before binding them to its single-use WebAuthn challenge. Verify endpoints still accept only `{ requestId, response }`; app parameters submitted at verification cannot replace the bound request. All existing signature, origin, RP ID, counter, user-handle and user-verification checks remain in force.
+
+A verified approved account returns `{ redirectUrl: "com.sskaraoke.player:/oauth/callback?code=...&state=..." }` instead of a browser session. The code is 32 random bytes encoded as 43 base64url characters and expires after two minutes. The original state is echoed unchanged. A first registration can authorize the initial administrator; later registrations return the normal pending response without a code. No existing browser session is copied into the app or replaced by the handoff.
+
+The native client posts JSON to `/api/auth/app/token`:
+
+```json
+{
+	"code": "<43-character authorization code>",
+	"code_verifier": "<43-character base64url verifier>",
+	"redirect_uri": "com.sskaraoke.player:/oauth/callback"
+}
+```
+
+The server hashes the verifier with SHA-256/base64url, locks the approved account, and atomically deletes the matching unexpired code before creating a session in the same transaction. Only a SHA-256 code hash is stored; codes are bound to their account, callback and challenge. A successful exchange returns HTTP 200 with the normal flat `{ token, level, user: { id, name, role }, partyId, memberId, expiresAt }`, where `level` is `member` or `admin`, the party/member fields are null, and expiry is a future ISO-8601 timestamp. Existing 24-hour lifetimes, `/api/auth/me`, logout and authorization checks are unchanged. Concurrent exchanges cannot issue multiple sessions.
+
+Malformed, expired, replayed, incorrectly bound or unapproved-account exchanges return 400 without a session. Exchange does not require browser cookies, an `Origin` header, or a fabricated browser identity. It uses the same 30-requests-per-five-minutes auth limiter (429 on exhaustion). The handoff page and auth responses use `Cache-Control: no-store`; the bundled proxy omits query strings from access logs. Do not log POST bodies, authorization codes, verifiers or tokens in additional proxies. No Android origin or Digital Asset Links entry is needed; both the app and browser must trust the configured HTTPS hostname's certificate.
 
 ### Parties
 
@@ -47,8 +74,8 @@ Roles are `admin` or `member`; account status is `pending`, `approved` or `revok
 | `POST` | `/api/parties/:id/join` | invitation or account | Redeem an invitation as guest, or join as the authenticated account |
 | `PATCH` | `/api/parties/:id` | 🔐 admin | Update party name |
 | `PATCH` | `/api/parties/:id/reactivate` | admin | Reactivate an ended party |
-| `PATCH` | `/api/parties/:id/lock` | party host / admin | Lock or unlock; caller-supplied member IDs are not authorization |
-| `DELETE` | `/api/parties/:id` | party host / admin | End a party and revoke invitations/guest sessions |
+| `PATCH` | `/api/parties/:id/lock` | passkey party host / admin | Lock or unlock; HOSTSCREEN is denied; caller-supplied member IDs are not authorization |
+| `DELETE` | `/api/parties/:id` | passkey party host / admin | End a party and revoke invitations/guest sessions; HOSTSCREEN is denied |
 | `DELETE` | `/api/parties/:id/remove` | admin | Permanently delete a party and all its data |
 | `GET` | `/api/parties/:id/members` | party member / admin | List members of the authorized party |
 | `GET` | `/api/parties/:id/members/:memberId` | own member / admin | Fetch your own membership |

@@ -21,6 +21,7 @@ A web-based, self-hosted karaoke queue system. Users can search for songs on You
 - 🔁 **Party Reactivation** — Ended parties can be reactivated without losing the member list or queue history
 - 🎨 **Themes** — Multiple colour themes selectable across the app
 - **Passkey Login** - WebAuthn with required user verification; the first account is admin and later accounts need approval. Password login is removed.
+- **Android App Login** - ssKaraoke Player signs in through the browser with a single-use, S256 PKCE-protected handoff.
 - **Host-bound QR Invitations** - Random, expiring invitations grant a separate guest identity and access to one party only. Host logout, access revocation, invitation replacement, or ending the party revokes that guest access.
 - ⚙️ **Admin / Settings Panel** — Dedicated settings page to manage all parties and their members; supports permanent party deletion
 - 📱 **Mobile-first** — Designed to be used on phones
@@ -278,6 +279,15 @@ Docker TLS settings: `HTTPS_CERT_PATH` and `HTTPS_KEY_PATH` select a custom pair
 
 ## Authentication
 
+### HOSTSCREEN Login
+
+Set `HOST_SCREEN_LOGIN_KEY` to a long random secret in the root `.env` for Docker, or in the backend environment for local development. An empty value disables HOST login. Apply migration `V7__Hostscreen_account.sql` before starting the updated backend; Docker Compose runs it automatically. It creates the dedicated `HOSTSCREEN` system account with API role `hostscreen`, without changing first-passkey administrator registration.
+
+Approved registered users can open **Account Info** from the three-dot menu to reveal or copy the key. On the login screen, choose **Login as HOST** and enter it. HOSTSCREEN can browse active parties and join only as **Organizer**, with playback, queue and invitation controls. It cannot create, rename, lock, unlock, end, delete, duplicate or reactivate parties, administer party members, search songs or members, join as Guest, enroll passkeys, retrieve the key, or manage accounts. Party administration is blocked by the API as well as hidden in the menu. The system account cannot be promoted through account administration.
+
+The key is shared across host screens, so protect it like a password and use HTTPS. It is sent only to authenticated approved passkey users, never embedded in the frontend build or stored in browser storage. Each HOST login receives an independent 24-hour session; sign-out revokes that session and its guest invitations. Changing the environment key and restarting the backend blocks new logins with the old key; existing sessions remain valid until logout or expiry. All screens share the same HOSTSCREEN membership within a party.
+
+
 Authentication uses SimpleWebAuthn, following the passkey enrollment model in ssMusic_Server. The first verified registration creates the approved administrator atomically. All later registrations are pending until an admin approves them in **Settings > Accounts**. Admins can assign Host (`member`) or Admin roles and revoke access. Account changes revoke that account's sessions and dependent guest access. At least one approved administrator must remain.
 
 **Settings > Passkeys** lists your credentials and allows adding another passkey or removing one while retaining at least one. Private keys stay in your authenticator. PostgreSQL stores public keys, counters, accounts, and SHA-256 session/invitation hashes. WebAuthn challenges require user verification, are single-use, expire after five minutes, and are bound to the configured origin and RP ID. Enrollment of an additional credential is also bound to the signed-in account/session.
@@ -287,6 +297,18 @@ Account sessions expire after 24 hours, survive backend restarts, and are stored
 Each QR display creates a new cryptographically random 256-bit invitation, valid for up to 12 hours and never beyond the host session. The secret is in the URL fragment (`/join/invite#invite=...`), not a public join code or URL sent to the server; the browser submits it in a POST body. Replacing that host session's QR revokes its previous invitation and derived guest sessions. Closing the QR panel does not revoke it; reopening generates a replacement. Sign out or end the party to revoke access when finished. Treat the QR/link as a bearer invitation: anyone who receives or photographs it can join that party while it remains valid. It is reusable by multiple guests, each receiving a distinct member/session, not a one-use ticket.
 
 Use HTTPS outside localhost and keep RP hostnames stable. A secondary origin can be configured as a matched origin/RP pair; unrelated hostnames need separately enrolled credentials. Run one backend instance: challenges, rate limits, Socket.IO rooms and media-ticket signing keys are process-local. Expired sessions are denied even if their rows have not yet been pruned. Already downloaded or buffered media cannot be recalled.
+
+### Android App Sign-In
+
+This server implements the browser handoff required by [ssKaraoke Player PR #10](https://github.com/skystream006/ssKaraoke_Player/pull/10). Rebuild both the frontend and backend and apply [V6__App_login_codes.sql](backend/db/migrations/V6__App_login_codes.sql) before using it. `docker compose up --build -d` applies migrations automatically; native installations must run Flyway first. Existing accounts, passkeys and party data are retained.
+
+Configure the phone-reachable HTTPS hostname as `PASSKEY_ORIGIN` with its matching `PASSKEY_RP_ID`. Both Android and its browser must trust the certificate. The frontend must serve `/app-login` and proxy `/api` on that same origin (`REACT_APP_API_URL=/api`); external authentication proxies must allow the native token exchange without requiring browser cookies. App sign-in does not support HTTP, including HTTP localhost, or raw IP RP IDs.
+
+The app opens `/app-login` with its fixed callback, S256 challenge and random state. That page always requires fresh browser WebAuthn, even when the browser is already signed in. Account creation uses the same first-admin and approval rules as the website. Pending accounts stay on the sign-in page until approved and successfully verified; cancelling does not sign out an existing browser session.
+
+After verification, the browser opens `com.sskaraoke.player:/oauth/callback?code=...&state=...` and also offers **Return to app**. Only a two-minute, single-use authorization code appears in that callback, never a session token. Android exchanges the code and its private verifier at `POST /api/auth/app/token` without an `Origin` header or browser cookies. PostgreSQL stores only the code hash, bound to the approved account, callback and challenge. Exchange checks approval again and creates a separate normal 24-hour account session. Account access changes invalidate outstanding codes as well as sessions. See the [backend contract](backend/README.md#android-app-handoff) for request and response details.
+
+Existing `/api/auth/me`, logout, permissions and invitation revocation apply unchanged to app sessions. Account/passkey management opens `/account` independently in the browser and may need a separate login. No Android WebAuthn origin or Digital Asset Links configuration is needed. PKCE prevents an app that intercepts the custom-scheme callback from redeeming the code without the verifier; it does not prove which installed app initiated the request. Start sign-in only from an app you trust. After deployment, verify the return-to-app flow on a real Android device.
 
 ### Upgrading from passwords
 

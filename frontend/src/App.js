@@ -1,12 +1,13 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
-import { LogOut } from 'lucide-react';
+import { LogOut, UserRound } from 'lucide-react';
 import WelcomePage from './pages/WelcomePage';
 import OrganizerPage from './pages/OrganizerPage';
 import GuestPage from './pages/GuestPage';
 import JoinPage, { InvitationJoinPage } from './pages/JoinPage';
 import SettingsPage from './pages/SettingsPage';
 import AccountPage from './pages/AccountPage';
+import AppLoginPage from './pages/AppLoginPage';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import PasskeyModal from './components/PasskeyModal';
 import ActionsMenu from './components/ActionsMenu';
@@ -19,6 +20,9 @@ function ProtectedRoute({ children, requiredLevel, accountOnly = false }) {
   const location = useLocation();
   if (initializing) return <div className="passkey-screen" role="status">Checking session...</div>;
   if (authLevel === 'none') return <PasskeyModal />;
+  if (authLevel === 'hostscreen' && location.pathname !== '/join' && !location.pathname.startsWith('/organizer/')) {
+    return <Navigate to="/join" replace />;
+  }
   if (authLevel === 'guest') {
     const guestPath = `/guest/${partyId}/${memberId}`;
     if (accountOnly || location.pathname !== guestPath) return <Navigate to={guestPath} replace />;
@@ -32,22 +36,26 @@ function ProtectedRoute({ children, requiredLevel, accountOnly = false }) {
 function AppRoutes() {
   const { logout, loading, error, authLevel } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const handleSwitchUser = async () => {
     if (await logout()) navigate('/', { replace: true });
   };
 
   const signOutAction = { label: 'Sign out', icon: LogOut, run: handleSwitchUser, disabled: loading };
-  const switchUserButton = <ActionsMenu label="Account actions" actions={[signOutAction]} />;
+  const accountInfoAction = ['admin', 'member'].includes(authLevel)
+    ? { label: 'Account Info', icon: UserRound, run: () => navigate('/account') } : null;
+  const switchUserButton = <ActionsMenu label="Account actions" actions={[accountInfoAction, signOutAction]} />;
 
   return (
     <>
-      {authLevel !== 'none' && error && <p className="error-msg" role="alert">{error}</p>}
+      {location.pathname !== '/app-login' && authLevel !== 'none' && error && <p className="error-msg" role="alert">{error}</p>}
       <Routes>
+        <Route path="/app-login" element={<AppLoginPage key={`${location.search}${location.hash}`} />} />
         <Route path="/" element={<ProtectedRoute accountOnly><WelcomePage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/join" element={<ProtectedRoute accountOnly><JoinPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
-        <Route path="/join/:joinCode" element={<InvitationJoinPage />} />
-        <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute accountOnly><OrganizerPage signOutAction={signOutAction} /></ProtectedRoute>} />
+        <Route path="/join/:joinCode" element={authLevel === 'hostscreen' ? <Navigate to="/join" replace /> : <InvitationJoinPage />} />
+        <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute accountOnly><OrganizerPage signOutAction={signOutAction} accountInfoAction={accountInfoAction} /></ProtectedRoute>} />
         <Route path="/guest/:partyId/:memberId" element={<ProtectedRoute><GuestPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/account" element={<ProtectedRoute accountOnly><AccountPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute requiredLevel="admin"><SettingsPage switchUserButton={switchUserButton} /></ProtectedRoute>} />

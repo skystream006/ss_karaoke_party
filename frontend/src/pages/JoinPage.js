@@ -9,7 +9,7 @@ import './JoinPage.css';
 
 export default function JoinPage({ switchUserButton }) {
   const navigate = useNavigate();
-  const { defaultUsername } = useAuth();
+  const { defaultUsername, authLevel } = useAuth();
 
   const [parties, setParties] = useState([]);
   const [loadingParties, setLoadingParties] = useState(true);
@@ -227,13 +227,13 @@ export default function JoinPage({ switchUserButton }) {
               <div className="form-group">
                 <label>Join as</label>
                 <div className="role-tabs">
-                  <button
+                  {authLevel !== 'hostscreen' && <button
                     type="button"
                     className={`role-tab ${joinRole === 'guest' ? 'active' : ''}`}
                     onClick={() => setJoinRole('guest')}
                   >
                     🎵 Guest
-                  </button>
+                  </button>}
                   <button
                     type="button"
                     className={`role-tab ${joinRole === 'organizer' ? 'active' : ''}`}

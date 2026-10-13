@@ -250,22 +250,24 @@ export default function GuestPage({ switchUserButton }) {
       {/* Header */}
       <header className="guest-header">
         <div className="guest-header-info">
-          <span className="party-badge">🎉 {party.name}</span>
+          <div className="guest-header-title">
+            {authLevel !== 'guest' && authLevel !== 'none' && (
+              <button
+                type="button"
+                className="home-button"
+                onClick={() => navigate('/')}
+                aria-label="Home"
+                title="Home"
+              >
+                <Home size={20} aria-hidden="true" />
+              </button>
+            )}
+            <span className="party-badge">🎉 {party.name}</span>
+          </div>
           {isLocked && <span className="locked-badge">🔒 Locked</span>}
           <span className="member-badge">👤 {memberName}</span>
         </div>
         <div className="guest-header-actions">
-          {authLevel !== 'guest' && authLevel !== 'none' && (
-            <button
-              type="button"
-              className="home-button"
-              onClick={() => navigate('/')}
-              aria-label="Home"
-              title="Home"
-            >
-              <Home size={20} aria-hidden="true" />
-            </button>
-          )}
           <ThemePicker />
           <button
             className="btn-audio-toggle"

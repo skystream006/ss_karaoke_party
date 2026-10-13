@@ -1,10 +1,11 @@
 const express = require('express');
-const { randomUUID } = require('node:crypto');
+const { randomUUID, timingSafeEqual, createHash } = require('node:crypto');
 const webauthnServer = require('@simplewebauthn/server');
 const pool = require('../db/db');
 const { createAuth, requireAccount, requireAdmin, publicSession, validId } = require('../middleware/auth');
 const { authLimiter } = require('../middleware/rateLimiter');
 const { authError, passkeyConfig, createChallenges } = require('../lib/passkeys');
+const { appLoginRequest, appTokenRequest, issueAppLoginCode, consumeAppLoginCode } = require('../lib/appLogin');
 
 function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings = process.env,
   challenges = createChallenges(), limiter = authLimiter } = {}) {
@@ -82,6 +83,7 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
 
   router.post('/register/options', limiter, route(async (req, res) => {
     const config = passkeyConfig(req.get('origin'), settings);
+    const appLogin = appLoginRequest(req.body.appLogin, config);
     const name = typeof req.body.name === 'string' ? req.body.name.trim().replace(/\s+/g, ' ') : '';
     if (name.length < 2 || name.length > 60 || /[\x00-\x1f\x7f]/.test(name)) {
       throw authError(400, 'Account names must contain 2 to 60 characters.');
@@ -90,7 +92,7 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
     if (existing.rows.length) throw authError(409, 'That account name is already registered.');
     const user = { id: randomUUID(), name };
     const options = await registrationOptions(user, config);
-    const requestId = challenges.issue({ ...config, kind: 'register', challenge: options.challenge, user });
+    const requestId = challenges.issue({ ...config, kind: 'register', challenge: options.challenge, user, appLogin });
     res.json({ requestId, options });
   }));
 
@@ -99,21 +101,23 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
     const credential = await verifyRegistration(req.body.response, request);
     const result = await transaction(async (client) => {
       await client.query('SELECT pg_advisory_xact_lock(1948271)');
-      const { rows } = await client.query('SELECT NOT EXISTS (SELECT 1 FROM auth_users) AS bootstrap');
+      const { rows } = await client.query("SELECT NOT EXISTS (SELECT 1 FROM auth_users WHERE role <> 'hostscreen') AS bootstrap");
       const bootstrap = rows[0].bootstrap;
       await client.query('INSERT INTO auth_users (id, name, role, status) VALUES ($1, $2, $3, $4)',
         [request.user.id, request.user.name, bootstrap ? 'admin' : 'member', bootstrap ? 'approved' : 'pending']);
       await saveCredential(client, request.user.id, credential, request.rpID);
-      return bootstrap ? sessionResult(request.user.id, client)
-        : { pending: true, message: 'Passkey registered. An administrator must approve your account before sign-in.' };
+      if (!bootstrap) return { pending: true, message: 'Passkey registered. An administrator must approve your account before sign-in.' };
+      return request.appLogin ? issueAppLoginCode(client, request.user.id, request.appLogin)
+        : sessionResult(request.user.id, client);
     });
     res.status(201).json(result);
   }));
 
   router.post('/login/options', limiter, route(async (req, res) => {
     const config = passkeyConfig(req.get('origin'), settings);
+    const appLogin = appLoginRequest(req.body.appLogin, config);
     const options = await webauthn.generateAuthenticationOptions({ rpID: config.rpID, userVerification: 'required' });
-    const requestId = challenges.issue({ ...config, kind: 'login', challenge: options.challenge });
+    const requestId = challenges.issue({ ...config, kind: 'login', challenge: options.challenge, appLogin });
     res.json({ requestId, options });
   }));
 
@@ -145,7 +149,35 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
       if (!verification.verified) throw authError(400, 'Passkey verification failed.');
       await client.query('UPDATE auth_credentials SET counter = $1, last_used_at = NOW() WHERE id = $2',
         [verification.authenticationInfo.newCounter, credential.id]);
-      return sessionResult(credential.user_id, client);
+      return request.appLogin ? issueAppLoginCode(client, credential.user_id, request.appLogin)
+        : sessionResult(credential.user_id, client);
+    });
+    res.json(result);
+  }));
+
+  router.post('/hostscreen/login', limiter, route(async (req, res) => {
+    const configuredKey = settings.HOST_SCREEN_LOGIN_KEY;
+    if (typeof configuredKey !== 'string' || !configuredKey.trim()) {
+      throw authError(503, 'HOST login is not configured.');
+    }
+    const key = req.body.key;
+    const digest = (value) => createHash('sha256').update(value).digest();
+    if (typeof key !== 'string' || !timingSafeEqual(digest(key), digest(configuredKey))) {
+      throw authError(401, 'Invalid HOST login key.');
+    }
+    const result = await transaction(async (client) => {
+      const { rows } = await client.query("SELECT id FROM auth_users WHERE role = 'hostscreen' AND status = 'approved' FOR UPDATE");
+      if (!rows.length) throw authError(403, 'HOSTSCREEN account is unavailable.');
+      return sessionResult(rows[0].id, client);
+    });
+    res.json(result);
+  }));
+
+  router.post('/app/token', limiter, route(async (req, res) => {
+    const request = appTokenRequest(req.body);
+    const result = await transaction(async (client) => {
+      const userId = await consumeAppLoginCode(client, request);
+      return sessionResult(userId, client);
     });
     res.json(result);
   }));
@@ -159,6 +191,9 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
   }));
 
   router.use(requireAccount);
+  router.get('/account-info', (req, res) => {
+    res.json({ user: req.auth.user, HOST_SCREEN_LOGIN_KEY: settings.HOST_SCREEN_LOGIN_KEY || null });
+  });
   router.get('/passkeys', route(async (req, res) => {
     const { rows } = await database.query(
       'SELECT id, transports, rp_id, created_at, last_used_at FROM auth_credentials WHERE user_id = $1 ORDER BY created_at',
@@ -218,6 +253,7 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
       const { rows } = await client.query('SELECT * FROM auth_users WHERE id = $1 FOR UPDATE', [req.params.id]);
       const target = rows[0];
       if (!target) throw authError(404, 'Account not found.');
+      if (target.role === 'hostscreen') throw authError(403, 'The HOSTSCREEN system account cannot be changed here.');
       const nextRole = role || target.role;
       const nextStatus = status || target.status;
       if (target.id === req.auth.userId && nextStatus !== 'approved') throw authError(409, 'You cannot revoke your own access.');
@@ -228,6 +264,7 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
       const result = await client.query('UPDATE auth_users SET role = $1, status = $2 WHERE id = $3 RETURNING id, name, role, status, created_at',
         [nextRole, nextStatus, target.id]);
       await client.query('DELETE FROM auth_sessions WHERE user_id = $1', [target.id]);
+      await client.query('DELETE FROM auth_app_codes WHERE user_id = $1', [target.id]);
       return result.rows[0];
     });
     req.app.get('io')?.in(`user:${user.id}`).disconnectSockets(true);

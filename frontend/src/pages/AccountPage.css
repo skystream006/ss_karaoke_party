@@ -33,6 +33,12 @@
 .account-user-row label { display: grid; gap: 6px; font-size: 13px; color: var(--text-secondary); min-width: 0; }
 .account-user-row select { width: 100%; min-width: 0; padding: 10px; color: var(--text-primary); border: 1px solid var(--border); background: var(--bg-card); border-radius: 6px; font-size: 14px; }
 .account-page .error-msg { margin-block: 16px; }
+.account-info-details { display: grid; gap: 10px; margin-bottom: 20px; }
+.account-info-details > div { display: grid; grid-template-columns: 90px minmax(0, 1fr); gap: 12px; }
+.account-info-details dd { overflow-wrap: anywhere; }
+.account-host-key-label { display: block; font-size: 13px; overflow-wrap: anywhere; margin-bottom: 8px; }
+.account-host-key { display: grid; grid-template-columns: minmax(0, 1fr) 38px 38px; gap: 8px; max-width: 640px; }
+.account-host-key input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); font-family: monospace; }
 
 @media (max-width: 600px) {
   .account-page { padding: 16px; }

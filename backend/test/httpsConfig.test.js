@@ -54,6 +54,13 @@ test('Nginx redirects to a fixed origin and proxies HTTPS APIs and WebSocket upg
   assert.match(rendered, /proxy_set_header Upgrade \$http_upgrade;/);
   assert.match(rendered, /proxy_set_header X-Forwarded-Proto \$scheme;/);
   assert.match(rendered, /ssl_certificate "\/var\/lib\/karaoke\/tls\/server-cert.pem";/);
+  const appLoginLocation = rendered.match(/location [^{]*app-login[^{]*\{([^}]+)\}/)?.[1];
+  assert.ok(appLoginLocation);
+  assert.match(appLoginLocation, /try_files \/index.html =404;/);
+  for (const header of ['Cache-Control "no-store"', 'Referrer-Policy "no-referrer"',
+    'X-Content-Type-Options "nosniff"', 'X-Frame-Options "DENY"']) {
+    assert.ok(appLoginLocation.includes(`add_header ${header} always;`));
+  }
   assert.doesNotMatch(rendered, /__HTTPS_/);
 });
 

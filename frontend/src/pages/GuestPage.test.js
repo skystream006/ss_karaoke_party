@@ -69,8 +69,10 @@ test('passkey-signed-in guests can go home without signing out', async () => {
   useAuth.mockReturnValue({ authLevel: 'admin' });
   const switchUser = jest.fn();
   await renderGuest(<button type="button" onClick={switchUser}>Sign out</button>);
-  const homeButton = container.querySelector('.guest-header-actions [aria-label="Home"]');
+  const homeButton = container.querySelector('.guest-header-title [aria-label="Home"]');
   expect(homeButton).not.toBeNull();
+  expect(homeButton.nextElementSibling.classList.contains('party-badge')).toBe(true);
+  expect(homeButton.nextElementSibling.textContent).toContain('Friday');
   expect(homeButton.classList.contains('home-button')).toBe(true);
   expect(homeButton.title).toBe('Home');
   act(() => { Simulate.click(homeButton); });
@@ -81,7 +83,7 @@ test('passkey-signed-in guests can go home without signing out', async () => {
 test.each(['guest', 'none'])('does not show the header Home button for %s sessions', async (authLevel) => {
   useAuth.mockReturnValue({ authLevel });
   await renderGuest();
-  expect(container.querySelector('.guest-header-actions [aria-label="Home"]')).toBeNull();
+  expect(container.querySelector('.guest-header [aria-label="Home"]')).toBeNull();
 });
 
 test('places the sign-out action immediately after Status', async () => {

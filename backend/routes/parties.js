@@ -3,7 +3,7 @@ const router = express.Router();
 const pool = require('../db/db');
 const { randomInt } = require('node:crypto');
 const { writeLimiter } = require('../middleware/rateLimiter');
-const { requireAdmin, requireAuth, requireAccount, requirePartyAccess, requirePartyHost, validId } = require('../middleware/auth');
+const { requireAdmin, requireAuth, requireAccount, requireOrganizerAccount, requirePartyAccess, requirePartyHost, validId } = require('../middleware/auth');
 const { createPartyInvitations } = require('../lib/partyInvitations');
 
 const invitations = createPartyInvitations();
@@ -20,8 +20,14 @@ router.post('/invitations/resolve', writeLimiter, async (req, res) => {
 });
 
 router.post('/:id/join', writeLimiter, (req, res, next) => {
-  if (req.body.invitation !== undefined) return next();
-  requireAuth(req, res, () => requireAccount(req, res, next));
+  if (req.body.invitation !== undefined) {
+    if (!req.headers.authorization) return next();
+    return requireAuth(req, res, () => {
+      if (req.auth.level === 'hostscreen') return res.status(403).json({ error: 'HOSTSCREEN can only join as Organizer.' });
+      next();
+    });
+  }
+  requireAuth(req, res, () => requireOrganizerAccount(req, res, next));
 }, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {
@@ -30,6 +36,9 @@ router.post('/:id/join', writeLimiter, (req, res, next) => {
     }
     const name = typeof req.body.name === 'string' && req.body.name.trim() ? req.body.name.trim() : req.auth.user.name;
     const role = req.body.role === undefined ? 'organizer' : req.body.role;
+    if (req.auth.level === 'hostscreen' && role !== 'organizer') {
+      return res.status(403).json({ error: 'HOSTSCREEN can only join as Organizer.' });
+    }
     if (!validId(req.params.id) || name.length > 60 || !['organizer', 'guest'].includes(role)) {
       return res.status(400).json({ error: 'Invalid party membership.' });
     }
@@ -76,7 +85,7 @@ function generateJoinCode() {
 }
 
 // GET /api/parties - List all active parties
-router.get('/', requireAccount, async (req, res) => {
+router.get('/', requireOrganizerAccount, async (req, res) => {
   try {
     const result = await pool.query(
       'SELECT id, name, join_code, is_locked, created_at FROM parties WHERE is_active = true ORDER BY created_at DESC'
@@ -297,7 +306,7 @@ router.patch('/:id/reactivate', requireAdmin, async (req, res) => {
 });
 
 // PATCH /api/parties/:id/lock - Lock or unlock a party — admin or organizer
-router.patch('/:id/lock', writeLimiter, requirePartyHost, async (req, res) => {
+router.patch('/:id/lock', writeLimiter, requireAccount, requirePartyHost, async (req, res) => {
   const { is_locked } = req.body;
   if (typeof is_locked !== 'boolean') {
     return res.status(400).json({ error: 'is_locked must be a boolean' });
@@ -323,7 +332,7 @@ router.patch('/:id/lock', writeLimiter, requirePartyHost, async (req, res) => {
 });
 
 // DELETE /api/parties/:id - End a party (organizer only)
-router.delete('/:id', requirePartyHost, async (req, res) => {
+router.delete('/:id', requireAccount, requirePartyHost, async (req, res) => {
   try {
     await pool.query(
       `WITH ended AS (UPDATE parties SET is_active = false WHERE id = $1 RETURNING id)
@@ -406,7 +415,9 @@ router.patch('/:id/members/:memberId', writeLimiter, requireAdmin, async (req, r
     await client.query('BEGIN');
     const result = await client.query(
       `UPDATE party_members SET name = $1, role = $2 WHERE id = $3 AND party_id = $4
-       AND ($2 = 'guest' OR user_id IS NOT NULL) RETURNING id, party_id, name, role, joined_at`,
+        AND ($2 = 'guest' OR user_id IS NOT NULL)
+        AND ($2 = 'organizer' OR NOT EXISTS (SELECT 1 FROM auth_users WHERE id = party_members.user_id AND role = 'hostscreen'))
+        RETURNING id, party_id, name, role, joined_at`,
       [name.trim(), memberRole, req.params.memberId, req.params.id]
     );
     if (result.rows.length === 0) {

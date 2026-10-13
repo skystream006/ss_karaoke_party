@@ -7,7 +7,8 @@ const { Pool } = require('pg');
 const express = require('express');
 const { isoCBOR } = require('@simplewebauthn/server/helpers');
 
-const origin = 'http://localhost:3000';
+const origin = 'https://party.example.test';
+const hostScreenKey = 'integration-only-hostscreen-key';
 const digest = (value) => createHash('sha256').update(value).digest();
 
 function authenticator() {
@@ -67,24 +68,31 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
   }
   require.cache[require.resolve('../db/db')] = { exports: database };
   const { createAuth, hashToken } = require('../middleware/auth');
+  const { APP_REDIRECT_URI } = require('../lib/appLogin');
   const auth = createAuth({ database });
   const { createAuthRoutes } = require('../routes/auth');
   const app = express();
   app.use(express.json({ limit: '64kb' }));
-  app.use('/api/auth', createAuthRoutes({ database, settings: { PASSKEY_ORIGIN: origin }, limiter: (req, res, next) => next() }));
+  app.use('/api/auth', createAuthRoutes({ database, settings: { PASSKEY_ORIGIN: origin, HOST_SCREEN_LOGIN_KEY: hostScreenKey }, limiter: (req, res, next) => next() }));
   app.use('/api/parties', require('../routes/parties'));
   app.use('/api/queue', auth.requireAuth, require('../routes/queue'));
+  app.use('/api/youtube', auth.requireAuth, require('../routes/youtube'));
+  app.use('/api/ssmusic', auth.requireAuth, require('../routes/ssmusic').createSsmusicRoutes({
+    database, auth, client: { request: async () => { throw new Error('HOSTSCREEN must never call upstream search'); } },
+  }).apiRouter);
   server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   const baseUrl = `http://127.0.0.1:${server.address().port}/api`;
   delete process.env.YOUTUBE_API_KEY;
 
   async function request(endpoint, { method = 'GET', body, token, requestOrigin = origin } = {}) {
-    const headers = { 'Content-Type': 'application/json', Origin: requestOrigin };
+    const headers = { 'Content-Type': 'application/json' };
+    if (requestOrigin !== null) headers.Origin = requestOrigin;
     if (token) headers.Authorization = `Bearer ${token}`;
     const response = await fetch(`${baseUrl}${endpoint}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     const text = await response.text();
-    return { status: response.status, data: text ? JSON.parse(text) : null };
+    return { status: response.status, data: text ? JSON.parse(text) : null,
+      cacheControl: response.headers.get('cache-control') };
   }
   const post = (endpoint, body, token) => request(endpoint, { method: 'POST', body, token });
   const expect = (response, status) => {
@@ -96,7 +104,30 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     return post('/auth/login/verify', { requestId: options.requestId, response: key.login(options.options, changes) });
   }
 
+  function appRequest() {
+    const verifier = randomBytes(32).toString('base64url');
+    return { verifier, parameters: { redirect_uri: APP_REDIRECT_URI, code_challenge_method: 'S256',
+      code_challenge: digest(verifier).toString('base64url'), state: randomBytes(32).toString('base64url') } };
+  }
+  async function authorizeApp(key) {
+    const flow = appRequest();
+    const options = expect(await post('/auth/login/options', { appLogin: flow.parameters }), 200);
+    const response = await post('/auth/login/verify', { requestId: options.requestId,
+      response: key.login(options.options), appLogin: appRequest().parameters });
+    const authorization = expect(response, 200);
+    assert.deepEqual(Object.keys(authorization), ['redirectUrl']);
+    assert.equal(response.cacheControl, 'no-store');
+    const callback = new URL(authorization.redirectUrl);
+    const code = callback.searchParams.get('code');
+    assert.match(code, /^[A-Za-z0-9_-]{43}$/);
+    assert.equal(authorization.redirectUrl, `${APP_REDIRECT_URI}?code=${code}&state=${flow.parameters.state}`);
+    return { ...flow, code };
+  }
+  const exchange = (flow, changes = {}) => request('/auth/app/token', { method: 'POST', requestOrigin: null,
+    body: { code: flow.code, code_verifier: flow.verifier, redirect_uri: APP_REDIRECT_URI, ...changes } });
+
   let admin;
+  let adminKey;
   let member;
   let memberKey;
   let pendingId;
@@ -111,6 +142,7 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     assert.equal(results.filter((result) => result.data.level === 'admin').length, 1);
     const pendingIndex = results.findIndex((result) => result.data.pending);
     memberKey = candidates[pendingIndex].key;
+    adminKey = candidates[results.findIndex((result) => result.data.token)].key;
     admin = results.find((result) => result.data.token).data;
     const rows = (await database.query('SELECT * FROM auth_users')).rows;
     assert.equal(rows.filter((user) => user.status === 'approved' && user.role === 'admin').length, 1);
@@ -136,6 +168,77 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     expect(await request(`/auth/users/${admin.user.id}`, { method: 'PATCH', token: admin.token, body: { status: 'revoked' } }), 409);
   });
 
+  await context.test('HOSTSCREEN key login grants only organizer entry and cannot search, create parties or manage accounts', async () => {
+    expect(await request('/auth/account-info'), 401);
+    for (const account of [admin, member]) {
+      const info = await request('/auth/account-info', { token: account.token });
+      assert.equal(expect(info, 200).HOST_SCREEN_LOGIN_KEY, hostScreenKey);
+      assert.equal(info.cacheControl, 'no-store');
+    }
+    expect(await post('/auth/hostscreen/login', { key: 'incorrect' }), 401);
+    const response = await post('/auth/hostscreen/login', { key: hostScreenKey, role: 'admin' });
+    const screen = expect(response, 200);
+    assert.equal(response.cacheControl, 'no-store');
+    assert.equal(screen.level, 'hostscreen');
+    assert.equal(screen.user.name, 'HOSTSCREEN');
+    assert.equal(screen.user.role, 'hostscreen');
+    assert.equal(JSON.stringify(screen).includes(hostScreenKey), false);
+    assert.equal(expect(await request('/auth/me', { token: screen.token }), 200).level, 'hostscreen');
+    const anotherScreen = expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 200);
+    assert.equal(anotherScreen.user.id, screen.user.id);
+    assert.notEqual(anotherScreen.token, screen.token);
+    for (const endpoint of ['/auth/account-info', '/auth/passkeys', '/auth/users', '/parties/all',
+      '/parties/members/search?name=Alex', '/parties/members/names', '/youtube/search?q=music',
+      '/youtube/video?url=dQw4w9WgXcQ', '/ssmusic/search?q=music']) {
+      expect(await request(endpoint, { token: screen.token }), 403);
+    }
+    expect(await post('/auth/passkeys/options', {}, screen.token), 403);
+    expect(await post('/parties', { name: 'Denied', organizer_name: 'Screen' }, screen.token), 403);
+    expect(await request(`/auth/users/${screen.user.id}`, { method: 'PATCH', token: admin.token, body: { role: 'admin' } }), 403);
+    const created = expect(await post('/parties', { name: 'Screen test', organizer_name: 'Host' }, member.token), 201);
+    const partyId = created.party.id;
+    expect(await request(`/parties/${partyId}`, { token: screen.token }), 403);
+    assert.ok(expect(await request('/parties', { token: screen.token }), 200).some((party) => party.id === partyId));
+    expect(await post(`/parties/${partyId}/join`, { role: 'guest' }, screen.token), 403);
+    const joined = expect(await post(`/parties/${partyId}/join`, {}, screen.token), 201);
+    assert.equal(joined.role, 'organizer');
+    expect(await request(`/parties/${partyId}`, { token: screen.token }), 200);
+    expect(await request(`/queue/${partyId}`, { token: screen.token }), 200);
+    for (const [method, endpoint, body] of [
+      ['PATCH', `/parties/${partyId}/lock`, { is_locked: true }],
+      ['PATCH', `/parties/${partyId}/lock`, { is_locked: false }],
+      ['PATCH', `/parties/${partyId}`, { name: 'Changed by screen' }],
+      ['PATCH', `/parties/${partyId}/reactivate`, {}],
+      ['POST', `/parties/${partyId}/duplicate`, {}],
+      ['DELETE', `/parties/${partyId}`, undefined],
+      ['DELETE', `/parties/${partyId}/remove`, undefined],
+      ['PATCH', `/parties/${partyId}/members/${joined.id}`, { name: 'Changed', role: 'organizer' }],
+      ['DELETE', `/parties/${partyId}/members/${joined.id}`, undefined],
+    ]) {
+      expect(await request(endpoint, { method, body, token: screen.token }), 403);
+    }
+    const unchangedParty = expect(await request(`/parties/${partyId}`, { token: screen.token }), 200);
+    assert.equal(unchangedParty.name, 'Screen test');
+    assert.equal(unchangedParty.is_active, true);
+    assert.equal(unchangedParty.is_locked, false);
+    expect(await request(`/parties/${partyId}/lock`, { method: 'PATCH', token: member.token, body: { is_locked: true } }), 200);
+    expect(await request(`/parties/${partyId}/lock`, { method: 'PATCH', token: screen.token, body: { is_locked: false } }), 403);
+    assert.equal(expect(await request(`/parties/${partyId}`, { token: screen.token }), 200).is_locked, true);
+    expect(await request(`/parties/${partyId}/lock`, { method: 'PATCH', token: member.token, body: { is_locked: false } }), 200);
+    expect(await request(`/parties/${partyId}/members/${joined.id}`, {
+      method: 'PATCH', token: admin.token, body: { name: 'Screen', role: 'guest' },
+    }), 404);
+    const invitation = expect(await post(`/parties/${partyId}/invitations`, {}, screen.token), 201);
+    expect(await post(`/parties/${partyId}/join`, { name: 'Screen guest', invitation: invitation.token }, screen.token), 403);
+    const guest = expect(await post(`/parties/${partyId}/join`, { name: 'Invited guest', invitation: invitation.token }), 201);
+    expect(await request('/auth/account-info', { token: guest.token }), 403);
+    expect(await post('/auth/logout', {}, screen.token), 204);
+    expect(await request('/auth/me', { token: screen.token }), 401);
+    expect(await request('/auth/me', { token: guest.token }), 401);
+    expect(await post('/auth/logout', {}, anotherScreen.token), 204);
+    expect(await request(`/parties/${partyId}/remove`, { method: 'DELETE', token: admin.token }), 200);
+  });
+
   await context.test('additional passkeys are bound to the signed-in account and its single-use session challenge', async () => {
     const key = authenticator();
     const first = expect(await post('/auth/passkeys/options', {}, admin.token), 200);
@@ -150,6 +253,96 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     expect(await request(`/auth/passkeys/${key.id}`, { method: 'DELETE', token: member.token }), 404);
     expect(await request(`/auth/passkeys/${key.id}`, { method: 'DELETE', token: admin.token }), 204);
     expect(await request(`/auth/passkeys/${passkeys.find((entry) => entry.id !== key.id).id}`, { method: 'DELETE', token: admin.token }), 409);
+  });
+
+  await context.test('app codes require fresh WebAuthn and cannot bypass signature, origin or user verification', async () => {
+    const flow = appRequest();
+    for (const parameters of [{ ...flow.parameters, redirect_uri: 'https://attacker.test' },
+      { ...flow.parameters, code_challenge_method: 'plain' }, { ...flow.parameters, state: [] }]) {
+      expect(await post('/auth/login/options', { appLogin: parameters }, admin.token), 400);
+    }
+    for (const changes of [{ verified: false }, { tamper: true }, { requestOrigin: 'https://attacker.test' }]) {
+      const options = expect(await post('/auth/login/options', { appLogin: flow.parameters }, admin.token), 200);
+      const body = { requestId: options.requestId, response: memberKey.login(options.options, changes) };
+      expect(await post('/auth/login/verify', body, admin.token), 400);
+      expect(await post('/auth/login/verify', body, admin.token), 400);
+    }
+    assert.equal((await database.query('SELECT * FROM auth_app_codes')).rows.length, 0);
+  });
+
+  await context.test('native app exchange needs no Origin or cookies and concurrent redemption issues only one session', async () => {
+    for (const [key, account] of [[memberKey, member], [adminKey, admin]]) {
+      const before = Number((await database.query('SELECT COUNT(*) FROM auth_sessions')).rows[0].count);
+      const flow = await authorizeApp(key);
+      assert.equal(Number((await database.query('SELECT COUNT(*) FROM auth_sessions')).rows[0].count), before);
+      const stored = (await database.query('SELECT * FROM auth_app_codes WHERE code_hash = $1', [hashToken(flow.code)])).rows[0];
+      assert.equal(stored.user_id, account.user.id);
+      assert.equal(stored.code_challenge, flow.parameters.code_challenge);
+      assert.equal(stored.redirect_uri, APP_REDIRECT_URI);
+      assert.ok(stored.expires_at.getTime() > Date.now());
+      assert.ok(stored.expires_at.getTime() <= Date.now() + 2 * 60 * 1000);
+      assert.equal(JSON.stringify(stored).includes(flow.code), false);
+      const responses = await Promise.all([exchange(flow), exchange(flow)]);
+      assert.deepEqual(responses.map((response) => response.status).sort(), [200, 400]);
+      const response = responses.find((result) => result.status === 200);
+      assert.equal(response.cacheControl, 'no-store');
+      const session = response.data;
+      assert.equal(session.level, account.level);
+      assert.equal(session.user.name, account.user.name);
+      assert.equal(session.user.id, account.user.id);
+      assert.notEqual(session.token, account.token);
+      assert.ok(Date.parse(session.expiresAt) > Date.now());
+      assert.match(session.expiresAt, /Z$/);
+      assert.equal(Number((await database.query('SELECT COUNT(*) FROM auth_sessions')).rows[0].count), before + 1);
+      expect(await exchange(flow), 400);
+      expect(await request('/auth/me', { token: session.token, requestOrigin: null }), 200);
+      expect(await request('/auth/logout', { method: 'POST', token: session.token, requestOrigin: null, body: {} }), 204);
+      expect(await request('/auth/me', { token: session.token, requestOrigin: null }), 401);
+      expect(await request('/auth/me', { token: account.token }), 200);
+    }
+  });
+
+  await context.test('app codes reject wrong verifiers, callbacks and expiry without issuing sessions', async () => {
+    const flow = await authorizeApp(memberKey);
+    expect(await exchange(flow, { code_verifier: randomBytes(32).toString('base64url') }), 400);
+    expect(await exchange(flow, { redirect_uri: `${APP_REDIRECT_URI}/` }), 400);
+    expect(await exchange(flow, { code: ['invalid'] }), 400);
+    expect(await exchange(flow), 200);
+    const expired = await authorizeApp(memberKey);
+    await database.query("UPDATE auth_app_codes SET expires_at = NOW() - INTERVAL '1 second' WHERE code_hash = $1", [hashToken(expired.code)]);
+    expect(await exchange(expired), 400);
+  });
+
+  await context.test('app registration waits for approval and successful sign-in must follow approval', async () => {
+    const key = authenticator();
+    const flow = appRequest();
+    const options = expect(await post('/auth/register/options', { name: 'App applicant', appLogin: flow.parameters }), 200);
+    const registration = expect(await post('/auth/register/verify', { requestId: options.requestId,
+      response: key.register(options.options) }), 201);
+    assert.equal(registration.pending, true);
+    assert.equal(registration.token, undefined);
+    assert.equal(registration.redirectUrl, undefined);
+    const pending = expect(await post('/auth/login/options', { appLogin: flow.parameters }), 200);
+    expect(await post('/auth/login/verify', { requestId: pending.requestId, response: key.login(pending.options) }), 403);
+    const userId = (await database.query("SELECT id FROM auth_users WHERE name = 'App applicant'")).rows[0].id;
+    expect(await request(`/auth/users/${userId}`, { method: 'PATCH', token: admin.token, body: { status: 'approved' } }), 200);
+    assert.equal(expect(await exchange(await authorizeApp(key)), 200).user.id, userId);
+  });
+
+  await context.test('exchange rechecks account approval and access changes cannot resurrect outstanding codes', async () => {
+    const flow = await authorizeApp(memberKey);
+    for (const status of ['pending', 'revoked']) {
+      await database.query('UPDATE auth_users SET status = $1 WHERE id = $2', [status, member.user.id]);
+      expect(await exchange(flow), 400);
+    }
+    expect(await request(`/auth/users/${member.user.id}`, { method: 'PATCH', token: admin.token, body: { status: 'approved' } }), 200);
+    expect(await exchange(flow), 400);
+    const next = await authorizeApp(memberKey);
+    expect(await request(`/auth/users/${member.user.id}`, { method: 'PATCH', token: admin.token, body: { status: 'revoked' } }), 200);
+    expect(await exchange(next), 400);
+    expect(await request(`/auth/users/${member.user.id}`, { method: 'PATCH', token: admin.token, body: { status: 'approved' } }), 200);
+    expect(await exchange(next), 400);
+    member = expect(await login(memberKey), 200);
   });
 
   const firstParty = expect(await post('/parties', { name: 'Party one', organizer_name: 'Host one' }, admin.token), 201);

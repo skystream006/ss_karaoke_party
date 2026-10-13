@@ -59,6 +59,7 @@ services:
       PASSKEY_RP_ID_SECONDARY: ${PASSKEY_RP_ID_SECONDARY:-}
       PASSKEY_ORIGIN_SECONDARY: ${PASSKEY_ORIGIN_SECONDARY:-}
       TRUST_PROXY: ${TRUST_PROXY:-1}
+      HOST_SCREEN_LOGIN_KEY: ${HOST_SCREEN_LOGIN_KEY:-}
     volumes:
       - ./certs:/app/certs:ro
     ports:

@@ -52,22 +52,31 @@ export function AuthProvider({ children }) {
     return () => window.removeEventListener('auth:expired', expired);
   }, [clearSession]);
 
-  const ceremony = useCallback(async (kind, name) => {
+  const ceremony = useCallback(async (kind, name, appLogin) => {
     setLoading(true);
     setError('');
     setNotice('');
     try {
       const headers = kind === 'passkeys' ? { Authorization: `Bearer ${session?.token}` } : {};
-      const { data } = await axios.post(`${API_BASE}/auth/${kind}/options`, name ? { name } : {}, { headers });
+      const payload = name ? { name } : {};
+      if (appLogin) payload.appLogin = appLogin;
+      const { data } = await axios.post(`${API_BASE}/auth/${kind}/options`, payload, { headers });
       const response = kind === 'login'
         ? await startAuthentication({ optionsJSON: data.options })
         : await startRegistration({ optionsJSON: data.options });
       const result = await axios.post(`${API_BASE}/auth/${kind}/verify`, { requestId: data.requestId, response }, { headers });
-      if (result.data.token) persistSession(result.data);
       if (result.data.pending) {
         setNotice(result.data.message);
         return 'pending';
       }
+      if (appLogin) {
+        if (typeof result.data.redirectUrl !== 'string') {
+          setError('The server did not return an app sign-in code. Start sign-in again from the app.');
+          return false;
+        }
+        return { redirectUrl: result.data.redirectUrl };
+      }
+      if (result.data.token) persistSession(result.data);
       return true;
     } catch (err) {
       setError(err.response?.data?.error || (err.name === 'NotAllowedError'
@@ -78,9 +87,25 @@ export function AuthProvider({ children }) {
     }
   }, [persistSession, session?.token]);
 
-  const login = useCallback(() => ceremony('login'), [ceremony]);
-  const register = useCallback((name) => ceremony('register', name), [ceremony]);
+  const login = useCallback((appLogin) => ceremony('login', undefined, appLogin), [ceremony]);
+  const register = useCallback((name, appLogin) => ceremony('register', name, appLogin), [ceremony]);
   const addPasskey = useCallback(() => ceremony('passkeys'), [ceremony]);
+
+  const loginHost = useCallback(async (key) => {
+    setLoading(true);
+    setError('');
+    setNotice('');
+    try {
+      const { data } = await axios.post(`${API_BASE}/auth/hostscreen/login`, { key });
+      persistSession(data);
+      return true;
+    } catch (failure) {
+      setError(failure.response?.data?.error || 'HOST login failed.');
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, [persistSession]);
 
   const acceptInvitation = useCallback((result) => {
     if (!result.token || result.level !== 'guest' || !result.partyId || !result.memberId) {
@@ -115,7 +140,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{ authToken: session?.token || null, authLevel: session?.level || 'none',
       user: session?.user, partyId: session?.partyId, memberId: session?.memberId,
-      defaultUsername, initializing, loading, error, notice, login, register, addPasskey, acceptInvitation, logout, clearError }}>
+      defaultUsername, initializing, loading, error, notice, login, loginHost, register, addPasskey, acceptInvitation, logout, clearError }}>
       {children}
     </AuthContext.Provider>
   );

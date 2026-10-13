@@ -16,7 +16,8 @@
 .passkey-brand { color: var(--accent, #6c63ff); }
 .passkey-panel h1 { font-size: 28px; margin: 16px 0 8px; letter-spacing: 0; }
 .passkey-panel h2 { font-size: 18px; font-weight: 500; margin: 0 0 28px; }
-.passkey-panel form { display: grid; gap: 12px; }
+.passkey-panel form, .passkey-actions { display: grid; gap: 12px; }
+.passkey-actions, .passkey-panel .passkey-notice + form { margin-top: 12px; }
 .passkey-panel .form-group { text-align: left; margin: 0; min-width: 0; }
 .passkey-panel .btn { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 46px; white-space: normal; }
 .passkey-panel .error-msg, .passkey-notice { overflow-wrap: anywhere; font-size: 14px; line-height: 1.5; }

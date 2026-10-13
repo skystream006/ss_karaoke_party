@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const axios = require('axios');
+const { forbidHostscreen } = require('../middleware/auth');
+
+router.use(forbidHostscreen);
 
 const VIDEO_ID_PATTERN = /^[A-Za-z0-9_-]{11}$/;
 
