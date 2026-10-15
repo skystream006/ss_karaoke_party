@@ -187,7 +187,7 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     const anotherScreen = expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 200);
     assert.equal(anotherScreen.user.id, screen.user.id);
     assert.notEqual(anotherScreen.token, screen.token);
-    for (const endpoint of ['/auth/account-info', '/auth/passkeys', '/auth/users', '/parties/all',
+    for (const endpoint of ['/auth/account-info', '/auth/hostscreen/login-attempts', '/auth/passkeys', '/auth/users', '/parties/all',
       '/parties/members/search?name=Alex', '/parties/members/names', '/youtube/search?q=music',
       '/youtube/video?url=dQw4w9WgXcQ', '/ssmusic/search?q=music']) {
       expect(await request(endpoint, { token: screen.token }), 403);
@@ -232,11 +232,112 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     expect(await post(`/parties/${partyId}/join`, { name: 'Screen guest', invitation: invitation.token }, screen.token), 403);
     const guest = expect(await post(`/parties/${partyId}/join`, { name: 'Invited guest', invitation: invitation.token }), 201);
     expect(await request('/auth/account-info', { token: guest.token }), 403);
+    expect(await request('/auth/hostscreen/login-attempts', { token: guest.token }), 403);
+    expect(await request('/auth/hostscreen/login-attempts', { method: 'DELETE', token: guest.token }), 403);
     expect(await post('/auth/logout', {}, screen.token), 204);
     expect(await request('/auth/me', { token: screen.token }), 401);
     expect(await request('/auth/me', { token: guest.token }), 401);
     expect(await post('/auth/logout', {}, anotherScreen.token), 204);
     expect(await request(`/parties/${partyId}/remove`, { method: 'DELETE', token: admin.token }), 200);
+  });
+
+  await context.test('HOST login records persist without secrets and only admins can paginate them', async () => {
+    const endpoint = '/auth/hostscreen/login-attempts';
+    expect(await request(endpoint), 401);
+    expect(await request(endpoint, { token: member.token }), 403);
+    const initialResponse = await request(endpoint, { token: admin.token });
+    const initial = expect(initialResponse, 200);
+    assert.equal(initialResponse.cacheControl, 'no-store');
+    assert.equal(initial.items.length, 1);
+    assert.equal(initial.items[0].outcome, 'invalid_key');
+    assert.ok(initial.items[0].ip_address.includes('127.0.0.1'));
+    assert.ok(Number.isFinite(Date.parse(initial.items[0].occurred_at)));
+    assert.deepEqual(Object.keys(initial.items[0]).sort(), ['id', 'ip_address', 'occurred_at', 'outcome']);
+    assert.equal(JSON.stringify(initial).includes(hostScreenKey), false);
+    for (let attempt = 0; attempt < 7; attempt += 1) {
+      expect(await post('/auth/hostscreen/login', { key: 'audit-test-invalid-key' }), 401);
+    }
+    expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 429);
+    const recorded = expect(await request(endpoint, { token: admin.token }), 200);
+    assert.equal(recorded.items.length, 9);
+    assert.equal(recorded.items[0].outcome, 'rate_limited');
+    assert.equal(recorded.items.filter((item) => item.outcome === 'invalid_key').length, 8);
+    assert.equal(JSON.stringify(recorded).includes('audit-test-invalid-key'), false);
+    const columns = (await database.query(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = $1 AND table_name = 'hostscreen_login_attempts'`,
+      [schema])).rows.map((column) => column.column_name).sort();
+    assert.deepEqual(columns, ['id', 'ip_address', 'occurred_at', 'outcome']);
+    for (const cursor of ['0', '-1', 'bad', '9223372036854775808', '1&before=2']) {
+      expect(await request(`${endpoint}?before=${cursor}`, { token: admin.token }), 400);
+    }
+    await database.query(
+      `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
+       SELECT '2001:db8::1'::inet, 'invalid_key' FROM generate_series(1, 55)`);
+    const first = expect(await request(endpoint, { token: admin.token }), 200);
+    assert.equal(first.items.length, 50);
+    assert.equal(first.nextCursor, first.items.at(-1).id);
+    for (let index = 1; index < first.items.length; index += 1) {
+      assert.ok(BigInt(first.items[index - 1].id) > BigInt(first.items[index].id));
+    }
+    await database.query("INSERT INTO hostscreen_login_attempts (ip_address, outcome) VALUES ('192.0.2.1', 'rate_limited')");
+    const second = expect(await request(`${endpoint}?before=${first.nextCursor}`, { token: admin.token }), 200);
+    assert.equal(second.items.length, 14);
+    assert.equal(second.nextCursor, null);
+    assert.equal(new Set([...first.items, ...second.items].map((item) => item.id)).size, 64);
+    app.use('/api/restarted-auth', createAuthRoutes({ database }));
+    const reloaded = expect(await request('/restarted-auth/hostscreen/login-attempts', { token: admin.token }), 200);
+    assert.equal(reloaded.items[0].ip_address, '192.0.2.1');
+    const empty = expect(await request(`${endpoint}?before=${second.items.at(-1).id}`, { token: admin.token }), 200);
+    assert.deepEqual(empty, { items: [], nextCursor: null, recordCount: 65, recordLimit: 1000, loginDisabled: false });
+  });
+
+  await context.test('1000 audit records disable new HOST logins across routers until an administrator clears them', async () => {
+    const settings = { HOST_SCREEN_LOGIN_KEY: hostScreenKey };
+    app.use('/api/host-cap', createAuthRoutes({ database, settings, hostLimiter: (req, res, next) => next() }));
+    const endpoint = '/host-cap/hostscreen/login-attempts';
+    const loginEndpoint = '/host-cap/hostscreen/login';
+    await database.query('DELETE FROM hostscreen_login_attempts');
+    await database.query(
+      `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
+       SELECT '192.0.2.1'::inet, 'invalid_key' FROM generate_series(1, 999)`);
+    const existingScreen = expect(await post(loginEndpoint, { key: hostScreenKey }), 200);
+    const before = expect(await request(endpoint, { token: admin.token }), 200);
+    assert.equal(before.recordCount, 999);
+    assert.equal(before.loginDisabled, false);
+    const failures = await Promise.all(Array.from({ length: 8 }, () => post(loginEndpoint, { key: 'wrong' })));
+    for (const failure of failures) {
+      assert.match(expect(failure, 503).error, /administrator clears/);
+    }
+    const full = expect(await request(endpoint, { token: admin.token }), 200);
+    assert.equal(full.recordCount, 1000);
+    assert.equal(full.recordLimit, 1000);
+    assert.equal(full.loginDisabled, true);
+    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM hostscreen_login_attempts')).rows[0].count, 1000);
+    assert.match(expect(await post(loginEndpoint, { key: hostScreenKey }), 503).error, /administrator clears/);
+    expect(await request('/auth/me', { token: existingScreen.token }), 200);
+    app.use('/api/host-cap-restarted', createAuthRoutes({ database, settings }));
+    assert.match(expect(await post('/host-cap-restarted/hostscreen/login', { key: hostScreenKey }), 503).error, /administrator clears/);
+    for (const token of [undefined, member.token, existingScreen.token]) {
+      expect(await request(endpoint, { method: 'DELETE', token }), token ? 403 : 401);
+    }
+    assert.equal(expect(await request(endpoint, { token: admin.token }), 200).recordCount, 1000);
+    const cleared = await request(endpoint, { method: 'DELETE', token: admin.token });
+    expect(cleared, 204);
+    assert.equal(cleared.cacheControl, 'no-store');
+    assert.deepEqual(expect(await request(endpoint, { token: admin.token }), 200),
+      { items: [], nextCursor: null, recordCount: 0, recordLimit: 1000, loginDisabled: false });
+    const resumed = expect(await post('/host-cap-restarted/hostscreen/login', { key: hostScreenKey }), 200);
+    expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 429);
+    assert.equal(expect(await request(endpoint, { token: admin.token }), 200).recordCount, 1);
+    await database.query(
+      `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
+       SELECT '192.0.2.1'::inet, 'invalid_key' FROM generate_series(1, 998)`);
+    assert.match(expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 503).error, /administrator clears/);
+    assert.equal(expect(await request(endpoint, { token: admin.token }), 200).recordCount, 1000);
+    expect(await request(endpoint, { method: 'DELETE', token: admin.token }), 204);
+    expect(await request(endpoint, { method: 'DELETE', token: admin.token }), 204);
+    expect(await post('/auth/logout', {}, existingScreen.token), 204);
+    expect(await post('/auth/logout', {}, resumed.token), 204);
   });
 
   await context.test('additional passkeys are bound to the signed-in account and its single-use session challenge', async () => {

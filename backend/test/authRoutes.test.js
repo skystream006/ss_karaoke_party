@@ -7,6 +7,22 @@ const { createAuth, hashToken } = require('../middleware/auth');
 const { APP_REDIRECT_URI, APP_CODE_TTL_MS, appLoginRequest, appTokenRequest,
   issueAppLoginCode, consumeAppLoginCode } = require('../lib/appLogin');
 
+function loginAuditDatabase(record, count = () => 0) {
+  const client = {
+    query: async (sql, values) => {
+      if (sql.startsWith('INSERT INTO hostscreen_login_attempts')) {
+        record(sql, values);
+        return { rows: [] };
+      }
+      if (sql.startsWith('SELECT COUNT(*)')) return { rows: [{ count: count() }] };
+      if (['BEGIN', 'COMMIT', 'ROLLBACK', 'SELECT pg_advisory_xact_lock(1948272)'].includes(sql)) return { rows: [] };
+      throw new Error('Unexpected database operation in login audit test');
+    },
+    release: () => {},
+  };
+  return { connect: async () => client };
+}
+
 test('HOSTSCREEN can access organizer entry points but not passkey accounts or searches', () => {
   const { requireAccount, requireOrganizerAccount, forbidHostscreen, requireAdmin } = require('../middleware/auth');
   for (const level of ['hostscreen', 'admin', 'member', 'guest']) {
@@ -27,7 +43,8 @@ test('HOSTSCREEN can access organizer entry points but not passkey accounts or s
 
 test('HOST login fails closed without a configured key and rejects malformed or incorrect keys', async (context) => {
   const { createAuthRoutes } = require('../routes/auth');
-  const database = { connect: async () => { throw new Error('Invalid keys must not open a transaction'); } };
+  const records = [];
+  const database = loginAuditDatabase((sql, values) => records.push({ sql, values }));
   const app = express();
   app.use(express.json());
   for (const [prefix, settings] of [['disabled', {}], ['enabled', { HOST_SCREEN_LOGIN_KEY: 'configured-test-key' }]]) {
@@ -44,6 +61,109 @@ test('HOST login fails closed without a configured key and rejects malformed or 
     assert.equal(response.status, status);
     assert.equal(response.headers.get('cache-control'), 'no-store');
     assert.equal((await response.json()).token, undefined);
+  }
+  assert.equal(records.length, 4);
+  for (const record of records) {
+    assert.match(record.sql, /INSERT INTO hostscreen_login_attempts/);
+    assert.deepEqual(record.values, ['127.0.0.1', 'invalid_key']);
+  }
+  assert.equal(JSON.stringify(records).includes('configured-test-key'), false);
+});
+
+test('HOST login allows ten attempts per IP and resets after ten minutes without blocking passkeys', async (context) => {
+  const { createAuthRoutes } = require('../routes/auth');
+  const records = [];
+  const database = loginAuditDatabase((sql, values) => records.push(values));
+  const app = express();
+  app.set('trust proxy', 1);
+  app.use(express.json());
+  app.use('/auth', createAuthRoutes({ database,
+    settings: { HOST_SCREEN_LOGIN_KEY: 'configured-test-key', PASSKEY_ORIGIN: 'http://localhost:3000' } }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  context.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  context.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+  const post = (forwardedFor, key = 'wrong', endpoint = '/hostscreen/login') => fetch(
+    `http://127.0.0.1:${server.address().port}/auth${endpoint}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': forwardedFor,
+        Origin: 'http://localhost:3000' }, body: JSON.stringify({ key }),
+    });
+  for (let attempt = 1; attempt <= 10; attempt += 1) {
+    const response = await post('192.0.2.10');
+    assert.equal(response.status, 401);
+    assert.equal(response.headers.get('ratelimit-limit'), '10');
+    assert.equal(response.headers.get('ratelimit-remaining'), String(10 - attempt));
+    await response.json();
+  }
+  const blocked = await post('192.0.2.10', 'configured-test-key');
+  assert.equal(blocked.status, 429);
+  assert.equal(blocked.headers.get('retry-after'), '600');
+  assert.equal(blocked.headers.get('cache-control'), 'no-store');
+  assert.match((await blocked.json()).error, /10-minute/);
+  const spoofed = await post('198.51.100.99, 192.0.2.10');
+  assert.equal(spoofed.status, 429);
+  await spoofed.json();
+  const otherIp = await post('192.0.2.11');
+  assert.equal(otherIp.status, 401);
+  assert.equal(otherIp.headers.get('ratelimit-remaining'), '9');
+  await otherIp.json();
+  const passkey = await post('192.0.2.10', undefined, '/login/options');
+  assert.equal(passkey.status, 200);
+  await passkey.json();
+  context.mock.timers.tick(10 * 60 * 1000 - 1);
+  const stillBlocked = await post('192.0.2.10');
+  assert.equal(stillBlocked.status, 429);
+  assert.equal(stillBlocked.headers.get('retry-after'), '1');
+  await stillBlocked.json();
+  context.mock.timers.tick(1);
+  const reset = await post('192.0.2.10');
+  assert.equal(reset.status, 401);
+  assert.equal(reset.headers.get('ratelimit-remaining'), '9');
+  await reset.json();
+  assert.equal(records.filter((record) => record[1] === 'invalid_key').length, 12);
+  assert.deepEqual(records.filter((record) => record[1] === 'rate_limited'),
+    Array.from({ length: 3 }, () => ['192.0.2.10', 'rate_limited']));
+  assert.equal(JSON.stringify(records).includes('configured-test-key'), false);
+});
+
+test('HOST login fails closed with a safe error when audit storage is unavailable', async (context) => {
+  const { createAuthRoutes } = require('../routes/auth');
+  let writes = 0;
+  const database = loginAuditDatabase(() => { writes += 1; throw new Error('private database connection details'); });
+  const app = express();
+  app.use(express.json());
+  app.use('/auth', createAuthRoutes({ database, settings: { HOST_SCREEN_LOGIN_KEY: 'test-configured-key' } }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  context.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  for (let attempt = 0; attempt < 11; attempt += 1) {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/auth/hostscreen/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'wrong' }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'HOST login is temporarily unavailable.' });
+  }
+  assert.equal(writes, 11);
+});
+
+test('the thousandth HOST login record persists and blocks valid keys and rate-limited attempts without growing records', async (context) => {
+  const { createAuthRoutes } = require('../routes/auth');
+  let count = 999;
+  const database = loginAuditDatabase(() => { count += 1; }, () => count);
+  const app = express();
+  app.use(express.json());
+  app.use('/auth', createAuthRoutes({ database, settings: { HOST_SCREEN_LOGIN_KEY: 'configured-test-key' } }));
+  const server = app.listen(0, '127.0.0.1');
+  await new Promise((resolve) => server.once('listening', resolve));
+  context.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
+  for (let attempt = 0; attempt < 12; attempt += 1) {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/auth/hostscreen/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: attempt === 0 ? 'wrong' : 'configured-test-key' }),
+    });
+    assert.equal(response.status, 503);
+    assert.deepEqual(await response.json(), { error: 'HOST login is disabled until an administrator clears the login records.' });
+    assert.equal(count, 1000);
   }
 });
 

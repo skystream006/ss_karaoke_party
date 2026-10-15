@@ -5,13 +5,15 @@ import axios from 'axios';
 import { startAuthentication, startRegistration } from '@simplewebauthn/browser';
 import App from './App';
 import QRCodeModal from './components/QRCodeModal';
-import { getParties, createParty, joinParty, resolvePartyInvitation, createPartyInvitation, getAccountInfo, getPasskeys, getAuthUsers, updateAuthUser } from './services/api';
+import { getParties, createParty, joinParty, resolvePartyInvitation, createPartyInvitation, getAccountInfo, getHostLoginAttempts, clearHostLoginAttempts, getPasskeys, getAuthUsers, updateAuthUser } from './services/api';
 
 jest.mock('axios', () => ({ post: jest.fn(), get: jest.fn() }));
 jest.mock('@simplewebauthn/browser', () => ({ startAuthentication: jest.fn(), startRegistration: jest.fn() }));
 jest.mock('./services/api', () => ({
   getParties: jest.fn(), createParty: jest.fn(), joinParty: jest.fn(), resolvePartyInvitation: jest.fn(), createPartyInvitation: jest.fn(),
   getAccountInfo: jest.fn(), getPasskeys: jest.fn(), getAuthUsers: jest.fn(), updateAuthUser: jest.fn(), removePasskey: jest.fn(),
+  getHostLoginAttempts: jest.fn(),
+  clearHostLoginAttempts: jest.fn(),
 }));
 jest.mock('./components/ThemePicker', () => () => null);
 jest.mock('./pages/OrganizerPage', () => ({ signOutAction }) => {
@@ -39,6 +41,7 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/');
   getParties.mockResolvedValue({ data: [party] });
   getAccountInfo.mockResolvedValue({ data: { user: session.user, HOST_SCREEN_LOGIN_KEY: 'test-host-key' } });
+  getHostLoginAttempts.mockResolvedValue({ data: { items: [], nextCursor: null, recordCount: 0, recordLimit: 1000, loginDisabled: false } });
   resolvePartyInvitation.mockResolvedValue({ data: { party, host: 'Alex', expiresAt: '2099-01-01' } });
   startAuthentication.mockResolvedValue({ id: 'credential' });
   startRegistration.mockResolvedValue({ id: 'credential' });
@@ -226,6 +229,7 @@ test.each(['/account', '/settings', '/guest/party-id/member', '/join/invite'])('
   await renderApp();
   expect(window.location.pathname).toBe('/join');
   expect(getAccountInfo).not.toHaveBeenCalled();
+  expect(getHostLoginAttempts).not.toHaveBeenCalled();
 });
 
 test('Account Info in the three-dot menu shows a masked key that can be revealed and copied', async () => {
@@ -236,12 +240,97 @@ test('Account Info in the three-dot menu shows a masked key that can be revealed
   await act(async () => { Simulate.click(container.querySelector('[aria-label="Account actions"]')); });
   await click('Account Info');
   expect(window.location.pathname).toBe('/account');
+  expect(getHostLoginAttempts).not.toHaveBeenCalled();
+  expect(container.querySelector('#host-login-attempts-heading')).toBeNull();
   expect(container.querySelector('#account-host-key').type).toBe('password');
   await act(async () => { Simulate.click(container.querySelector('[aria-label="Show HOST key"]')); });
   expect(container.querySelector('#account-host-key').type).toBe('text');
   await act(async () => { Simulate.click(container.querySelector('[aria-label="Copy HOST key"]')); });
   expect(writeText).toHaveBeenCalledWith('test-host-key');
   expect(container.textContent).toContain('Key copied.');
+});
+
+test('admins review paginated HOST login failures and refresh to the newest records', async () => {
+  sessionStorage.setItem('authToken', 'admin-token');
+  axios.get.mockResolvedValue({ data: { ...session, level: 'admin', user: { ...session.user, role: 'admin' } } });
+  getPasskeys.mockResolvedValue({ data: [] });
+  getAuthUsers.mockResolvedValue({ data: [] });
+  const recent = { id: '52', occurred_at: '2026-10-14T10:00:00Z', ip_address: '192.0.2.1', outcome: 'invalid_key' };
+  const older = { id: '2', occurred_at: '2026-10-14T09:00:00Z', ip_address: '2001:db8::1', outcome: 'rate_limited' };
+  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [recent], nextCursor: '52', recordCount: 2, recordLimit: 1000, loginDisabled: false } });
+  window.history.replaceState({}, '', '/account');
+  await renderApp();
+  expect(getHostLoginAttempts).toHaveBeenCalledWith(null);
+  expect(container.querySelector('table').textContent).toContain('192.0.2.1');
+  expect(container.querySelector('table').textContent).toContain('Invalid key');
+  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [older], nextCursor: null, recordCount: 2, recordLimit: 1000, loginDisabled: false } });
+  await click('Load more');
+  expect(getHostLoginAttempts).toHaveBeenLastCalledWith('52');
+  expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+  expect(container.querySelector('table').textContent).toContain('Retry limit reached');
+  expect(container.textContent).not.toContain('Load more');
+  await act(async () => { Simulate.click(container.querySelector('[aria-label="Refresh HOST login attempts"]')); });
+  expect(getHostLoginAttempts).toHaveBeenLastCalledWith(null);
+  expect(container.querySelector('table')).toBeNull();
+  expect(container.textContent).toContain('No failed HOST login attempts recorded.');
+});
+
+test('admin login record loading errors leave account controls available and support retry', async () => {
+  sessionStorage.setItem('authToken', 'admin-token');
+  axios.get.mockResolvedValue({ data: { ...session, level: 'admin' } });
+  getPasskeys.mockResolvedValue({ data: [] });
+  getAuthUsers.mockResolvedValue({ data: [] });
+  let rejectRecords;
+  getHostLoginAttempts.mockReturnValueOnce(new Promise((resolve, reject) => { rejectRecords = reject; }));
+  window.history.replaceState({}, '', '/account');
+  await renderApp();
+  const refresh = container.querySelector('[aria-label="Refresh HOST login attempts"]');
+  expect(refresh.disabled).toBe(true);
+  expect(container.textContent).toContain('Loading login attempts...');
+  await act(async () => { rejectRecords(new Error('offline')); });
+  expect(container.textContent).toContain('Unable to load HOST login attempts.');
+  expect(container.querySelector('#account-host-key')).not.toBeNull();
+  expect(refresh.disabled).toBe(false);
+  await act(async () => { Simulate.click(refresh); });
+  expect(container.textContent).not.toContain('Unable to load HOST login attempts.');
+  expect(container.textContent).toContain('No failed HOST login attempts recorded.');
+});
+
+test('admins must confirm clearing login records and can recover from a failed clear', async () => {
+  sessionStorage.setItem('authToken', 'admin-token');
+  axios.get.mockResolvedValue({ data: { ...session, level: 'admin' } });
+  getPasskeys.mockResolvedValue({ data: [] });
+  getAuthUsers.mockResolvedValue({ data: [] });
+  const recent = { id: '1000', occurred_at: '2026-10-14T12:00:00Z', ip_address: '192.0.2.1', outcome: 'invalid_key' };
+  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [recent], nextCursor: '951',
+    recordCount: 1000, recordLimit: 1000, loginDisabled: true } });
+  window.history.replaceState({}, '', '/account');
+  await renderApp();
+  expect(container.textContent).toContain('1,000 / 1,000 records');
+  expect(container.textContent).toContain('HOST login is disabled until these records are cleared.');
+  const clear = container.querySelector('[aria-label="Clear HOST login records"]');
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
+  await act(async () => { Simulate.click(clear); });
+  expect(confirm).toHaveBeenCalledWith('Permanently clear all HOST login records and remove the record-limit lockout? This cannot be undone.');
+  expect(clearHostLoginAttempts).not.toHaveBeenCalled();
+  confirm.mockReturnValue(true);
+  clearHostLoginAttempts.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => { Simulate.click(clear); });
+  expect(container.textContent).toContain('Unable to clear HOST login records.');
+  expect(container.querySelector('table')).not.toBeNull();
+  expect(container.textContent).toContain('1,000 / 1,000 records');
+  let finishClear;
+  clearHostLoginAttempts.mockReturnValueOnce(new Promise((resolve) => { finishClear = resolve; }));
+  await act(async () => { Simulate.click(clear); });
+  expect(clear.disabled).toBe(true);
+  expect(container.querySelector('[aria-label="Refresh HOST login attempts"]').disabled).toBe(true);
+  await act(async () => { finishClear({ status: 204 }); });
+  expect(container.textContent).toContain('Login records cleared.');
+  expect(container.textContent).toContain('0 / 1,000 records');
+  expect(container.textContent).not.toContain('HOST login is disabled until these records are cleared.');
+  expect(container.querySelector('table')).toBeNull();
+  expect(container.textContent).not.toContain('Load more');
+  expect(clear.disabled).toBe(true);
 });
 
 test('passkey login uses the verified account name when creating a party', async () => {

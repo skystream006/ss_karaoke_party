@@ -20,7 +20,9 @@ Apply all Flyway migrations, including [V5__Passkeys_and_party_invitations.sql](
 | `POST` | `/api/auth/register/verify` | Configured Origin | `{ requestId, response }`; first verified account is admin, later accounts are pending |
 | `POST` | `/api/auth/login/options` | Configured Origin | Discoverable passkey login options |
 | `POST` | `/api/auth/login/verify` | Configured Origin | `{ requestId, response }`; verifies signature, UV, RP, origin and counter |
-| `POST` | `/api/auth/hostscreen/login` | Shared HOST key | `{ key }`; rate-limited login returning a `hostscreen` session |
+| `POST` | `/api/auth/hostscreen/login` | Shared HOST key | `{ key }`; 10 attempts per IP per 10 minutes; returns a `hostscreen` session |
+| `GET` | `/api/auth/hostscreen/login-attempts` | admin | Newest 50 failed/blocked HOST attempts; optional `before` cursor |
+| `DELETE` | `/api/auth/hostscreen/login-attempts` | admin | Permanently clear all HOST login records and remove the record-cap lockout; 204 |
 | `GET` | `/api/auth/account-info` | approved admin/member | Returns `{ user, HOST_SCREEN_LOGIN_KEY }`; key is null when unset |
 | `POST` | `/api/auth/app/token` | One-time code + S256 verifier | Native app exchange; no Origin, cookie or bearer token required |
 | `GET` | `/api/auth/me` | session | Authoritative `{ level, user, partyId, memberId, expiresAt }` |
@@ -37,6 +39,18 @@ Options endpoints return `{ requestId, options }`. A successful sign-in returns 
 Passkey roles are `admin` or `member`; account status is `pending`, `approved` or `revoked`. Account changes invalidate all of the target's sessions, outstanding app codes and dependent invitations/guests. Self-revocation and removing the last approved admin are rejected. Passkey removal does not revoke existing sessions; logout or account revocation does.
 
 Apply [V7__Hostscreen_account.sql](db/migrations/V7__Hostscreen_account.sql) for the dedicated `HOSTSCREEN` account and `hostscreen` role. Configure the backend-only `HOST_SCREEN_LOGIN_KEY` with a long random secret; blank disables login (503), invalid keys return 401. This shared account can list active parties and join as organizer, then use queue/playback/invitation controls. It cannot create, rename, lock, unlock, end, delete, duplicate or reactivate parties, administer party members, join as guest (including authenticated invitation redemption), execute YouTube/ssMusic/member searches, enroll passkeys, read account info, or administer accounts. Party mutation routes return 403 even when HOSTSCREEN has organizer membership. Its role cannot be changed through `/auth/users/:id`. HOST sessions use the normal hashed tokens and 24-hour expiry. Each screen has a separate session but shares party membership with other screens. Changing the key requires a backend restart and does not revoke existing sessions. Never log login request bodies or account-info responses.
+
+HOST login has its own per-IP limiter, separate from passkey ceremonies: the first 10 requests in a 10-minute window are allowed, and subsequent requests return 429 with `{ error }` and `Retry-After` seconds. The window starts at the first attempt, counts successful and failed requests, and is not extended by blocked requests. Responses remain non-cacheable. IP identification uses Express `req.ip` and the configured `TRUST_PROXY`; do not trust arbitrary forwarding headers. Like the existing limiters, counters are in memory per backend process and do not survive restart or synchronize across replicas.
+
+### HOST Login Records
+
+Apply [V8__Hostscreen_login_attempts.sql](db/migrations/V8__Hostscreen_login_attempts.sql) before starting the updated backend. Incorrect or malformed keys are recorded as `invalid_key`; requests rejected by the HOST limiter are recorded as `rate_limited` without checking the submitted key. Successful logins and disabled HOST login are not failure records. Each PostgreSQL row contains only `id`, `occurred_at`, `ip_address` and `outcome`. No keys, tokens, bodies or arbitrary request headers are persisted. IP addresses come from the configured Express proxy handling, not directly from a supplied header; unavailable or invalid IPs are stored as null.
+
+The admin-only, non-cacheable endpoint returns `{ items, nextCursor, recordCount, recordLimit, loginDisabled }`, ordered by descending ID with at most 50 items. `recordCount` is the total across all pages; `recordLimit` is 1000. Pass `?before=<nextCursor>` for older records. A null cursor means there are no more records; malformed cursors return 400. Members, guests and HOSTSCREEN receive 403. Admins can also review, refresh, load older records and confirm clearing them in **Account Info > HOST login attempts**.
+
+At 1000 records, HOST login returns 503 for every IP and key, and stops adding records. A shared PostgreSQL transaction advisory lock serializes counting, recording, successful login and admin clearing across backend instances, so concurrent requests cannot bypass the cap. The request that records the thousandth failure commits that record and returns the disabled status. The lockout persists until an admin clears the records using `DELETE /api/auth/hostscreen/login-attempts`; clearing is idempotent and does not reset the per-IP retry cooldown or revoke existing sessions. No new migration beyond V8 is needed.
+
+Audit records persist across restarts independently of the in-memory retry counters and have no automatic expiry. Attempts before this migration are not backfilled. Database audit failures return a sanitized 503 without permitting the login. Requests rejected before reaching the HOST route, such as by an upstream proxy or the general API limiter, are not recorded here.
 
 ### Android App Handoff
 

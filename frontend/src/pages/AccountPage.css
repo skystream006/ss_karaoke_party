@@ -39,6 +39,13 @@
 .account-host-key-label { display: block; font-size: 13px; overflow-wrap: anywhere; margin-bottom: 8px; }
 .account-host-key { display: grid; grid-template-columns: minmax(0, 1fr) 38px 38px; gap: 8px; max-width: 640px; }
 .account-host-key input { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg-card); color: var(--text-primary); font-family: monospace; }
+.account-login-attempts { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 14px; }
+.account-login-attempts th, .account-login-attempts td { padding: 12px 8px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--border); overflow-wrap: anywhere; }
+.account-login-attempts th { color: var(--text-secondary); font-weight: 500; }
+.account-login-attempts th:first-child { width: 38%; }
+.account-login-attempts th:nth-child(2) { width: 36%; }
+.account-login-attempts code { font-size: 13px; }
+.account-login-pagination { margin-top: 12px; }
 
 @media (max-width: 600px) {
   .account-page { padding: 16px; }

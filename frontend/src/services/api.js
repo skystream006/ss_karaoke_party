@@ -23,6 +23,10 @@ api.interceptors.response.use((response) => response, (error) => {
 
 export const getPasskeys = () => api.get('/auth/passkeys');
 export const getAccountInfo = () => api.get('/auth/account-info');
+export const getHostLoginAttempts = (before = null) => api.get('/auth/hostscreen/login-attempts', {
+  params: before ? { before } : {},
+});
+export const clearHostLoginAttempts = () => api.delete('/auth/hostscreen/login-attempts');
 export const removePasskey = (id) => api.delete(`/auth/passkeys/${encodeURIComponent(id)}`);
 export const getAuthUsers = () => api.get('/auth/users');
 export const updateAuthUser = (id, data) => api.patch(`/auth/users/${id}`, data);

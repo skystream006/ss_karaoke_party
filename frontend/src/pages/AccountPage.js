@@ -1,9 +1,86 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, Copy, Eye, EyeOff, KeyRound, Plus, RefreshCw, Settings, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, Copy, Eye, EyeOff, KeyRound, Plus, RefreshCw, Settings, ShieldAlert, Trash2, Users } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getAccountInfo, getPasskeys, removePasskey, getAuthUsers, updateAuthUser } from '../services/api';
+import { getAccountInfo, getHostLoginAttempts, clearHostLoginAttempts, getPasskeys, removePasskey, getAuthUsers, updateAuthUser } from '../services/api';
 import './AccountPage.css';
+
+function HostLoginAttempts() {
+  const [attempts, setAttempts] = useState([]);
+  const [nextCursor, setNextCursor] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [status, setStatus] = useState(null);
+  const [notice, setNotice] = useState('');
+
+  const load = useCallback(async (before = null) => {
+    setLoading(true);
+    setError('');
+    setNotice('');
+    try {
+      const { data } = await getHostLoginAttempts(before);
+      setAttempts((current) => before ? [...current, ...data.items] : data.items);
+      setNextCursor(data.nextCursor);
+      setStatus({ recordCount: data.recordCount, recordLimit: data.recordLimit, loginDisabled: data.loginDisabled });
+    } catch (failure) {
+      setError(failure.response?.data?.error || 'Unable to load HOST login attempts.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const clear = async () => {
+    if (!window.confirm('Permanently clear all HOST login records and remove the record-limit lockout? This cannot be undone.')) return;
+    setLoading(true);
+    setError('');
+    setNotice('');
+    try {
+      await clearHostLoginAttempts();
+      setAttempts([]);
+      setNextCursor(null);
+      setStatus(null);
+      await load();
+      setNotice('Login records cleared.');
+    } catch (failure) {
+      setError(failure.response?.data?.error || 'Unable to clear HOST login records.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return <section className="account-section" aria-labelledby="host-login-attempts-heading" aria-busy={loading}>
+    <div className="account-section-heading">
+      <h2 id="host-login-attempts-heading"><ShieldAlert size={20} aria-hidden="true" /> HOST login attempts</h2>
+      <div className="account-actions">
+        <button className="account-icon-button" onClick={clear} disabled={loading || !status?.recordCount}
+          title="Clear HOST login records" aria-label="Clear HOST login records"><Trash2 size={18} aria-hidden="true" /></button>
+        <button className="account-icon-button" onClick={() => load()} disabled={loading}
+          title="Refresh HOST login attempts" aria-label="Refresh HOST login attempts"><RefreshCw size={18} aria-hidden="true" /></button>
+      </div>
+    </div>
+    {status && <p className="muted">{status.recordCount?.toLocaleString()} / {status.recordLimit?.toLocaleString()} records</p>}
+    {status?.loginDisabled && <p className="error-msg" role="alert">HOST login is disabled until these records are cleared.</p>}
+    {error && <p className="error-msg" role="alert">{error}</p>}
+    {notice && <p role="status">{notice}</p>}
+    {loading && <p role="status">Loading login attempts...</p>}
+    {!loading && !error && attempts.length === 0 && <p className="muted">No failed HOST login attempts recorded.</p>}
+    {attempts.length > 0 && <table className="account-login-attempts" aria-label="HOST login attempts">
+      <thead><tr><th scope="col">Time</th><th scope="col">IP address</th><th scope="col">Result</th></tr></thead>
+      <tbody>{attempts.map((attempt) => <tr key={attempt.id}>
+        <td><time dateTime={attempt.occurred_at}>{new Date(attempt.occurred_at).toLocaleString()}</time></td>
+        <td><code>{attempt.ip_address || 'Unknown'}</code></td>
+        <td>{attempt.outcome === 'rate_limited' ? 'Retry limit reached' : 'Invalid key'}</td>
+      </tr>)}</tbody>
+    </table>}
+    {nextCursor && <div className="account-actions account-login-pagination">
+      <button className="btn btn-ghost" onClick={() => load(nextCursor)} disabled={loading}>
+        <ChevronDown size={18} aria-hidden="true" /> Load more
+      </button>
+    </div>}
+  </section>;
+}
 
 export default function AccountPage({ switchUserButton }) {
   const navigate = useNavigate();
@@ -140,6 +217,7 @@ export default function AccountPage({ switchUserButton }) {
         </li>)}
       </ul>
     </section>
+    {isAdmin && <HostLoginAttempts />}
     {isAdmin && <section className="account-section" aria-labelledby="accounts-heading">
       <div className="account-section-heading"><h2 id="accounts-heading"><Users size={20} aria-hidden="true" /> Accounts</h2></div>
       <div className="account-user-list">
