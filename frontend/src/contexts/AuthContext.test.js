@@ -152,3 +152,26 @@ test('only a 401 for the current token clears the active session', async () => {
   expect(auth.authToken).toBeNull();
   expect(auth.authLevel).toBe('none');
 });
+
+test('guest sharing retains the original invitation across reloads and removes it on sign-out', async () => {
+  const session = { token: 'guest-token', level: 'guest', partyId: 'party', memberId: 'guest' };
+  const invitation = { token: 'a'.repeat(43), expiresAt: '2099-01-01' };
+  act(() => auth.acceptInvitation(session, invitation));
+  expect(auth.partyInvitation).toEqual({ ...invitation, partyId: 'party', memberId: 'guest' });
+  axios.get.mockResolvedValue({ data: session });
+  await act(async () => root.render(<AuthProvider key="reload"><Consumer /></AuthProvider>));
+  expect(auth.partyInvitation.token).toBe(invitation.token);
+  axios.post.mockResolvedValue({});
+  await act(async () => auth.logout());
+  expect(auth.partyInvitation).toBeUndefined();
+  expect(sessionStorage.getItem('partyInvitation')).toBeNull();
+});
+
+test('restoration discards invitations belonging to a different membership', async () => {
+  act(() => auth.acceptInvitation({ token: 'guest-token', level: 'guest', partyId: 'party', memberId: 'guest' },
+    { token: 'a'.repeat(43), expiresAt: '2099-01-01' }));
+  axios.get.mockResolvedValue({ data: { level: 'guest', partyId: 'party', memberId: 'other-guest' } });
+  await act(async () => root.render(<AuthProvider key="reload"><Consumer /></AuthProvider>));
+  expect(auth.partyInvitation).toBeNull();
+  expect(sessionStorage.getItem('partyInvitation')).toBeNull();
+});

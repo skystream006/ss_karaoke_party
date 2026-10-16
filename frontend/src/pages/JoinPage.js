@@ -290,7 +290,7 @@ export function InvitationJoinPage() {
     setError('');
     try {
       const { data } = await joinParty(details.party.id, { name: name.trim(), invitation });
-      acceptInvitation(data);
+      acceptInvitation(data, { token: invitation, expiresAt: details.expiresAt });
       sessionStorage.setItem('memberName', data.member.name);
       sessionStorage.setItem('memberId', data.member.id);
       sessionStorage.setItem('memberRole', 'guest');

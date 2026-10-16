@@ -4,8 +4,8 @@ import { Copy, RefreshCw, Check } from 'lucide-react';
 import { createPartyInvitation } from '../services/api';
 import './QRCodeModal.css';
 
-export default function QRCodeModal({ party }) {
-  const [invitation, setInvitation] = useState(null);
+export default function QRCodeModal({ party, sharedInvitation }) {
+  const [invitation, setInvitation] = useState(sharedInvitation || null);
   const [generation, setGeneration] = useState(0);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
@@ -13,6 +13,11 @@ export default function QRCodeModal({ party }) {
   const requestRef = useRef(null);
 
   useEffect(() => {
+    if (sharedInvitation) {
+      setInvitation(sharedInvitation);
+      setLoading(false);
+      return;
+    }
     let active = true;
     setLoading(true);
     setInvitation(null);
@@ -26,7 +31,7 @@ export default function QRCodeModal({ party }) {
       .catch((failure) => { if (active) setError(failure.response?.data?.error || 'Unable to create invitation.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [party.id, generation]);
+  }, [party.id, generation, sharedInvitation]);
 
   const joinUrl = invitation ? `${window.location.origin}/join/invite#invite=${invitation.token}` : '';
 
@@ -72,14 +77,14 @@ export default function QRCodeModal({ party }) {
             </button>
           </div>
         </div></>}
-        <button type="button" className="btn btn-ghost qr-regenerate" disabled={loading}
+        {!sharedInvitation && <button type="button" className="btn btn-ghost qr-regenerate" disabled={loading}
           onClick={() => {
             if (!invitation || window.confirm('Replace this QR code and disconnect guests who joined with it?')) {
               setGeneration((current) => current + 1);
             }
           }}>
           <RefreshCw size={17} aria-hidden="true" /> {invitation ? 'New QR code' : 'Retry'}
-        </button>
+        </button>}
       </div>
     </div>
   );

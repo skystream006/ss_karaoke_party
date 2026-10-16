@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { Home } from 'lucide-react';
+import { Home, QrCode, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus, getMember } from '../services/api';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import CustomizationPanel from '../components/CustomizationPanel';
 import ThemePicker from '../components/ThemePicker';
+import QRCodeModal from '../components/QRCodeModal';
 import useSSMusicJobs from '../hooks/useSSMusicJobs';
 import './GuestPage.css';
 
@@ -17,7 +18,7 @@ const SOCKET_URL =
 export default function GuestPage({ switchUserButton }) {
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
-  const { authLevel } = useAuth();
+  const { authLevel, partyInvitation } = useAuth();
 
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -28,6 +29,7 @@ export default function GuestPage({ switchUserButton }) {
   const [activeTab, setActiveTab] = useState('search');
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const [audioPanelOpen, setAudioPanelOpen] = useState(false);
+  const [qrPanelOpen, setQrPanelOpen] = useState(false);
   const [videoProgress, setVideoProgress] = useState({ currentTime: 0, duration: 0 });
   const [connected, setConnected] = useState(false);
   const [socketId, setSocketId] = useState(null);
@@ -35,11 +37,19 @@ export default function GuestPage({ switchUserButton }) {
   const [settings, setSettings] = useState({ key: 0, tempo: 1.0, vocalLevel: 100 });
 
   const socketRef = useRef(null);
+  const qrDialogRef = useRef(null);
   const latestProgressRef = useRef({ currentTime: 0, duration: 0 });
 
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
   const member = { id: memberId, name: memberName };
+  const sharedInvitation = partyInvitation?.partyId === partyId
+    && partyInvitation?.memberId === memberId ? partyInvitation : null;
+
+  useEffect(() => {
+    if (qrPanelOpen && sharedInvitation) qrDialogRef.current?.showModal();
+    else qrDialogRef.current?.close();
+  }, [qrPanelOpen, sharedInvitation]);
 
   const handleRemove = async (itemId) => {
     try {
@@ -269,6 +279,15 @@ export default function GuestPage({ switchUserButton }) {
         </div>
         <div className="guest-header-actions">
           <ThemePicker />
+          {sharedInvitation && <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => setQrPanelOpen(true)}
+            aria-label="Show party QR code"
+            title="Share party invitation"
+          >
+            <QrCode size={20} aria-hidden="true" />
+          </button>}
           <button
             className="btn-audio-toggle"
             onClick={() => setAudioPanelOpen((o) => !o)}
@@ -287,6 +306,23 @@ export default function GuestPage({ switchUserButton }) {
           {switchUserButton}
         </div>
       </header>
+
+      {sharedInvitation && <dialog ref={qrDialogRef} className="guest-qr-dialog"
+        aria-label="Share party invitation" onClose={() => setQrPanelOpen(false)}
+        onCancel={() => setQrPanelOpen(false)} onKeyDown={(event) => {
+          if (event.key === 'Escape') {
+            event.preventDefault();
+            setQrPanelOpen(false);
+          }
+        }}>
+        <div className="guest-qr-dialog-actions">
+          <button type="button" className="btn btn-ghost" aria-label="Close party QR code"
+            title="Close" onClick={() => setQrPanelOpen(false)}>
+            <X size={20} aria-hidden="true" />
+          </button>
+        </div>
+        {qrPanelOpen && <QRCodeModal party={party} sharedInvitation={sharedInvitation} />}
+      </dialog>}
 
       {/* Mobile tab switcher */}
       <nav className="mobile-tabs">

@@ -18,16 +18,25 @@ export function AuthProvider({ children }) {
   const [notice, setNotice] = useState('');
 
   const clearSession = useCallback(() => {
-    for (const key of [SESSION_TOKEN_KEY, SESSION_LEVEL_KEY, 'usernameRequired', 'memberName', 'memberId', 'memberRole']) {
+    for (const key of [SESSION_TOKEN_KEY, SESSION_LEVEL_KEY, 'partyInvitation', 'usernameRequired', 'memberName', 'memberId', 'memberRole']) {
       sessionStorage.removeItem(key);
     }
     setSession(null);
   }, []);
 
   const persistSession = useCallback((value) => {
+    let invitation = value.invitation;
+    if (!invitation) {
+      try { invitation = JSON.parse(sessionStorage.getItem('partyInvitation')); } catch { invitation = null; }
+    }
+    if (value.level !== 'guest' || invitation?.partyId !== value.partyId || invitation?.memberId !== value.memberId) {
+      invitation = null;
+    }
+    if (invitation) sessionStorage.setItem('partyInvitation', JSON.stringify(invitation));
+    else sessionStorage.removeItem('partyInvitation');
     sessionStorage.setItem(SESSION_TOKEN_KEY, value.token);
     sessionStorage.setItem(SESSION_LEVEL_KEY, value.level);
-    setSession(value);
+    setSession({ ...value, invitation });
     if (value.user?.name) {
       localStorage.setItem(DEFAULT_USERNAME_KEY, value.user.name);
       setDefaultUsername(value.user.name);
@@ -107,14 +116,16 @@ export function AuthProvider({ children }) {
     }
   }, [persistSession]);
 
-  const acceptInvitation = useCallback((result) => {
+  const acceptInvitation = useCallback((result, invitation) => {
     if (!result.token || result.level !== 'guest' || !result.partyId || !result.memberId) {
       throw new Error('Invalid party session.');
     }
     setError('');
     setNotice('');
     setInitializing(false);
-    persistSession(result);
+    sessionStorage.removeItem('partyInvitation');
+    persistSession({ ...result, invitation: invitation
+      ? { ...invitation, partyId: result.partyId, memberId: result.memberId } : null });
   }, [persistSession]);
 
   const logout = useCallback(async () => {
@@ -140,6 +151,7 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={{ authToken: session?.token || null, authLevel: session?.level || 'none',
       user: session?.user, partyId: session?.partyId, memberId: session?.memberId,
+      partyInvitation: session?.invitation,
       defaultUsername, initializing, loading, error, notice, login, loginHost, register, addPasskey, acceptInvitation, logout, clearError }}>
       {children}
     </AuthContext.Provider>

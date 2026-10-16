@@ -414,6 +414,7 @@ test('QR invitation checks only the secret and accepts a scoped guest response',
   await submit();
   expect(joinParty).toHaveBeenCalledWith(party.id, { name: 'Taylor', invitation });
   expect(sessionStorage.getItem('authLevel')).toBe('guest');
+  expect(JSON.parse(sessionStorage.getItem('partyInvitation'))).toMatchObject({ token: invitation, partyId: party.id, memberId: 'guest-id' });
   expect(window.location.pathname).toBe('/guest/party-id/guest-id');
   expect(window.location.hash).toBe('');
   expect(container.textContent).toContain('Guest view');
@@ -512,6 +513,17 @@ test('QR rendering issues one invitation in StrictMode and rotates only after co
   expect(createPartyInvitation).toHaveBeenCalledTimes(2);
   expect(container.querySelector('.url-text').textContent).toContain('b'.repeat(43));
   confirm.mockRestore();
+});
+
+test('shared QR invitations reuse the current link without creating or rotating invitations', async () => {
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: jest.fn().mockResolvedValue() } });
+  await act(async () => root.render(<QRCodeModal party={party}
+    sharedInvitation={{ token: invitation, expiresAt: '2099-01-01' }} />));
+  expect(createPartyInvitation).not.toHaveBeenCalled();
+  expect(container.querySelector('.url-text').textContent).toBe(`${window.location.origin}/join/invite#invite=${invitation}`);
+  expect(container.querySelector('.qr-regenerate')).toBeNull();
+  await act(async () => Simulate.click(container.querySelector('[aria-label="Copy invitation link"]')));
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${window.location.origin}/join/invite#invite=${invitation}`);
 });
 
 test.each(['member', 'admin'])('account settings protect the last passkey and restrict approval controls for %s', async (level) => {

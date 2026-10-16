@@ -22,10 +22,13 @@ jest.mock('../components/ThemePicker', () => () => null);
 let root;
 let container;
 let handlers;
+const invitation = { token: 'a'.repeat(43), expiresAt: '2099-01-01', partyId: 'party-id', memberId: 'member-id' };
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   jest.resetAllMocks();
+  HTMLDialogElement.prototype.showModal = jest.fn(function () { this.open = true; });
+  HTMLDialogElement.prototype.close = jest.fn(function () { this.open = false; });
   useAuth.mockReturnValue({ authLevel: 'guest' });
   getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', join_code: 'ABCDEF' } });
   getQueue.mockResolvedValue({ data: [] });
@@ -56,13 +59,44 @@ async function renderGuest(switchUserButton) {
   });
 }
 
-test.each([false, true])('guests cannot create or share host invitations (locked: %s)', async (isLocked) => {
+test.each([false, true])('guests without a retained invitation cannot create one (locked: %s)', async (isLocked) => {
   getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', join_code: 'ABCDEF', is_locked: isLocked } });
   await renderGuest();
   expect(getServerInfo).not.toHaveBeenCalled();
   expect(container.querySelector('[aria-label="Show party QR code"]')).toBeNull();
   expect(container.querySelector('dialog')).toBeNull();
   expect(container.textContent).not.toContain('ABCDEF');
+});
+
+test.each([false, true])('guests can open, copy, close and reopen their current QR invitation (locked: %s)', async (isLocked) => {
+  useAuth.mockReturnValue({ authLevel: 'guest', partyInvitation: invitation });
+  getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', is_locked: isLocked } });
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: jest.fn().mockResolvedValue() } });
+  await renderGuest();
+  const show = container.querySelector('[aria-label="Show party QR code"]');
+  const dialog = container.querySelector('dialog');
+  expect(dialog.open).toBe(false);
+  act(() => Simulate.click(show));
+  expect(dialog.open).toBe(true);
+  expect(dialog.querySelector('svg')).not.toBeNull();
+  expect(dialog.querySelector('.qr-regenerate')).toBeNull();
+  await act(async () => Simulate.click(dialog.querySelector('[aria-label="Copy invitation link"]')));
+  expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${window.location.origin}/join/invite#invite=${invitation.token}`);
+  act(() => Simulate.click(dialog.querySelector('[aria-label="Close party QR code"]')));
+  expect(dialog.open).toBe(false);
+  act(() => Simulate.click(show));
+  expect(dialog.open).toBe(true);
+  act(() => Simulate.cancel(dialog));
+  expect(dialog.open).toBe(false);
+  act(() => Simulate.click(show));
+  act(() => Simulate.keyDown(dialog, { key: 'Escape' }));
+  expect(dialog.open).toBe(false);
+});
+
+test.each([{ partyId: 'other-party' }, { memberId: 'other-member' }])('does not share another session membership invitation: %s', async (scope) => {
+  useAuth.mockReturnValue({ authLevel: 'guest', partyInvitation: { ...invitation, ...scope } });
+  await renderGuest();
+  expect(container.querySelector('[aria-label="Show party QR code"]')).toBeNull();
 });
 
 test('passkey-signed-in guests can go home without signing out', async () => {
