@@ -30,6 +30,13 @@ import './OrganizerPage.css';
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
+function isReadyForPlayback(item, ssmusicState) {
+  return !ssmusicState[item.id]?.pending && !ssmusicState[item.id]?.error
+    && !['submitting', 'queued', 'running', 'error'].includes(item.ssmusic_status)
+    && !item.ssmusic_error
+    && (item.source !== 'ssmusic' || Boolean(item.media_path));
+}
+
 export default function OrganizerPage({ signOutAction, accountInfoAction }) {
   const { authLevel } = useAuth();
   const { partyId, memberId: memberIdFromUrl } = useParams();
@@ -245,7 +252,7 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
     // Find currently playing or paused item
     const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
     // Auto-advance to the next song by position, regardless of its played status
-    const nextSongs = active ? queue.filter((i) => i.position > active.position) : [];
+    const nextSongs = active ? queue.filter((i) => i.position > active.position && isReadyForPlayback(i, ssmusicState)) : [];
     const next = nextSongs.length > 0 ? nextSongs.reduce((a, b) => (a.position < b.position ? a : b)) : null;
     if (next) {
       await updateQueueItemStatus(partyId, next.id, 'playing');
@@ -256,7 +263,7 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
       }
       setCurrentItem(null);
     }
-  }, [partyId, queue]);
+  }, [partyId, queue, ssmusicState]);
 
   const handlePrevious = useCallback(async () => {
     try {
@@ -278,15 +285,19 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
       const active = queue.find((i) => i.status === 'playing' || i.status === 'paused');
       if (!active) return;
       // Find the song with the lowest position that is higher than the current
-      const nextSongs = queue.filter((i) => i.position > active.position);
-      if (nextSongs.length === 0) return;
+      const nextSongs = queue.filter((i) => i.position > active.position && isReadyForPlayback(i, ssmusicState));
+      if (nextSongs.length === 0) {
+        await updateQueueItemStatus(partyId, active.id, 'played');
+        setCurrentItem(null);
+        return;
+      }
       const next = nextSongs.reduce((a, b) => (a.position < b.position ? a : b));
       await updateQueueItemStatus(partyId, next.id, 'playing');
       setCurrentItem({ ...next, status: 'playing' });
     } catch {
       setError('Failed to skip to next song.');
     }
-  }, [partyId, queue]);
+  }, [partyId, queue, ssmusicState]);
 
   // Emit playback progress to guests and update local display
   const handleTimeUpdate = useCallback((currentTime, duration) => {

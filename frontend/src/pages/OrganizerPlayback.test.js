@@ -110,6 +110,54 @@ test('stops the player when the last song ends', async () => {
   expect(mockPlayerProps.mediaPath).toBeNull();
 });
 
+test.each(['onEnded', 'onNext'])('%s skips processing, failed and missing-media songs to the next ready position', async (action) => {
+  const blocked = ['submitting', 'queued', 'running', 'error'].map((ssmusic_status, index) => ({
+    ...youtube, id: `blocked-${index}`, position: index + 2, ssmusic_status,
+  }));
+  const missingMedia = { ...youtube, id: 'missing-media', position: 6, source: 'ssmusic', media_path: null };
+  const failed = { ...youtube, id: 'failed', position: 7, ssmusic_error: 'Conversion failed' };
+  const ready = { ...youtube, id: 'ready', position: 8, source: 'ssmusic', ssmusic_status: 'completed',
+    media_path: 'ready/clip.mp4', media_type: 'video' };
+  const later = { ...youtube, id: 'later', position: 9 };
+  const queue = [later, ...blocked, audio, failed, ready, missingMedia];
+  getQueue.mockResolvedValueOnce({ data: queue });
+  await renderPage();
+  await act(async () => mockPlayerProps[action]());
+  expect(updateQueueItemStatus).toHaveBeenCalledTimes(1);
+  expect(updateQueueItemStatus).toHaveBeenCalledWith('party-id', ready.id, 'playing');
+  expect(mockPlayerProps.mediaPath).toBe(ready.media_path);
+  expect(mockPlaylistProps.queue).toEqual(queue);
+});
+
+test.each(['onEnded', 'onNext'])('%s stops when all remaining songs are unavailable', async (action) => {
+  getQueue.mockResolvedValueOnce({ data: [audio, { ...youtube, ssmusic_status: 'running' },
+    { ...youtube, id: 'failed', position: 3, ssmusic_status: 'error' }] });
+  await renderPage();
+  await act(async () => mockPlayerProps[action]());
+  expect(updateQueueItemStatus).toHaveBeenCalledTimes(1);
+  expect(updateQueueItemStatus).toHaveBeenCalledWith('party-id', audio.id, 'played');
+  expect(mockPlayerProps.videoId).toBeNull();
+});
+
+test.each(['onEnded', 'onNext'])('%s skips an in-flight submission and its local failure', async (action) => {
+  const later = { ...youtube, id: 'later', position: 3 };
+  getQueue.mockResolvedValueOnce({ data: [audio, youtube, later] });
+  let rejectRequest;
+  sendQueueItemToSSMusic.mockImplementationOnce(() => new Promise((resolve, reject) => { rejectRequest = reject; }));
+  await renderPage();
+  let request;
+  act(() => { request = mockPlaylistProps.onSendToSSMusic(youtube); });
+  await act(async () => mockPlayerProps[action]());
+  expect(updateQueueItemStatus).toHaveBeenLastCalledWith('party-id', later.id, 'playing');
+  await act(async () => {
+    rejectRequest(new Error('ssMusic is unavailable'));
+    await request;
+  });
+  await act(async () => mockPlayerProps[action]());
+  expect(updateQueueItemStatus).toHaveBeenLastCalledWith('party-id', later.id, 'playing');
+  expect(updateQueueItemStatus).toHaveBeenCalledTimes(2);
+});
+
 test('routes guest seek, settings and progress through the shared controls', async () => {
   await renderPage();
   act(() => {
