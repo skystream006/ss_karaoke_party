@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { EllipsisVertical } from 'lucide-react';
 import './ActionsMenu.css';
 
-export default function ActionsMenu({ label = 'More actions', actions = [] }) {
+export default function ActionsMenu({ label = 'More actions', actions = [], disabled = false }) {
   const [open, setOpen] = useState(false);
   const [position, setPosition] = useState(null);
   const triggerRef = useRef(null);
@@ -13,7 +13,7 @@ export default function ActionsMenu({ label = 'More actions', actions = [] }) {
 
   useLayoutEffect(() => {
     if (!open) return;
-    if (!availableActions.length) {
+    if (disabled || !availableActions.length) {
       setOpen(false);
       return;
     }
@@ -24,7 +24,7 @@ export default function ActionsMenu({ label = 'More actions', actions = [] }) {
       top: Math.max(8, anchor.bottom + menu.height + 12 <= window.innerHeight
         ? anchor.bottom + 4 : Math.min(anchor.top - menu.height - 4, window.innerHeight - menu.height - 8)),
     });
-  }, [open, availableActions.length]);
+  }, [open, availableActions.length, disabled]);
 
   useEffect(() => {
     if (open && position) {
@@ -76,7 +76,7 @@ export default function ActionsMenu({ label = 'More actions', actions = [] }) {
   return (
     <>
       <button type="button" ref={triggerRef} className="actions-menu-trigger"
-        title={label} aria-label={label}
+        title={label} aria-label={label} disabled={disabled}
         aria-haspopup="menu" aria-expanded={open} aria-controls={open ? menuId : undefined}
         onClick={() => { setPosition(null); setOpen(!open); }}
         onKeyDown={(event) => {
@@ -88,7 +88,7 @@ export default function ActionsMenu({ label = 'More actions', actions = [] }) {
         }}>
         <EllipsisVertical size={20} aria-hidden="true" />
       </button>
-      {open && createPortal(
+      {open && !disabled && createPortal(
         <div id={menuId} ref={menuRef} role="menu" tabIndex={-1} aria-label={label}
           className="actions-menu" style={position || { top: 0, left: 0, visibility: 'hidden' }}
           onKeyDown={handleMenuKeyDown}>

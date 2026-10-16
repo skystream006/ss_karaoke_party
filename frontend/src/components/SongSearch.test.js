@@ -260,3 +260,42 @@ test('playlist processing feedback lasts until conversion completes', async () =
   expect(container.querySelector('[role="status"]')).toBeNull();
   expect(container.querySelector('.playlist-media-status').textContent).toBe('ssMusic');
 });
+
+test.each(['submitting', 'queued', 'running', 'request'])('disables only the processing item actions during %s and restores them afterward', async (processingState) => {
+  const item = { id: 'entry', video_id: 'youtube-song', source: 'youtube', video_title: 'YouTube song',
+    position: 1, singer_name: 'Singer', status: 'queued' };
+  const onPlay = jest.fn();
+  const onRemove = jest.fn();
+  const onSendToSSMusic = jest.fn();
+  const renderQueue = (updates = {}, ssmusicState = {}) => root.render(<Playlist
+    queue={[{ ...item, ...updates }, { ...item, id: 'other', position: 2 }]}
+    onPlay={onPlay} onRemove={onRemove} onSendToSSMusic={onSendToSSMusic}
+    isOrganizer ssmusicState={ssmusicState} />);
+
+  act(() => renderQueue());
+  act(() => container.querySelector('.actions-menu-trigger').click());
+  expect(document.querySelector('[role="menu"]')).not.toBeNull();
+
+  act(() => renderQueue(
+    { ssmusic_status: processingState === 'request' ? undefined : processingState },
+    processingState === 'request' ? { entry: { pending: true } } : {},
+  ));
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+  const [processingItem, otherItem] = container.querySelectorAll('.playlist-item');
+  expect([...processingItem.querySelectorAll('button')].every(button => button.disabled)).toBe(true);
+  expect([...otherItem.querySelectorAll('button')].every(button => !button.disabled)).toBe(true);
+  act(() => processingItem.querySelector('.playlist-playback-button').click());
+  act(() => processingItem.querySelector('.actions-menu-trigger').click());
+  expect(onPlay).not.toHaveBeenCalled();
+  expect(onRemove).not.toHaveBeenCalled();
+  expect(onSendToSSMusic).not.toHaveBeenCalled();
+  expect(document.querySelector('[role="menu"]')).toBeNull();
+
+  for (const ssmusic_status of ['completed', 'error']) {
+    await act(async () => renderQueue({ ssmusic_status }));
+    expect([...processingItem.querySelectorAll('button')].every(button => !button.disabled)).toBe(true);
+    act(() => processingItem.querySelector('.actions-menu-trigger').click());
+    expect([...document.querySelectorAll('[role="menuitem"]')].every(button => !button.disabled)).toBe(true);
+    act(() => Simulate.keyDown(document.querySelector('[role="menu"]'), { key: 'Escape' }));
+  }
+});

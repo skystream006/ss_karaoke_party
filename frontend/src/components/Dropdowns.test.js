@@ -270,8 +270,9 @@ test('playlist sends only YouTube items and disables only the item already being
     ssmusicState={{ [song.id]: { pending: true } }} />));
   const triggers = container.querySelectorAll('[aria-haspopup="menu"]');
   expect(triggers).toHaveLength(2);
-  act(() => Simulate.click(triggers[0]));
-  expect(document.querySelector('[role="menuitem"]').disabled).toBe(true);
+  expect(triggers[0].disabled).toBe(true);
+  act(() => triggers[0].click());
+  expect(document.querySelector('[role="menu"]')).toBeNull();
   expect(container.querySelector('[role="status"]').textContent).toBe('Video is processing, come back when done');
   act(() => Simulate.click(triggers[1]));
   const send = document.querySelector('[role="menuitem"]');

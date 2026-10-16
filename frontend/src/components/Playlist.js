@@ -20,18 +20,18 @@ function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pen
     actions.push({ label: pending ? 'Sending to ssMusic...' : 'Send to ssMusic', icon: pending ? LoaderCircle : Send,
       disabled: pending, spinning: pending, run: () => onSendToSSMusic(item) });
   }
-  if (onRemove) actions.push({ label: 'Remove', icon: Trash2, danger: true, run: () => onRemove(item.id) });
+  if (onRemove) actions.push({ label: 'Remove', icon: Trash2, danger: true, disabled: pending, run: () => onRemove(item.id) });
 
   if (!actions.length && !onPlayback) return null;
   return (
     <div className="playlist-actions">
       {onPlayback && (
         <button type="button" className="playlist-playback-button"
-          title={playbackLabel} aria-label={playbackLabel} onClick={() => onPlayback(item)}>
+          title={playbackLabel} aria-label={playbackLabel} disabled={pending} onClick={() => onPlayback(item)}>
           {isPlaying ? <Pause size={20} aria-hidden="true" /> : <Play size={20} aria-hidden="true" />}
         </button>
       )}
-      <ActionsMenu label={`Actions for ${item.video_title}`} actions={actions} />
+      <ActionsMenu label={`Actions for ${item.video_title}`} actions={actions} disabled={pending} />
     </div>
   );
 }
