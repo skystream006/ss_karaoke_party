@@ -14,7 +14,10 @@ function loginAuditDatabase(record, count = () => 0) {
         record(sql, values);
         return { rows: [] };
       }
-      if (sql.startsWith('SELECT COUNT(*)')) return { rows: [{ count: count() }] };
+      if (sql.startsWith('SELECT COUNT(*)')) {
+        assert.match(sql, /FILTER \(WHERE outcome IN \('invalid_key', 'rate_limited'\)\)/);
+        return { rows: [{ count: count(), failed_count: count() }] };
+      }
       if (['BEGIN', 'COMMIT', 'ROLLBACK', 'SELECT pg_advisory_xact_lock(1948272)'].includes(sql)) return { rows: [] };
       throw new Error('Unexpected database operation in login audit test');
     },
@@ -146,9 +149,9 @@ test('HOST login fails closed with a safe error when audit storage is unavailabl
   assert.equal(writes, 11);
 });
 
-test('the thousandth HOST login record persists and blocks valid keys and rate-limited attempts without growing records', async (context) => {
+test('the fiftieth HOST login failure persists and blocks valid keys and rate-limited attempts without growing records', async (context) => {
   const { createAuthRoutes } = require('../routes/auth');
-  let count = 999;
+  let count = 49;
   const database = loginAuditDatabase(() => { count += 1; }, () => count);
   const app = express();
   app.use(express.json());
@@ -163,7 +166,7 @@ test('the thousandth HOST login record persists and blocks valid keys and rate-l
     });
     assert.equal(response.status, 503);
     assert.deepEqual(await response.json(), { error: 'HOST login is disabled until an administrator clears the login records.' });
-    assert.equal(count, 1000);
+    assert.equal(count, 50);
   }
 });
 

@@ -21,7 +21,8 @@ function HostLoginAttempts() {
       const { data } = await getHostLoginAttempts(before);
       setAttempts((current) => before ? [...current, ...data.items] : data.items);
       setNextCursor(data.nextCursor);
-      setStatus({ recordCount: data.recordCount, recordLimit: data.recordLimit, loginDisabled: data.loginDisabled });
+      setStatus({ recordCount: data.recordCount, failedCount: data.failedCount,
+        recordLimit: data.recordLimit, loginDisabled: data.loginDisabled });
     } catch (failure) {
       setError(failure.response?.data?.error || 'Unable to load HOST login attempts.');
     } finally {
@@ -32,7 +33,7 @@ function HostLoginAttempts() {
   useEffect(() => { load(); }, [load]);
 
   const clear = async () => {
-    if (!window.confirm('Permanently clear all HOST login records and remove the record-limit lockout? This cannot be undone.')) return;
+    if (!window.confirm('Permanently clear all HOST login records and remove the failure-limit lockout? This cannot be undone.')) return;
     setLoading(true);
     setError('');
     setNotice('');
@@ -60,18 +61,19 @@ function HostLoginAttempts() {
           title="Refresh HOST login attempts" aria-label="Refresh HOST login attempts"><RefreshCw size={18} aria-hidden="true" /></button>
       </div>
     </div>
-    {status && <p className="muted">{status.recordCount?.toLocaleString()} / {status.recordLimit?.toLocaleString()} records</p>}
+    {status && <p className="muted">{status.failedCount?.toLocaleString()} / {status.recordLimit?.toLocaleString()} failed attempts
+      {' '}({status.recordCount?.toLocaleString()} total records)</p>}
     {status?.loginDisabled && <p className="error-msg" role="alert">HOST login is disabled until these records are cleared.</p>}
     {error && <p className="error-msg" role="alert">{error}</p>}
     {notice && <p role="status">{notice}</p>}
     {loading && <p role="status">Loading login attempts...</p>}
-    {!loading && !error && attempts.length === 0 && <p className="muted">No failed HOST login attempts recorded.</p>}
+    {!loading && !error && attempts.length === 0 && <p className="muted">No HOST login attempts recorded.</p>}
     {attempts.length > 0 && <table className="account-login-attempts" aria-label="HOST login attempts">
       <thead><tr><th scope="col">Time</th><th scope="col">IP address</th><th scope="col">Result</th></tr></thead>
       <tbody>{attempts.map((attempt) => <tr key={attempt.id}>
         <td><time dateTime={attempt.occurred_at}>{new Date(attempt.occurred_at).toLocaleString()}</time></td>
         <td><code>{attempt.ip_address || 'Unknown'}</code></td>
-        <td>{attempt.outcome === 'rate_limited' ? 'Retry limit reached' : 'Invalid key'}</td>
+        <td>{attempt.outcome === 'success' ? 'Successful' : attempt.outcome === 'rate_limited' ? 'Retry limit reached' : 'Invalid key'}</td>
       </tr>)}</tbody>
     </table>}
     {nextCursor && <div className="account-actions account-login-pagination">

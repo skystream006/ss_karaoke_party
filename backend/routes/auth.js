@@ -8,7 +8,7 @@ const { authLimiter, createHostScreenLoginLimiter } = require('../middleware/rat
 const { authError, passkeyConfig, createChallenges } = require('../lib/passkeys');
 const { appLoginRequest, appTokenRequest, issueAppLoginCode, consumeAppLoginCode } = require('../lib/appLogin');
 
-const HOST_LOGIN_RECORD_LIMIT = 1000;
+const HOST_LOGIN_FAILURE_LIMIT = 50;
 const hostLoginDisabled = () => authError(503, 'HOST login is disabled until an administrator clears the login records.');
 
 function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings = process.env,
@@ -19,22 +19,25 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
     try {
       return await transaction(async (client) => {
         await client.query('SELECT pg_advisory_xact_lock(1948272)');
-        const { rows } = await client.query('SELECT COUNT(*)::int AS count FROM hostscreen_login_attempts');
-        return operation(client, rows[0].count);
+        const { rows } = await client.query(
+          `SELECT COUNT(*)::int AS count,
+           COUNT(*) FILTER (WHERE outcome IN ('invalid_key', 'rate_limited'))::int AS failed_count
+           FROM hostscreen_login_attempts`);
+        return operation(client, rows[0].failed_count, rows[0].count);
       });
     } catch {
       throw authError(503, 'HOST login is temporarily unavailable.');
     }
   }
-  async function recordHostLoginAttempt(client, req, outcome, count) {
-    if (count >= HOST_LOGIN_RECORD_LIMIT) return hostLoginDisabled();
+  async function recordHostLoginAttempt(client, req, outcome, failedCount) {
+    if (failedCount >= HOST_LOGIN_FAILURE_LIMIT) return hostLoginDisabled();
     await client.query('INSERT INTO hostscreen_login_attempts (ip_address, outcome) VALUES ($1, $2)',
       [isIP(req.ip || '') ? req.ip : null, outcome]);
-    return count + 1 >= HOST_LOGIN_RECORD_LIMIT ? hostLoginDisabled() : null;
+    return failedCount + 1 >= HOST_LOGIN_FAILURE_LIMIT && outcome !== 'success' ? hostLoginDisabled() : null;
   }
   const limitHostLogin = hostLimiter || createHostScreenLoginLimiter({
     onBlocked: async (req) => {
-      const error = await hostLoginTransaction((client, count) => recordHostLoginAttempt(client, req, 'rate_limited', count));
+      const error = await hostLoginTransaction((client, failedCount) => recordHostLoginAttempt(client, req, 'rate_limited', failedCount));
       if (error) throw error;
     },
   });
@@ -189,15 +192,17 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
     }
     const key = req.body.key;
     const digest = (value) => createHash('sha256').update(value).digest();
-    const result = await hostLoginTransaction(async (client, count) => {
-      if (count >= HOST_LOGIN_RECORD_LIMIT) return { error: hostLoginDisabled() };
+    const result = await hostLoginTransaction(async (client, failedCount) => {
+      if (failedCount >= HOST_LOGIN_FAILURE_LIMIT) return { error: hostLoginDisabled() };
       if (typeof key !== 'string' || !timingSafeEqual(digest(key), digest(configuredKey))) {
-        const error = await recordHostLoginAttempt(client, req, 'invalid_key', count);
+        const error = await recordHostLoginAttempt(client, req, 'invalid_key', failedCount);
         return { error: error || authError(401, 'Invalid HOST login key.') };
       }
       const { rows } = await client.query("SELECT id FROM auth_users WHERE role = 'hostscreen' AND status = 'approved' FOR UPDATE");
       if (!rows.length) return { error: authError(403, 'HOSTSCREEN account is unavailable.') };
-      return sessionResult(rows[0].id, client);
+      const session = await sessionResult(rows[0].id, client);
+      await recordHostLoginAttempt(client, req, 'success', failedCount);
+      return session;
     });
     if (result.error) throw result.error;
     res.json(result);
@@ -270,13 +275,13 @@ function createAuthRoutes({ database = pool, webauthn = webauthnServer, settings
       || BigInt(before) > 9223372036854775807n)) {
       throw authError(400, 'Invalid login record cursor.');
     }
-    const result = await hostLoginTransaction(async (client, count) => {
+    const result = await hostLoginTransaction(async (client, failedCount, recordCount) => {
       const { rows } = await client.query(
         `SELECT id, occurred_at, HOST(ip_address) AS ip_address, outcome FROM hostscreen_login_attempts
          WHERE ($1::bigint IS NULL OR id < $1::bigint) ORDER BY id DESC LIMIT 51`, [before || null]);
       const items = rows.slice(0, 50);
       return { items, nextCursor: rows.length > 50 ? String(items[items.length - 1].id) : null,
-        recordCount: count, recordLimit: HOST_LOGIN_RECORD_LIMIT, loginDisabled: count >= HOST_LOGIN_RECORD_LIMIT };
+        recordCount, failedCount, recordLimit: HOST_LOGIN_FAILURE_LIMIT, loginDisabled: failedCount >= HOST_LOGIN_FAILURE_LIMIT };
     });
     res.json(result);
   }));

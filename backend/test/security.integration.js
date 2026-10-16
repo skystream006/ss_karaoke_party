@@ -248,8 +248,9 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     const initialResponse = await request(endpoint, { token: admin.token });
     const initial = expect(initialResponse, 200);
     assert.equal(initialResponse.cacheControl, 'no-store');
-    assert.equal(initial.items.length, 1);
-    assert.equal(initial.items[0].outcome, 'invalid_key');
+    assert.equal(initial.items.length, 3);
+    assert.equal(initial.failedCount, 1);
+    assert.deepEqual(initial.items.map((item) => item.outcome), ['success', 'success', 'invalid_key']);
     assert.ok(initial.items[0].ip_address.includes('127.0.0.1'));
     assert.ok(Number.isFinite(Date.parse(initial.items[0].occurred_at)));
     assert.deepEqual(Object.keys(initial.items[0]).sort(), ['id', 'ip_address', 'occurred_at', 'outcome']);
@@ -259,7 +260,8 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     }
     expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 429);
     const recorded = expect(await request(endpoint, { token: admin.token }), 200);
-    assert.equal(recorded.items.length, 9);
+    assert.equal(recorded.items.length, 11);
+    assert.equal(recorded.failedCount, 9);
     assert.equal(recorded.items[0].outcome, 'rate_limited');
     assert.equal(recorded.items.filter((item) => item.outcome === 'invalid_key').length, 8);
     assert.equal(JSON.stringify(recorded).includes('audit-test-invalid-key'), false);
@@ -272,7 +274,7 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     }
     await database.query(
       `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
-       SELECT '2001:db8::1'::inet, 'invalid_key' FROM generate_series(1, 55)`);
+      SELECT '2001:db8::1'::inet, 'success' FROM generate_series(1, 55)`);
     const first = expect(await request(endpoint, { token: admin.token }), 200);
     assert.equal(first.items.length, 50);
     assert.equal(first.nextCursor, first.items.at(-1).id);
@@ -281,17 +283,17 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     }
     await database.query("INSERT INTO hostscreen_login_attempts (ip_address, outcome) VALUES ('192.0.2.1', 'rate_limited')");
     const second = expect(await request(`${endpoint}?before=${first.nextCursor}`, { token: admin.token }), 200);
-    assert.equal(second.items.length, 14);
+    assert.equal(second.items.length, 16);
     assert.equal(second.nextCursor, null);
-    assert.equal(new Set([...first.items, ...second.items].map((item) => item.id)).size, 64);
+    assert.equal(new Set([...first.items, ...second.items].map((item) => item.id)).size, 66);
     app.use('/api/restarted-auth', createAuthRoutes({ database }));
     const reloaded = expect(await request('/restarted-auth/hostscreen/login-attempts', { token: admin.token }), 200);
     assert.equal(reloaded.items[0].ip_address, '192.0.2.1');
     const empty = expect(await request(`${endpoint}?before=${second.items.at(-1).id}`, { token: admin.token }), 200);
-    assert.deepEqual(empty, { items: [], nextCursor: null, recordCount: 65, recordLimit: 1000, loginDisabled: false });
+    assert.deepEqual(empty, { items: [], nextCursor: null, recordCount: 67, failedCount: 10, recordLimit: 50, loginDisabled: false });
   });
 
-  await context.test('1000 audit records disable new HOST logins across routers until an administrator clears them', async () => {
+  await context.test('50 failed attempts disable new HOST logins across routers until an administrator clears them', async () => {
     const settings = { HOST_SCREEN_LOGIN_KEY: hostScreenKey };
     app.use('/api/host-cap', createAuthRoutes({ database, settings, hostLimiter: (req, res, next) => next() }));
     const endpoint = '/host-cap/hostscreen/login-attempts';
@@ -299,20 +301,22 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     await database.query('DELETE FROM hostscreen_login_attempts');
     await database.query(
       `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
-       SELECT '192.0.2.1'::inet, 'invalid_key' FROM generate_series(1, 999)`);
+      SELECT '192.0.2.1'::inet, 'invalid_key' FROM generate_series(1, 49)`);
     const existingScreen = expect(await post(loginEndpoint, { key: hostScreenKey }), 200);
     const before = expect(await request(endpoint, { token: admin.token }), 200);
-    assert.equal(before.recordCount, 999);
+    assert.equal(before.recordCount, 50);
+    assert.equal(before.failedCount, 49);
     assert.equal(before.loginDisabled, false);
     const failures = await Promise.all(Array.from({ length: 8 }, () => post(loginEndpoint, { key: 'wrong' })));
     for (const failure of failures) {
       assert.match(expect(failure, 503).error, /administrator clears/);
     }
     const full = expect(await request(endpoint, { token: admin.token }), 200);
-    assert.equal(full.recordCount, 1000);
-    assert.equal(full.recordLimit, 1000);
+    assert.equal(full.recordCount, 51);
+    assert.equal(full.failedCount, 50);
+    assert.equal(full.recordLimit, 50);
     assert.equal(full.loginDisabled, true);
-    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM hostscreen_login_attempts')).rows[0].count, 1000);
+    assert.equal((await database.query('SELECT COUNT(*)::int AS count FROM hostscreen_login_attempts')).rows[0].count, 51);
     assert.match(expect(await post(loginEndpoint, { key: hostScreenKey }), 503).error, /administrator clears/);
     expect(await request('/auth/me', { token: existingScreen.token }), 200);
     app.use('/api/host-cap-restarted', createAuthRoutes({ database, settings }));
@@ -320,24 +324,84 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     for (const token of [undefined, member.token, existingScreen.token]) {
       expect(await request(endpoint, { method: 'DELETE', token }), token ? 403 : 401);
     }
-    assert.equal(expect(await request(endpoint, { token: admin.token }), 200).recordCount, 1000);
+    assert.equal(expect(await request(endpoint, { token: admin.token }), 200).recordCount, 51);
     const cleared = await request(endpoint, { method: 'DELETE', token: admin.token });
     expect(cleared, 204);
     assert.equal(cleared.cacheControl, 'no-store');
     assert.deepEqual(expect(await request(endpoint, { token: admin.token }), 200),
-      { items: [], nextCursor: null, recordCount: 0, recordLimit: 1000, loginDisabled: false });
+      { items: [], nextCursor: null, recordCount: 0, failedCount: 0, recordLimit: 50, loginDisabled: false });
     const resumed = expect(await post('/host-cap-restarted/hostscreen/login', { key: hostScreenKey }), 200);
     expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 429);
-    assert.equal(expect(await request(endpoint, { token: admin.token }), 200).recordCount, 1);
+    const afterResume = expect(await request(endpoint, { token: admin.token }), 200);
+    assert.equal(afterResume.recordCount, 2);
+    assert.equal(afterResume.failedCount, 1);
     await database.query(
       `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
-       SELECT '192.0.2.1'::inet, 'invalid_key' FROM generate_series(1, 998)`);
+      SELECT '192.0.2.1'::inet, 'invalid_key' FROM generate_series(1, 48)`);
     assert.match(expect(await post('/auth/hostscreen/login', { key: hostScreenKey }), 503).error, /administrator clears/);
-    assert.equal(expect(await request(endpoint, { token: admin.token }), 200).recordCount, 1000);
+    const blockedByRateLimit = expect(await request(endpoint, { token: admin.token }), 200);
+    assert.equal(blockedByRateLimit.recordCount, 51);
+    assert.equal(blockedByRateLimit.failedCount, 50);
+    assert.equal(blockedByRateLimit.loginDisabled, true);
     expect(await request(endpoint, { method: 'DELETE', token: admin.token }), 204);
     expect(await request(endpoint, { method: 'DELETE', token: admin.token }), 204);
     expect(await post('/auth/logout', {}, existingScreen.token), 204);
     expect(await post('/auth/logout', {}, resumed.token), 204);
+  });
+
+  await context.test('successful HOST logins are atomic with their audit record and never advance or reset the failure cap', async () => {
+    const settings = { HOST_SCREEN_LOGIN_KEY: hostScreenKey };
+    const failingDatabase = {
+      query: (...args) => database.query(...args),
+      connect: async () => {
+        const client = await database.connect();
+        return {
+          query: (sql, values) => {
+            if (sql.startsWith('INSERT INTO hostscreen_login_attempts') && values[1] === 'success') {
+              throw new Error('Simulated success audit failure');
+            }
+            return client.query(sql, values);
+          },
+          release: () => client.release(),
+        };
+      },
+    };
+    app.use('/api/host-audit-fail', createAuthRoutes({ database: failingDatabase, settings }));
+    const sessionsBefore = Number((await database.query('SELECT COUNT(*) FROM auth_sessions')).rows[0].count);
+    expect(await post('/host-audit-fail/hostscreen/login', { key: hostScreenKey }), 503);
+    assert.equal(Number((await database.query('SELECT COUNT(*) FROM auth_sessions')).rows[0].count), sessionsBefore);
+    assert.equal(Number((await database.query('SELECT COUNT(*) FROM hostscreen_login_attempts')).rows[0].count), 0);
+    await database.query(
+      `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
+       SELECT '192.0.2.1'::inet, 'invalid_key' FROM generate_series(1, 49)`);
+    await database.query(
+      `INSERT INTO hostscreen_login_attempts (ip_address, outcome)
+       SELECT '192.0.2.1'::inet, 'success' FROM generate_series(1, 1000)`);
+    const results = await Promise.all(Array.from({ length: 3 }, () => post('/host-cap/hostscreen/login', { key: hostScreenKey })));
+    const sessions = results.map((result) => expect(result, 200));
+    for (const session of sessions) {
+      expect(await request('/auth/me', { token: session.token }), 200);
+    }
+    const records = expect(await request('/auth/hostscreen/login-attempts', { token: admin.token }), 200);
+    assert.equal(records.recordCount, 1052);
+    assert.equal(records.failedCount, 49);
+    assert.equal(records.loginDisabled, false);
+    assert.equal(records.items[0].outcome, 'success');
+    for (const session of sessions) {
+      assert.equal(JSON.stringify(records).includes(session.token), false);
+    }
+    assert.equal(JSON.stringify(records).includes(hostScreenKey), false);
+    expect(await post('/host-cap/hostscreen/login', { key: 'wrong' }), 503);
+    expect(await post('/host-cap/hostscreen/login', { key: hostScreenKey }), 503);
+    const blocked = expect(await request('/auth/hostscreen/login-attempts', { token: admin.token }), 200);
+    assert.equal(blocked.recordCount, 1053);
+    assert.equal(blocked.failedCount, 50);
+    assert.equal(blocked.loginDisabled, true);
+    assert.equal(Number((await database.query('SELECT COUNT(*) FROM auth_sessions')).rows[0].count), sessionsBefore + 3);
+    expect(await request('/auth/hostscreen/login-attempts', { method: 'DELETE', token: admin.token }), 204);
+    for (const session of sessions) {
+      expect(await post('/auth/logout', {}, session.token), 204);
+    }
   });
 
   await context.test('additional passkeys are bound to the signed-in account and its single-use session challenge', async () => {

@@ -41,7 +41,7 @@ beforeEach(() => {
   window.history.replaceState({}, '', '/');
   getParties.mockResolvedValue({ data: [party] });
   getAccountInfo.mockResolvedValue({ data: { user: session.user, HOST_SCREEN_LOGIN_KEY: 'test-host-key' } });
-  getHostLoginAttempts.mockResolvedValue({ data: { items: [], nextCursor: null, recordCount: 0, recordLimit: 1000, loginDisabled: false } });
+  getHostLoginAttempts.mockResolvedValue({ data: { items: [], nextCursor: null, recordCount: 0, failedCount: 0, recordLimit: 50, loginDisabled: false } });
   resolvePartyInvitation.mockResolvedValue({ data: { party, host: 'Alex', expiresAt: '2099-01-01' } });
   startAuthentication.mockResolvedValue({ id: 'credential' });
   startRegistration.mockResolvedValue({ id: 'credential' });
@@ -250,29 +250,56 @@ test('Account Info in the three-dot menu shows a masked key that can be revealed
   expect(container.textContent).toContain('Key copied.');
 });
 
-test('admins review paginated HOST login failures and refresh to the newest records', async () => {
+test('admins review successful and failed HOST logins and refresh to the newest records', async () => {
   sessionStorage.setItem('authToken', 'admin-token');
   axios.get.mockResolvedValue({ data: { ...session, level: 'admin', user: { ...session.user, role: 'admin' } } });
   getPasskeys.mockResolvedValue({ data: [] });
   getAuthUsers.mockResolvedValue({ data: [] });
   const recent = { id: '52', occurred_at: '2026-10-14T10:00:00Z', ip_address: '192.0.2.1', outcome: 'invalid_key' };
+  const successful = { id: '53', occurred_at: '2026-10-14T10:01:00Z', ip_address: '192.0.2.2', outcome: 'success' };
   const older = { id: '2', occurred_at: '2026-10-14T09:00:00Z', ip_address: '2001:db8::1', outcome: 'rate_limited' };
-  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [recent], nextCursor: '52', recordCount: 2, recordLimit: 1000, loginDisabled: false } });
+  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [successful, recent], nextCursor: '52', recordCount: 3, failedCount: 2, recordLimit: 50, loginDisabled: false } });
   window.history.replaceState({}, '', '/account');
   await renderApp();
   expect(getHostLoginAttempts).toHaveBeenCalledWith(null);
   expect(container.querySelector('table').textContent).toContain('192.0.2.1');
   expect(container.querySelector('table').textContent).toContain('Invalid key');
-  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [older], nextCursor: null, recordCount: 2, recordLimit: 1000, loginDisabled: false } });
+  expect(container.querySelector('tbody tr').textContent).toContain('Successful');
+  expect(container.querySelector('tbody tr').textContent).toContain('192.0.2.2');
+  expect(container.textContent).toContain('2 / 50 failed attempts');
+  expect(container.textContent).toContain('3 total records');
+  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [older], nextCursor: null, recordCount: 3, failedCount: 2, recordLimit: 50, loginDisabled: false } });
   await click('Load more');
   expect(getHostLoginAttempts).toHaveBeenLastCalledWith('52');
-  expect(container.querySelectorAll('tbody tr')).toHaveLength(2);
+  expect(container.querySelectorAll('tbody tr')).toHaveLength(3);
   expect(container.querySelector('table').textContent).toContain('Retry limit reached');
   expect(container.textContent).not.toContain('Load more');
   await act(async () => { Simulate.click(container.querySelector('[aria-label="Refresh HOST login attempts"]')); });
   expect(getHostLoginAttempts).toHaveBeenLastCalledWith(null);
   expect(container.querySelector('table')).toBeNull();
-  expect(container.textContent).toContain('No failed HOST login attempts recorded.');
+  expect(container.textContent).toContain('No HOST login attempts recorded.');
+});
+
+test('admins can clear successful login records even with no failed attempts', async () => {
+  sessionStorage.setItem('authToken', 'admin-token');
+  axios.get.mockResolvedValue({ data: { ...session, level: 'admin' } });
+  getPasskeys.mockResolvedValue({ data: [] });
+  getAuthUsers.mockResolvedValue({ data: [] });
+  const successful = { id: '75', occurred_at: '2026-10-14T10:01:00Z', ip_address: '192.0.2.2', outcome: 'success' };
+  getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [successful], nextCursor: '26',
+    recordCount: 75, failedCount: 0, recordLimit: 50, loginDisabled: false } });
+  window.history.replaceState({}, '', '/account');
+  await renderApp();
+  expect(container.textContent).toContain('0 / 50 failed attempts');
+  expect(container.textContent).toContain('75 total records');
+  expect(container.textContent).not.toContain('HOST login is disabled');
+  const clear = container.querySelector('[aria-label="Clear HOST login records"]');
+  expect(clear.disabled).toBe(false);
+  jest.spyOn(window, 'confirm').mockReturnValue(true);
+  await act(async () => { Simulate.click(clear); });
+  expect(clearHostLoginAttempts).toHaveBeenCalledTimes(1);
+  expect(container.textContent).toContain('0 total records');
+  expect(clear.disabled).toBe(true);
 });
 
 test('admin login record loading errors leave account controls available and support retry', async () => {
@@ -293,7 +320,7 @@ test('admin login record loading errors leave account controls available and sup
   expect(refresh.disabled).toBe(false);
   await act(async () => { Simulate.click(refresh); });
   expect(container.textContent).not.toContain('Unable to load HOST login attempts.');
-  expect(container.textContent).toContain('No failed HOST login attempts recorded.');
+  expect(container.textContent).toContain('No HOST login attempts recorded.');
 });
 
 test('admins must confirm clearing login records and can recover from a failed clear', async () => {
@@ -303,22 +330,23 @@ test('admins must confirm clearing login records and can recover from a failed c
   getAuthUsers.mockResolvedValue({ data: [] });
   const recent = { id: '1000', occurred_at: '2026-10-14T12:00:00Z', ip_address: '192.0.2.1', outcome: 'invalid_key' };
   getHostLoginAttempts.mockResolvedValueOnce({ data: { items: [recent], nextCursor: '951',
-    recordCount: 1000, recordLimit: 1000, loginDisabled: true } });
+    recordCount: 1000, failedCount: 50, recordLimit: 50, loginDisabled: true } });
   window.history.replaceState({}, '', '/account');
   await renderApp();
-  expect(container.textContent).toContain('1,000 / 1,000 records');
+  expect(container.textContent).toContain('50 / 50 failed attempts');
+  expect(container.textContent).toContain('1,000 total records');
   expect(container.textContent).toContain('HOST login is disabled until these records are cleared.');
   const clear = container.querySelector('[aria-label="Clear HOST login records"]');
   const confirm = jest.spyOn(window, 'confirm').mockReturnValue(false);
   await act(async () => { Simulate.click(clear); });
-  expect(confirm).toHaveBeenCalledWith('Permanently clear all HOST login records and remove the record-limit lockout? This cannot be undone.');
+  expect(confirm).toHaveBeenCalledWith('Permanently clear all HOST login records and remove the failure-limit lockout? This cannot be undone.');
   expect(clearHostLoginAttempts).not.toHaveBeenCalled();
   confirm.mockReturnValue(true);
   clearHostLoginAttempts.mockRejectedValueOnce(new Error('offline'));
   await act(async () => { Simulate.click(clear); });
   expect(container.textContent).toContain('Unable to clear HOST login records.');
   expect(container.querySelector('table')).not.toBeNull();
-  expect(container.textContent).toContain('1,000 / 1,000 records');
+  expect(container.textContent).toContain('50 / 50 failed attempts');
   let finishClear;
   clearHostLoginAttempts.mockReturnValueOnce(new Promise((resolve) => { finishClear = resolve; }));
   await act(async () => { Simulate.click(clear); });
@@ -326,7 +354,7 @@ test('admins must confirm clearing login records and can recover from a failed c
   expect(container.querySelector('[aria-label="Refresh HOST login attempts"]').disabled).toBe(true);
   await act(async () => { finishClear({ status: 204 }); });
   expect(container.textContent).toContain('Login records cleared.');
-  expect(container.textContent).toContain('0 / 1,000 records');
+  expect(container.textContent).toContain('0 / 50 failed attempts');
   expect(container.textContent).not.toContain('HOST login is disabled until these records are cleared.');
   expect(container.querySelector('table')).toBeNull();
   expect(container.textContent).not.toContain('Load more');
