@@ -155,21 +155,47 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
-  position: sticky;
-  top: 4.5rem;
-  max-height: calc(100vh - 5.5rem);
-  overflow-y: auto;
+}
+
+@media (min-width: 769px) {
+  .guest-layout {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
+  .guest-header {
+    flex-shrink: 0;
+  }
+
+  .guest-main {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .guest-main > .error-msg {
+    flex-shrink: 0;
+  }
+
+  .guest-columns {
+    flex: 1;
+    min-height: 0;
+    align-items: stretch;
+  }
+
+  .search-section,
+  .queue-section {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    scrollbar-gutter: stable;
+  }
 }
 
 @media (max-width: 768px) {
   .guest-columns {
     flex-direction: column;
-  }
-
-  .queue-section {
-    position: static;
-    max-height: none;
-    overflow-y: visible;
   }
 }
 
