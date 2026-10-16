@@ -20,7 +20,10 @@ jest.mock('./pages/OrganizerPage', () => ({ signOutAction }) => {
   const ActionsMenu = require('./components/ActionsMenu').default;
   return <div>Organizer view<ActionsMenu label="Party actions" actions={[signOutAction]} /></div>;
 });
-jest.mock('./pages/GuestPage', () => ({ switchUserButton }) => <div>Guest view{switchUserButton}</div>);
+jest.mock('./pages/GuestPage', () => ({ signOutAction, accountInfoAction }) => {
+  const ActionsMenu = require('./components/ActionsMenu').default;
+  return <div>Guest view<ActionsMenu label="Account actions" actions={[accountInfoAction, signOutAction]} /></div>;
+});
 jest.mock('./pages/SettingsPage', () => ({ switchUserButton }) => <div>Settings view{switchUserButton}</div>);
 
 let root;

@@ -11,13 +11,13 @@ const SSMUSIC_PENDING_LABELS = {
   running: 'ssMusic: downloading...',
 };
 
-function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pending }) {
+function PlaylistActions({ item, onPlay, onPause, onRemove, onSendToSSMusic, pending, failed }) {
   const isPlaying = item.status === 'playing';
   const onPlayback = isPlaying ? onPause : onPlay;
   const playbackLabel = isPlaying ? 'Pause' : item.status === 'paused' ? 'Resume' : 'Play now';
   const actions = [];
   if (onSendToSSMusic && (!item.source || item.source === 'youtube')) {
-    actions.push({ label: pending ? 'Sending to ssMusic...' : 'Send to ssMusic', icon: pending ? LoaderCircle : Send,
+    actions.push({ label: pending ? 'Sending to ssMusic...' : failed ? 'Resend to ssMusic' : 'Send to ssMusic', icon: pending ? LoaderCircle : Send,
       disabled: pending, spinning: pending, run: () => onSendToSSMusic(item) });
   }
   if (onRemove) actions.push({ label: 'Remove', icon: Trash2, danger: true, disabled: pending, run: () => onRemove(item.id) });
@@ -161,6 +161,7 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
                     {/* Actions */}
                     <PlaylistActions item={item} onPlay={onPlay} onPause={onPause}
                       onRemove={allowRemove ? onRemove : undefined} onSendToSSMusic={onSendToSSMusic}
+                      failed={Boolean(item.ssmusic_status === 'error' || item.ssmusic_error || ssmusicState[item.id]?.error)}
                       pending={Boolean(ssmusicState[item.id]?.pending || SSMUSIC_PENDING_LABELS[item.ssmusic_status])} />
                     </div>
 

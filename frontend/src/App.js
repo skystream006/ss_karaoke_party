@@ -56,7 +56,7 @@ function AppRoutes() {
         <Route path="/join" element={<ProtectedRoute accountOnly><JoinPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/join/:joinCode" element={authLevel === 'hostscreen' ? <Navigate to="/join" replace /> : <InvitationJoinPage />} />
         <Route path="/organizer/:partyId/:memberId" element={<ProtectedRoute accountOnly><OrganizerPage signOutAction={signOutAction} accountInfoAction={accountInfoAction} /></ProtectedRoute>} />
-        <Route path="/guest/:partyId/:memberId" element={<ProtectedRoute><GuestPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
+        <Route path="/guest/:partyId/:memberId" element={<ProtectedRoute><GuestPage signOutAction={signOutAction} accountInfoAction={accountInfoAction} /></ProtectedRoute>} />
         <Route path="/account" element={<ProtectedRoute accountOnly><AccountPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="/settings" element={<ProtectedRoute requiredLevel="admin"><SettingsPage switchUserButton={switchUserButton} /></ProtectedRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
-import { Home, QrCode, X } from 'lucide-react';
+import { Home, QrCode, RotateCcw, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { getParty, getQueue, removeFromQueue, reorderQueue, updateQueueItemStatus, getMember } from '../services/api';
+import { getParty, getQueue, removeFromQueue, reorderQueue, resetQueue, updateQueueItemStatus, getMember } from '../services/api';
+import ActionsMenu from '../components/ActionsMenu';
 import Playlist from '../components/Playlist';
 import SongSearch from '../components/SongSearch';
 import CustomizationPanel from '../components/CustomizationPanel';
@@ -15,7 +16,7 @@ import './GuestPage.css';
 const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL || window.location.origin;
 
-export default function GuestPage({ switchUserButton }) {
+export default function GuestPage({ signOutAction, accountInfoAction }) {
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
   const { authLevel, partyInvitation } = useAuth();
@@ -68,6 +69,16 @@ export default function GuestPage({ switchUserButton }) {
     } catch (err) {
       console.error('Failed to refresh queue after adding song:', err);
       // socket will handle the update if this fails
+    }
+  }, [partyId]);
+
+  const handleResetQueue = useCallback(async () => {
+    if (!window.confirm('Reset all songs (except the currently playing one) back to queued?')) return;
+    try {
+      await resetQueue(partyId);
+      setError('');
+    } catch {
+      setError('Failed to reset queue.');
     }
   }, [partyId]);
 
@@ -303,7 +314,11 @@ export default function GuestPage({ switchUserButton }) {
             <span className={`connection-dot connection-dot--${connectionState}`} />
             Status
           </button>
-          {switchUserButton}
+          <ActionsMenu label="Account actions" actions={[
+            accountInfoAction,
+            { label: 'Reset All', icon: RotateCcw, disabled: queue.length === 0, run: handleResetQueue },
+            signOutAction && { ...signOutAction, separated: true },
+          ]} />
         </div>
       </header>
 

@@ -284,6 +284,25 @@ test('playlist sends only YouTube items and disables only the item already being
   expect(libraryRow.querySelector('button[aria-label="Play now"]')).not.toBeNull();
 });
 
+test.each([
+  ['new item', {}, {}, 'Send to ssMusic'],
+  ['failed job', { ssmusic_status: 'error' }, {}, 'Resend to ssMusic'],
+  ['saved error', { ssmusic_error: 'Conversion failed' }, {}, 'Resend to ssMusic'],
+  ['request error', {}, { pending: false, error: 'Request failed' }, 'Resend to ssMusic'],
+])('playlist uses the correct ssMusic action label for a %s', (description, updates, requestState, label) => {
+  const item = { ...song, ...updates };
+  const onSendToSSMusic = jest.fn();
+  act(() => root.render(<Playlist queue={[item]} onSendToSSMusic={onSendToSSMusic}
+    ssmusicState={{ [item.id]: requestState }} />));
+  act(() => Simulate.click(container.querySelector('[aria-haspopup="menu"]')));
+  const action = document.querySelector('[role="menuitem"]');
+  expect(action.textContent).toBe(label);
+  expect(action.getAttribute('aria-label')).toBe(label);
+  expect(action.disabled).toBe(false);
+  act(() => Simulate.click(action));
+  expect(onSendToSSMusic).toHaveBeenCalledWith(item);
+});
+
 test('playlist menus support keyboard navigation, Escape focus return, and outside dismissal', () => {
   act(() => root.render(<Playlist queue={[song]} isOrganizer onPlay={jest.fn()} onRemove={jest.fn()}
     onSendToSSMusic={jest.fn()} />));
