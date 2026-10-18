@@ -19,7 +19,7 @@ const SOCKET_URL =
 export default function GuestPage({ signOutAction, accountInfoAction }) {
   const { partyId, memberId: memberIdFromUrl } = useParams();
   const navigate = useNavigate();
-  const { authLevel, partyInvitation } = useAuth();
+  const { authLevel } = useAuth();
 
   const [party, setParty] = useState(null);
   const [queue, setQueue] = useState([]);
@@ -44,13 +44,11 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
   const member = { id: memberId, name: memberName };
-  const sharedInvitation = partyInvitation?.partyId === partyId
-    && partyInvitation?.memberId === memberId ? partyInvitation : null;
 
   useEffect(() => {
-    if (qrPanelOpen && sharedInvitation) qrDialogRef.current?.showModal();
+    if (qrPanelOpen) qrDialogRef.current?.showModal();
     else qrDialogRef.current?.close();
-  }, [qrPanelOpen, sharedInvitation]);
+  }, [qrPanelOpen]);
 
   const handleRemove = async (itemId) => {
     try {
@@ -290,7 +288,7 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
         </div>
         <div className="guest-header-actions">
           <ThemePicker />
-          {sharedInvitation && <button
+          <button
             type="button"
             className="btn btn-ghost"
             onClick={() => setQrPanelOpen(true)}
@@ -298,7 +296,7 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
             title="Share party invitation"
           >
             <QrCode size={20} aria-hidden="true" />
-          </button>}
+          </button>
           <button
             className="btn-audio-toggle"
             onClick={() => setAudioPanelOpen((o) => !o)}
@@ -322,7 +320,7 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
         </div>
       </header>
 
-      {sharedInvitation && <dialog ref={qrDialogRef} className="guest-qr-dialog"
+      <dialog ref={qrDialogRef} className="guest-qr-dialog"
         aria-label="Share party invitation" onClose={() => setQrPanelOpen(false)}
         onCancel={() => setQrPanelOpen(false)} onKeyDown={(event) => {
           if (event.key === 'Escape') {
@@ -336,8 +334,8 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
             <X size={20} aria-hidden="true" />
           </button>
         </div>
-        {qrPanelOpen && <QRCodeModal party={party} sharedInvitation={sharedInvitation} />}
-      </dialog>}
+        {qrPanelOpen && <QRCodeModal party={party} shareOnly />}
+      </dialog>
 
       {/* Mobile tab switcher */}
       <nav className="mobile-tabs">

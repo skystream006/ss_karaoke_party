@@ -62,6 +62,15 @@ router.post('/:id/join', writeLimiter, (req, res, next) => {
 
 router.use(requireAuth);
 
+router.get('/:id/invitations/current', requirePartyAccess, async (req, res) => {
+  res.set('Cache-Control', 'no-store');
+  try {
+    res.json(await invitations.share(req.auth, req.params.id));
+  } catch (error) {
+    res.status(error.status || 500).json({ error: error.status ? error.message : 'Unable to share invitation.' });
+  }
+});
+
 router.post('/:id/invitations', writeLimiter, requirePartyHost, async (req, res) => {
   res.set('Cache-Control', 'no-store');
   try {

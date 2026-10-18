@@ -515,6 +515,8 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
   const partyId = firstParty.party.id;
   let invitation;
   let guest;
+  let sharedInvitation;
+  let sharedGuest;
   await context.test('QR generation requires a joined host and every generation has a unique secret', async () => {
     expect(await post(`/parties/${partyId}/invitations`, {}, member.token), 403);
     invitation = expect(await post(`/parties/${partyId}/invitations`, {}, admin.token), 201);
@@ -535,6 +537,28 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     assert.notEqual(guest.member.id, firstParty.member.id);
     const another = expect(await post(`/parties/${partyId}/join`, { name: 'Host one', invitation: invitation.token }), 201);
     assert.notEqual(another.member.id, guest.member.id);
+  });
+
+  await context.test('existing guests and account members share active invitations without rotating or escalating access', async () => {
+    expect(await request(`/parties/${partyId}/invitations/current`), 401);
+    expect(await request(`/parties/${secondParty.party.id}/invitations/current`, { token: guest.token }), 403);
+    expect(await request(`/parties/${partyId}/invitations/current`, { token: member.token }), 403);
+    sharedInvitation = expect(await request(`/parties/${partyId}/invitations/current`, { token: guest.token }), 200);
+    assert.match(sharedInvitation.token, /^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/);
+    assert.equal(sharedInvitation.expiresAt, invitation.expiresAt);
+    assert.equal(expect(await post('/parties/invitations/resolve', { invitation: sharedInvitation.token }), 200).party.id, partyId);
+    const tampered = `${invitation.id}.${'a'.repeat(43)}`;
+    expect(await post('/parties/invitations/resolve', { invitation: tampered }), 403);
+    expect(await post(`/parties/${secondParty.party.id}/join`, { name: 'Guest', invitation: sharedInvitation.token }), 403);
+    expect(await post(`/parties/${partyId}/join`, { name: 'Guest', role: 'organizer', invitation: sharedInvitation.token }), 403);
+    sharedGuest = expect(await post(`/parties/${partyId}/join`, { name: 'Shared guest', invitation: sharedInvitation.token }), 201);
+    assert.equal(sharedGuest.level, 'guest');
+    assert.equal((await auth.resolveSession(sharedGuest.token)).invitationId, invitation.id);
+    assert.equal((await database.query('SELECT COUNT(*) FROM party_invitations WHERE party_id = $1', [partyId])).rows[0].count, '1');
+    expect(await request('/auth/me', { token: guest.token }), 200);
+    expect(await post(`/parties/${partyId}/join`, { name: 'Account guest', role: 'guest' }, member.token), 201);
+    const shared = expect(await request(`/parties/${partyId}/invitations/current`, { token: member.token }), 200);
+    assert.equal(shared.token, sharedInvitation.token);
   });
 
   await context.test('guest HTTP access is restricted to its own party and server-owned member identity', async () => {
@@ -568,6 +592,8 @@ test('PostgreSQL passkey and invitation security integration', async (context) =
     const next = expect(await post(`/parties/${partyId}/invitations`, {}, admin.token), 201);
     assert.notEqual(next.id, invitation.id);
     assert.notEqual(next.token, invitation.token);
+    expect(await post('/parties/invitations/resolve', { invitation: sharedInvitation.token }), 403);
+    expect(await request('/auth/me', { token: sharedGuest.token }), 401);
     expect(await request(`/queue/${partyId}`, { token: guest.token }), 401);
     expect(await post(`/parties/${partyId}/join`, { name: 'Guest', invitation: invitation.token }), 403);
     invitation = next;

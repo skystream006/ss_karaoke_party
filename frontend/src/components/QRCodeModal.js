@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Copy, RefreshCw, Check } from 'lucide-react';
-import { createPartyInvitation } from '../services/api';
+import { createPartyInvitation, getCurrentPartyInvitation } from '../services/api';
 import './QRCodeModal.css';
 
-export default function QRCodeModal({ party, sharedInvitation }) {
+export default function QRCodeModal({ party, sharedInvitation, shareOnly = false }) {
   const [invitation, setInvitation] = useState(sharedInvitation || null);
   const [generation, setGeneration] = useState(0);
   const [error, setError] = useState('');
@@ -23,15 +23,17 @@ export default function QRCodeModal({ party, sharedInvitation }) {
     setInvitation(null);
     setError('');
     setCopied(false);
-    if (requestRef.current?.partyId !== party.id || requestRef.current?.generation !== generation) {
-      requestRef.current = { partyId: party.id, generation, promise: createPartyInvitation(party.id) };
+    if (requestRef.current?.partyId !== party.id || requestRef.current?.generation !== generation
+      || requestRef.current?.shareOnly !== shareOnly) {
+      requestRef.current = { partyId: party.id, generation, shareOnly,
+        promise: shareOnly ? getCurrentPartyInvitation(party.id) : createPartyInvitation(party.id) };
     }
     requestRef.current.promise
       .then(({ data }) => { if (active) setInvitation(data); })
       .catch((failure) => { if (active) setError(failure.response?.data?.error || 'Unable to create invitation.'); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [party.id, generation, sharedInvitation]);
+  }, [party.id, generation, sharedInvitation, shareOnly]);
 
   const joinUrl = invitation ? `${window.location.origin}/join/invite#invite=${invitation.token}` : '';
 
@@ -52,7 +54,7 @@ export default function QRCodeModal({ party, sharedInvitation }) {
         </div>
 
         {error && <p className="error-msg" role="alert">{error}</p>}
-        {loading && <p role="status">Creating invitation...</p>}
+        {loading && <p role="status">{shareOnly ? 'Loading invitation...' : 'Creating invitation...'}</p>}
         {invitation && <><div className="qr-section">
           <div className="qr-wrapper">
             <QRCodeSVG
@@ -77,7 +79,7 @@ export default function QRCodeModal({ party, sharedInvitation }) {
             </button>
           </div>
         </div></>}
-        {!sharedInvitation && <button type="button" className="btn btn-ghost qr-regenerate" disabled={loading}
+        {!sharedInvitation && (!shareOnly || (!invitation && error)) && <button type="button" className="btn btn-ghost qr-regenerate" disabled={loading}
           onClick={() => {
             if (!invitation || window.confirm('Replace this QR code and disconnect guests who joined with it?')) {
               setGeneration((current) => current + 1);

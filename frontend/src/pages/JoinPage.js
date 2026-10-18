@@ -270,7 +270,7 @@ export function InvitationJoinPage() {
     let active = true;
     setDetails(null);
     setError('');
-    if (!/^[A-Za-z0-9_-]{43}$/.test(invitation)) {
+    if (!/^(?:[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}\.)?[A-Za-z0-9_-]{43}$/i.test(invitation)) {
       setError('This join link is no longer valid. Scan a current host QR code.');
       setChecking(false);
       return;

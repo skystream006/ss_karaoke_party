@@ -82,3 +82,47 @@ test('sockets reject cross-party rooms, guest host broadcasts and revoked sessio
     assert.equal(error.message, 'Unauthorized'); resolve();
   }));
 });
+
+test('existing guests share only their current invitation without rotating it', async () => {
+  const partyId = randomUUID();
+  const memberId = randomUUID();
+  const invitationId = randomUUID();
+  let available = true;
+  const queries = [];
+  const invitations = createPartyInvitations({ database: { query: async (sql, params) => {
+    queries.push({ sql, params });
+    if (sql.includes('LEFT JOIN party_members')) return { rows: [{ id: partyId, is_active: true, member_id: memberId, role: 'guest' }] };
+    if (sql.includes('SELECT id, token_hash')) {
+      assert.deepEqual(params, [partyId, invitationId]);
+    }
+    return { rows: available ? [{ id: invitationId, token_hash: 'server-only-hash', party_id: partyId, expires_at: '2099-01-01' }] : [] };
+  } } });
+  const session = { level: 'guest', partyId, memberId, invitationId };
+  const shared = await invitations.share(session, partyId);
+  assert.match(shared.token, /^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/);
+  assert.equal(shared.expiresAt, '2099-01-01');
+  assert.equal((await invitations.find(shared.token, partyId)).id, invitationId);
+  assert.ok(queries.every(({ sql }) => !/INSERT|DELETE|UPDATE/.test(sql)));
+  await assert.rejects(invitations.find(`${invitationId}.${'a'.repeat(43)}`, partyId), { status: 403 });
+  const before = queries.length;
+  await assert.rejects(invitations.share(session, randomUUID()), { status: 403 });
+  assert.equal(queries.length, before);
+  available = false;
+  await assert.rejects(invitations.find(shared.token, partyId), { status: 403 });
+  await assert.rejects(invitations.join(partyId, { name: 'Guest', invitation: shared.token, role: 'organizer' }), { status: 403 });
+});
+
+test('signed-in guest members can share an existing host invitation but nonmembers cannot', async () => {
+  const partyId = randomUUID();
+  const invitationId = randomUUID();
+  let memberId = randomUUID();
+  const invitations = createPartyInvitations({ database: { query: async (sql, params) => {
+    if (sql.includes('LEFT JOIN party_members')) return { rows: [{ id: partyId, is_active: true, member_id: memberId, role: 'guest' }] };
+    if (sql.includes('SELECT id, token_hash')) assert.deepEqual(params, [partyId, null]);
+    return { rows: [{ id: invitationId, token_hash: 'server-only-hash', expires_at: '2099-01-01' }] };
+  } } });
+  const session = { level: 'member', userId: randomUUID() };
+  assert.ok((await invitations.share(session, partyId)).token);
+  memberId = null;
+  await assert.rejects(invitations.share(session, partyId), { status: 403 });
+});

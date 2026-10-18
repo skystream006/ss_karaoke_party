@@ -39,6 +39,7 @@ export const getParty = (id) => api.get(`/parties/${id}`);
 export const updateParty = (id, data) => api.patch(`/parties/${id}`, data);
 export const joinParty = (partyId, data) => api.post(`/parties/${partyId}/join`, data);
 export const createPartyInvitation = (partyId) => api.post(`/parties/${partyId}/invitations`);
+export const getCurrentPartyInvitation = (partyId) => api.get(`/parties/${partyId}/invitations/current`);
 export const resolvePartyInvitation = (invitation) => api.post('/parties/invitations/resolve', { invitation });
 export const endParty = (partyId) => api.delete(`/parties/${partyId}`);
 export const deleteParty = (partyId) => api.delete(`/parties/${partyId}/remove`);

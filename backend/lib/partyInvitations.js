@@ -1,16 +1,29 @@
 const pool = require('../db/db');
+const { createHmac, timingSafeEqual } = require('node:crypto');
 const { createAuth, hashToken, newToken, validToken, validId, publicSession } = require('../middleware/auth');
 const { authError } = require('./passkeys');
+
+function sharedParts(token) {
+  if (typeof token !== 'string') return null;
+  const parts = token.split('.');
+  return parts.length === 2 && validId(parts[0]) && validToken(parts[1]) ? parts : null;
+}
+
+function shareSignature(invitation) {
+  return createHmac('sha256', invitation.token_hash)
+    .update(`party-invitation-share:${invitation.id}`).digest('base64url');
+}
 
 function createPartyInvitations({ database = pool } = {}) {
   const auth = createAuth({ database });
 
   async function find(token, partyId, client = database, lock = false) {
-    if (!validToken(token) || (partyId !== undefined && !validId(partyId))) {
+    const shared = sharedParts(token);
+    if ((!validToken(token) && !shared) || (partyId !== undefined && !validId(partyId))) {
       throw authError(403, 'Invalid or expired host invitation.');
     }
     const { rows } = await client.query(
-      `SELECT invitation.id, invitation.party_id, invitation.host_session_id,
+      `SELECT invitation.id, invitation.token_hash, invitation.party_id, invitation.host_session_id,
               LEAST(invitation.expires_at, host.expires_at) AS expires_at,
               party.name AS party_name, member.name AS host_name
        FROM party_invitations invitation
@@ -18,15 +31,35 @@ function createPartyInvitations({ database = pool } = {}) {
        JOIN auth_users account ON account.id = host.user_id
        JOIN party_members member ON member.id = invitation.host_member_id
        JOIN parties party ON party.id = invitation.party_id
-       WHERE invitation.token_hash = $1 AND ($2::uuid IS NULL OR invitation.party_id = $2)
+       WHERE (invitation.token_hash = $1 OR invitation.id = $3::uuid)
+         AND ($2::uuid IS NULL OR invitation.party_id = $2)
          AND invitation.expires_at > NOW() AND host.expires_at > NOW()
          AND account.status = 'approved' AND member.user_id = host.user_id
          AND member.party_id = party.id AND member.role = 'organizer' AND party.is_active = true
        ${lock ? 'FOR SHARE OF invitation, host, account, member, party' : ''}`,
-      [hashToken(token), partyId || null]
+      [shared ? null : hashToken(token), partyId || null, shared ? shared[0] : null]
     );
     if (!rows[0]) throw authError(403, 'Invalid or expired host invitation.');
+    if (shared && !timingSafeEqual(Buffer.from(shared[1]), Buffer.from(shareSignature(rows[0])))) {
+      throw authError(403, 'Invalid or expired host invitation.');
+    }
     return rows[0];
+  }
+
+  async function share(session, partyId) {
+    if (!await auth.getPartyAccess(session, partyId)) throw authError(403, 'Party access denied.');
+    if (session.level === 'guest' && !validId(session.invitationId)) {
+      throw authError(403, 'Invalid or expired host invitation.');
+    }
+    const { rows } = await database.query(
+      `SELECT id, token_hash FROM party_invitations
+       WHERE party_id = $1 AND ($2::uuid IS NULL OR id = $2) AND expires_at > NOW()
+       ORDER BY created_at DESC LIMIT 1`,
+      [partyId, session.level === 'guest' ? session.invitationId : null]);
+    if (!rows[0]) throw authError(404, 'Ask a host to open their QR code to enable sharing.');
+    const token = `${rows[0].id}.${shareSignature(rows[0])}`;
+    const invitation = await find(token, partyId);
+    return { token, partyId, expiresAt: invitation.expires_at };
   }
 
   async function issue(session, partyId) {
@@ -68,7 +101,9 @@ function createPartyInvitations({ database = pool } = {}) {
     if ((body.role !== undefined && body.role !== 'guest') || body.member_id || body.user_id) {
       throw authError(403, 'Invitations grant guest access only.');
     }
-    if (!validToken(body.invitation) || !validId(partyId)) throw authError(403, 'Invalid or expired host invitation.');
+    if ((!validToken(body.invitation) && !sharedParts(body.invitation)) || !validId(partyId)) {
+      throw authError(403, 'Invalid or expired host invitation.');
+    }
     const client = await database.connect();
     try {
       await client.query('BEGIN');
@@ -91,7 +126,7 @@ function createPartyInvitations({ database = pool } = {}) {
     }
   }
 
-  return { find, issue, join };
+  return { find, issue, join, share };
 }
 
 module.exports = { createPartyInvitations };

@@ -4,7 +4,7 @@ import { act, Simulate } from 'react-dom/test-utils';
 import { MemoryRouter, Routes, Route } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
-import { getParty, getQueue, getMember, getServerInfo, removeFromQueue, resetQueue } from '../services/api';
+import { getParty, getQueue, getMember, getServerInfo, getCurrentPartyInvitation, createPartyInvitation, removeFromQueue, resetQueue } from '../services/api';
 import GuestPage from './GuestPage';
 
 jest.mock('socket.io-client', () => ({ io: jest.fn() }));
@@ -12,6 +12,7 @@ jest.mock('../contexts/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../services/api', () => ({
   getParty: jest.fn(), getQueue: jest.fn(), getMember: jest.fn(), getServerInfo: jest.fn(),
   removeFromQueue: jest.fn(), resetQueue: jest.fn(),
+  getCurrentPartyInvitation: jest.fn(), createPartyInvitation: jest.fn(),
 }));
 let mockPlaylistProps;
 jest.mock('../components/Playlist', () => (props) => { mockPlaylistProps = props; return null; });
@@ -34,6 +35,7 @@ beforeEach(() => {
   getQueue.mockResolvedValue({ data: [] });
   getMember.mockResolvedValue({ data: { id: 'member-id', name: 'Alex' } });
   getServerInfo.mockResolvedValue({ data: { ip: '192.168.1.10' } });
+  getCurrentPartyInvitation.mockResolvedValue({ data: invitation });
   handlers = {};
   io.mockReturnValue({ on: jest.fn((event, handler) => { handlers[event] = handler; }), emit: jest.fn(), disconnect: jest.fn() });
   container = document.createElement('div');
@@ -60,12 +62,18 @@ async function renderGuest(signOutAction, accountInfoAction) {
   });
 }
 
-test.each([false, true])('guests without a retained invitation cannot create one (locked: %s)', async (isLocked) => {
+test.each([false, true])('existing guests can share without a retained invitation (locked: %s)', async (isLocked) => {
   getParty.mockResolvedValue({ data: { id: 'party-id', name: 'Friday', join_code: 'ABCDEF', is_locked: isLocked } });
   await renderGuest();
   expect(getServerInfo).not.toHaveBeenCalled();
-  expect(container.querySelector('[aria-label="Show party QR code"]')).toBeNull();
-  expect(container.querySelector('dialog')).toBeNull();
+  const show = container.querySelector('[aria-label="Show party QR code"]');
+  expect(show).not.toBeNull();
+  expect(getCurrentPartyInvitation).not.toHaveBeenCalled();
+  await act(async () => Simulate.click(show));
+  expect(getCurrentPartyInvitation).toHaveBeenCalledWith('party-id');
+  expect(container.querySelector('dialog').open).toBe(true);
+  expect(container.querySelector('.qr-wrapper svg')).not.toBeNull();
+  expect(createPartyInvitation).not.toHaveBeenCalled();
   expect(container.textContent).not.toContain('ABCDEF');
 });
 
@@ -77,7 +85,7 @@ test.each([false, true])('guests can open, copy, close and reopen their current 
   const show = container.querySelector('[aria-label="Show party QR code"]');
   const dialog = container.querySelector('dialog');
   expect(dialog.open).toBe(false);
-  act(() => Simulate.click(show));
+  await act(async () => Simulate.click(show));
   expect(dialog.open).toBe(true);
   expect(dialog.querySelector('svg')).not.toBeNull();
   expect(dialog.querySelector('.qr-regenerate')).toBeNull();
@@ -85,19 +93,40 @@ test.each([false, true])('guests can open, copy, close and reopen their current 
   expect(navigator.clipboard.writeText).toHaveBeenCalledWith(`${window.location.origin}/join/invite#invite=${invitation.token}`);
   act(() => Simulate.click(dialog.querySelector('[aria-label="Close party QR code"]')));
   expect(dialog.open).toBe(false);
-  act(() => Simulate.click(show));
+  await act(async () => Simulate.click(show));
   expect(dialog.open).toBe(true);
   act(() => Simulate.cancel(dialog));
   expect(dialog.open).toBe(false);
-  act(() => Simulate.click(show));
+  await act(async () => Simulate.click(show));
   act(() => Simulate.keyDown(dialog, { key: 'Escape' }));
   expect(dialog.open).toBe(false);
 });
 
-test.each([{ partyId: 'other-party' }, { memberId: 'other-member' }])('does not share another session membership invitation: %s', async (scope) => {
+test.each([{ partyId: 'other-party' }, { memberId: 'other-member' }])('loads the current party invitation instead of stale browser storage: %s', async (scope) => {
   useAuth.mockReturnValue({ authLevel: 'guest', partyInvitation: { ...invitation, ...scope } });
   await renderGuest();
-  expect(container.querySelector('[aria-label="Show party QR code"]')).toBeNull();
+  await act(async () => Simulate.click(container.querySelector('[aria-label="Show party QR code"]')));
+  expect(getCurrentPartyInvitation).toHaveBeenCalledWith('party-id');
+  expect(container.querySelector('.url-text').textContent).toContain(invitation.token);
+});
+
+test.each(['member', 'admin'])('signed-in %s guest members have a QR sharing button', async (authLevel) => {
+  useAuth.mockReturnValue({ authLevel });
+  await renderGuest();
+  await act(async () => Simulate.click(container.querySelector('[aria-label="Show party QR code"]')));
+  expect(getCurrentPartyInvitation).toHaveBeenCalledWith('party-id');
+  expect(createPartyInvitation).not.toHaveBeenCalled();
+});
+
+test('missing host invitations show an error and can be retried without creating invitations', async () => {
+  getCurrentPartyInvitation.mockRejectedValueOnce({ response: { data: { error: 'Ask a host to open their QR code to enable sharing.' } } });
+  await renderGuest();
+  await act(async () => Simulate.click(container.querySelector('[aria-label="Show party QR code"]')));
+  expect(container.querySelector('[role="alert"]').textContent).toContain('Ask a host');
+  await act(async () => Simulate.click(container.querySelector('.qr-regenerate')));
+  expect(container.querySelector('.qr-wrapper svg')).not.toBeNull();
+  expect(container.querySelector('.qr-regenerate')).toBeNull();
+  expect(createPartyInvitation).not.toHaveBeenCalled();
 });
 
 test('passkey-signed-in guests can go home without signing out', async () => {

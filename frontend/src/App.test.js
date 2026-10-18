@@ -402,7 +402,7 @@ test('registration displays pending approval without signing the user in', async
   expect(sessionStorage.getItem('authToken')).toBeNull();
 });
 
-test('QR invitation checks only the secret and accepts a scoped guest response', async () => {
+test.each([invitation, `12345678-1234-1234-1234-123456789abc.${invitation}`])('QR invitation checks only the secret and accepts a scoped guest response: %s', async (invitation) => {
   window.history.replaceState({}, '', `/join/invite#invite=${invitation}`);
   await renderApp();
   expect(resolvePartyInvitation).toHaveBeenCalledWith(invitation);
