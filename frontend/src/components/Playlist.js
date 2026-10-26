@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { memo, useMemo, useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
 import { LoaderCircle, Pause, Play, Send, Trash2 } from 'lucide-react';
 import ActionsMenu from './ActionsMenu';
@@ -43,17 +43,12 @@ function formatTime(seconds) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, onSendToSSMusic, ssmusicState = {}, isOrganizer, canReorder, canRemove, currentTime, duration, onSeek }) {
-  // canReorder/canRemove default to isOrganizer when not explicitly provided
-  const allowReorder = canReorder !== undefined ? canReorder : isOrganizer;
-  const allowRemove = canRemove !== undefined ? canRemove : isOrganizer;
-
+function PlaylistProgress({ currentTime, duration, onSeek }) {
   // Local drag state for the progress slider so socket updates don't reset
   // the thumb position while the user is scrubbing.
   const [isDragging, setIsDragging] = useState(false);
   const [dragValue, setDragValue] = useState(0);
 
-  const showSlider = typeof currentTime === 'number' && duration > 0;
   const sliderValue = isDragging ? dragValue : Math.floor(currentTime || 0);
 
   const handleSliderMouseDown = (e) => {
@@ -69,8 +64,80 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
     setIsDragging(false);
   };
 
+  return (
+    <div className="playlist-progress">
+      <span className="progress-time">{formatTime(sliderValue)}</span>
+      <input
+        type="range"
+        className="progress-slider"
+        min={0}
+        max={Math.floor(duration)}
+        step={1}
+        value={sliderValue}
+        onChange={handleSliderChange}
+        onMouseDown={handleSliderMouseDown}
+        onTouchStart={handleSliderMouseDown}
+        onMouseUp={handleSliderCommit}
+        onTouchEnd={handleSliderCommit}
+      />
+      <span className="progress-time">{formatTime(duration)}</span>
+    </div>
+  );
+}
+
+const PlaylistRow = memo(function PlaylistRow({ item, index, allowReorder, onRemove, onPlay, onPause, onSendToSSMusic, jobState, currentTime, duration, onSeek }) {
+  const pending = Boolean(jobState?.pending || SSMUSIC_PENDING_LABELS[item.ssmusic_status]);
+  const error = jobState?.error || item.ssmusic_error;
+  return (
+    <Draggable draggableId={item.id} index={index} isDragDisabled={!allowReorder}>
+      {(dragProvided, snapshot) => (
+        <li
+          ref={dragProvided.innerRef}
+          {...dragProvided.draggableProps}
+          className={`playlist-item ${item.status === 'playing' ? 'playing' : ''} ${item.status === 'played' ? 'played' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
+        >
+          <div className="playlist-title">{item.video_title}</div>
+          <div className="playlist-item-row">
+            <div className="playlist-pos">
+              {item.status === 'playing' ? <span className="playing-indicator">♪</span> : <span>{item.position}</span>}
+            </div>
+            {allowReorder && (
+              <div {...dragProvided.dragHandleProps} className="drag-handle" title="Drag to reorder">⠿</div>
+            )}
+            <MediaThumbnail source={item.source} mediaPath={item.media_path}
+              thumbnail={item.video_thumbnail} alt={item.video_title} className="playlist-thumb" />
+            <div className="playlist-info">
+              <div className="playlist-singer">🎤 {item.singer_name}</div>
+              {item.source === 'ssmusic' ? (
+                <div className="playlist-media-status">{item.kpMedia ? 'kpMedia' : 'ssMusic'}</div>
+              ) : pending ? (
+                <div className="playlist-media-status" role="status"
+                  title={SSMUSIC_PENDING_LABELS[item.ssmusic_status] || SSMUSIC_PENDING_LABELS.submitting}>
+                  Video is processing, come back when done
+                </div>
+              ) : error && (
+                <div className="playlist-media-error" role="alert">{error}</div>
+              )}
+            </div>
+            <PlaylistActions item={item} onPlay={onPlay} onPause={onPause}
+              onRemove={onRemove} onSendToSSMusic={onSendToSSMusic}
+              failed={Boolean(item.ssmusic_status === 'error' || error)} pending={pending} />
+          </div>
+          {(item.status === 'playing' || item.status === 'paused') && typeof currentTime === 'number' && duration > 0 && (
+            <PlaylistProgress currentTime={currentTime} duration={duration} onSeek={onSeek} />
+          )}
+        </li>
+      )}
+    </Draggable>
+  );
+});
+
+export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, onSendToSSMusic, ssmusicState = {}, isOrganizer, canReorder, canRemove, currentTime, duration, onSeek }) {
+  const allowReorder = canReorder !== undefined ? canReorder : isOrganizer;
+  const allowRemove = canRemove !== undefined ? canRemove : isOrganizer;
+
   // Keep all songs sorted by position in a single unified list
-  const sortedQueue = [...queue].sort((a, b) => a.position - b.position);
+  const sortedQueue = useMemo(() => [...queue].sort((a, b) => a.position - b.position), [queue]);
 
   const handleDragEnd = (result) => {
     if (!result.destination) return;
@@ -105,89 +172,20 @@ export default function Playlist({ queue, onRemove, onReorder, onPlay, onPause, 
             {...provided.droppableProps}
           >
             {sortedQueue.map((item, index) => (
-              <Draggable
+              <PlaylistRow
                 key={item.id}
-                draggableId={item.id}
+                item={item}
                 index={index}
-                isDragDisabled={!allowReorder}
-              >
-                {(dragProvided, snapshot) => (
-                  <li
-                    ref={dragProvided.innerRef}
-                    {...dragProvided.draggableProps}
-                    className={`playlist-item ${item.status === 'playing' ? 'playing' : ''} ${item.status === 'played' ? 'played' : ''} ${snapshot.isDragging ? 'dragging' : ''}`}
-                  >
-                    <div className="playlist-title">{item.video_title}</div>
-                    <div className="playlist-item-row">
-                    {/* Position number */}
-                    <div className="playlist-pos">
-                      {item.status === 'playing' ? (
-                        <span className="playing-indicator">♪</span>
-                      ) : (
-                        <span>{item.position}</span>
-                      )}
-                    </div>
-
-                    {/* Drag handle */}
-                    {allowReorder && (
-                      <div
-                        {...dragProvided.dragHandleProps}
-                        className="drag-handle"
-                        title="Drag to reorder"
-                      >
-                        ⠿
-                      </div>
-                    )}
-
-                    {/* Thumbnail */}
-                    <MediaThumbnail source={item.source} mediaPath={item.media_path}
-                      thumbnail={item.video_thumbnail} alt={item.video_title} className="playlist-thumb" />
-
-                    {/* Song info */}
-                    <div className="playlist-info">
-                      <div className="playlist-singer">🎤 {item.singer_name}</div>
-                      {item.source === 'ssmusic' ? (
-                        <div className="playlist-media-status">{item.kpMedia ? 'kpMedia' : 'ssMusic'}</div>
-                      ) : ssmusicState[item.id]?.pending || SSMUSIC_PENDING_LABELS[item.ssmusic_status] ? (
-                        <div className="playlist-media-status" role="status"
-                          title={SSMUSIC_PENDING_LABELS[item.ssmusic_status] || SSMUSIC_PENDING_LABELS.submitting}>
-                          Video is processing, come back when done
-                        </div>
-                      ) : (ssmusicState[item.id]?.error || item.ssmusic_error) && (
-                        <div className="playlist-media-error" role="alert">{ssmusicState[item.id]?.error || item.ssmusic_error}</div>
-                      )}
-                    </div>
-
-                    {/* Actions */}
-                    <PlaylistActions item={item} onPlay={onPlay} onPause={onPause}
-                      onRemove={allowRemove ? onRemove : undefined} onSendToSSMusic={onSendToSSMusic}
-                      failed={Boolean(item.ssmusic_status === 'error' || item.ssmusic_error || ssmusicState[item.id]?.error)}
-                      pending={Boolean(ssmusicState[item.id]?.pending || SSMUSIC_PENDING_LABELS[item.ssmusic_status])} />
-                    </div>
-
-                    {/* Progress slider – shown for the currently playing or paused item */}
-                    {(item.status === 'playing' || item.status === 'paused') && showSlider && (
-                      <div className="playlist-progress">
-                        <span className="progress-time">{formatTime(sliderValue)}</span>
-                        <input
-                          type="range"
-                          className="progress-slider"
-                          min={0}
-                          max={Math.floor(duration)}
-                          step={1}
-                          value={sliderValue}
-                          onChange={handleSliderChange}
-                          onMouseDown={handleSliderMouseDown}
-                          onTouchStart={handleSliderMouseDown}
-                          onMouseUp={handleSliderCommit}
-                          onTouchEnd={handleSliderCommit}
-                        />
-                        <span className="progress-time">{formatTime(duration)}</span>
-                      </div>
-                    )}
-                  </li>
-                )}
-              </Draggable>
+                allowReorder={allowReorder}
+                onRemove={allowRemove ? onRemove : undefined}
+                onPlay={onPlay}
+                onPause={onPause}
+                onSendToSSMusic={onSendToSSMusic}
+                jobState={ssmusicState[item.id]}
+                currentTime={item.status === 'playing' || item.status === 'paused' ? currentTime : undefined}
+                duration={item.status === 'playing' || item.status === 'paused' ? duration : undefined}
+                onSeek={onSeek}
+              />
             ))}
             {provided.placeholder}
           </ul>

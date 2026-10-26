@@ -170,6 +170,59 @@ test('routes guest seek, settings and progress through the shared controls', asy
   expect(socket.emit).toHaveBeenCalledWith('video:progress', { partyId: 'party-id', currentTime: 22, duration: 100 });
 });
 
+test('progress updates only the playlist without rerendering the organizer player', async () => {
+  await renderPage();
+  const originalPlayerProps = mockPlayerProps;
+  act(() => mockPlayerProps.onTimeUpdate(22, 100));
+  expect(mockPlayerProps).toBe(originalPlayerProps);
+  expect(mockPlaylistProps.currentTime).toBe(22);
+  expect(mockPlaylistProps.duration).toBe(100);
+  expect(socket.emit).toHaveBeenCalledWith('video:progress', { partyId: 'party-id', currentTime: 22, duration: 100 });
+});
+
+test('closed playlist does no progress rendering and catches up when reopened', async () => {
+  await renderPage();
+  act(() => container.querySelector('.sidebar-toggle').click());
+  const hiddenPlaylistProps = mockPlaylistProps;
+  const originalPlayerProps = mockPlayerProps;
+  act(() => mockPlayerProps.onTimeUpdate(37, 100));
+  expect(mockPlaylistProps).toBe(hiddenPlaylistProps);
+  expect(mockPlayerProps).toBe(originalPlayerProps);
+  expect(socket.emit).toHaveBeenCalledWith('video:progress', { partyId: 'party-id', currentTime: 37, duration: 100 });
+  act(() => container.querySelector('.sidebar-toggle').click());
+  expect(mockPlaylistProps.currentTime).toBe(37);
+  expect(io).toHaveBeenCalledTimes(1);
+  expect(socket.disconnect).not.toHaveBeenCalled();
+});
+
+test('background organizer keeps broadcasting and handling guest controls without progress renders', async () => {
+  const visibility = jest.spyOn(document, 'visibilityState', 'get').mockReturnValue('visible');
+  try {
+    await renderPage();
+    act(() => {
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    const hiddenPlaylistProps = mockPlaylistProps;
+    act(() => {
+      mockPlayerProps.onTimeUpdate(45, 100);
+      handlers['video:seek']({ seekTime: 50 });
+    });
+    expect(mockPlaylistProps).toBe(hiddenPlaylistProps);
+    expect(mockControls.seekTo).toHaveBeenCalledWith(50);
+    expect(socket.emit).toHaveBeenCalledWith('video:progress', { partyId: 'party-id', currentTime: 45, duration: 100 });
+    act(() => {
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(mockPlaylistProps.currentTime).toBe(45);
+    expect(io).toHaveBeenCalledTimes(1);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+  } finally {
+    visibility.mockRestore();
+  }
+});
+
 test('media updates switch a playing or paused YouTube item to ssMusic without changing its queue identity', async () => {
   getQueue.mockResolvedValueOnce({ data: [{ ...youtube, source: 'youtube', status: 'paused' }] });
   await renderPage();

@@ -269,3 +269,71 @@ test('kpMedia stays queued when removal fails without undoing another conversion
   expect(mockPlaylistProps.queue).toEqual([convertedSecond]);
   expect(container.textContent).not.toContain('ssMusic video is busy');
 });
+
+test('hidden mobile queue keeps socket updates without flushing progress until shown', async () => {
+  jest.useFakeTimers();
+  const originalMatchMedia = window.matchMedia;
+  let resize;
+  const mediaQuery = { matches: true, addEventListener: jest.fn((event, callback) => { resize = callback; }), removeEventListener: jest.fn() };
+  window.matchMedia = jest.fn(() => mediaQuery);
+  try {
+    const playing = { id: 'playing', status: 'playing', position: 1 };
+    getQueue.mockResolvedValueOnce({ data: [playing] });
+    await renderGuest();
+    const socket = io.mock.results[0].value;
+    act(() => handlers['video:progress']({ currentTime: 12, duration: 100 }));
+    act(() => jest.advanceTimersByTime(4000));
+    expect(mockPlaylistProps.currentTime).toBe(0);
+    const updatedQueue = [playing, { id: 'next', status: 'queued', position: 2 }];
+    act(() => handlers['queue:update']({ queue: updatedQueue }));
+    expect(mockPlaylistProps.queue).toEqual(updatedQueue);
+    act(() => mockPlaylistProps.onSeek(25));
+    expect(socket.emit).toHaveBeenCalledWith('video:seek', { partyId: 'party-id', seekTime: 25 });
+    const queueTab = [...container.querySelectorAll('.mobile-tab')].find((tab) => tab.textContent.includes('Queue'));
+    act(() => Simulate.click(queueTab));
+    expect(mockPlaylistProps.currentTime).toBe(12);
+    act(() => handlers['video:progress']({ currentTime: 18, duration: 100 }));
+    act(() => jest.advanceTimersByTime(2000));
+    expect(mockPlaylistProps.currentTime).toBe(18);
+    const searchTab = [...container.querySelectorAll('.mobile-tab')].find((tab) => tab.textContent.includes('Search'));
+    act(() => Simulate.click(searchTab));
+    act(() => handlers['video:progress']({ currentTime: 30, duration: 100 }));
+    act(() => jest.advanceTimersByTime(4000));
+    expect(mockPlaylistProps.currentTime).toBe(18);
+    act(() => { mediaQuery.matches = false; resize(); });
+    expect(mockPlaylistProps.currentTime).toBe(30);
+    expect(io).toHaveBeenCalledTimes(1);
+    expect(socket.disconnect).not.toHaveBeenCalled();
+    act(() => root.render(null));
+    expect(mediaQuery.removeEventListener).toHaveBeenCalledWith('change', resize);
+    expect(jest.getTimerCount()).toBe(0);
+  } finally {
+    window.matchMedia = originalMatchMedia;
+    jest.useRealTimers();
+  }
+});
+
+test('background tabs suspend progress renders and catch up immediately on return', async () => {
+  jest.useFakeTimers();
+  const visibility = jest.spyOn(document, 'visibilityState', 'get');
+  visibility.mockReturnValue('visible');
+  try {
+    getQueue.mockResolvedValueOnce({ data: [{ id: 'playing', status: 'playing', position: 1 }] });
+    await renderGuest();
+    act(() => {
+      visibility.mockReturnValue('hidden');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    act(() => handlers['video:progress']({ currentTime: 45, duration: 100 }));
+    act(() => jest.advanceTimersByTime(4000));
+    expect(mockPlaylistProps.currentTime).toBe(0);
+    act(() => {
+      visibility.mockReturnValue('visible');
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(mockPlaylistProps.currentTime).toBe(45);
+    expect(io).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
+});

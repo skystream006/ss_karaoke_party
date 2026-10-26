@@ -1,4 +1,4 @@
-import React, { createRef } from 'react';
+import React, { createRef, Profiler } from 'react';
 import { createRoot } from 'react-dom/client';
 import { act, Simulate } from 'react-dom/test-utils';
 import { getSSMusicPlayback, getSSMusicStreamUrl } from '../services/api';
@@ -67,13 +67,13 @@ test('uses video playback instead of lyrics for a video result', async () => {
 test('highlights SYLT cues in milliseconds and tracks backward seeks', async () => {
   const audio = await renderPlayer();
   audio.currentTime = 1.2;
-  act(() => Simulate.timeUpdate(audio));
+  act(() => audio.dispatchEvent(new Event('timeupdate')));
   expect(container.querySelector('.sylt-line.active').textContent).toBe('Hello world');
   audio.currentTime = 3.2;
-  act(() => Simulate.seeked(audio));
+  act(() => audio.dispatchEvent(new Event('seeked')));
   expect(container.querySelector('.sylt-line.active').textContent).toBe('Next line');
   audio.currentTime = 0;
-  act(() => Simulate.seeked(audio));
+  act(() => audio.dispatchEvent(new Event('seeked')));
   expect(container.querySelector('.sylt-line.active')).toBeNull();
 });
 
@@ -165,4 +165,40 @@ test('seeks to a clicked lyric line and displays instrumental cues', async () =>
   expect(line.textContent).toBe('♪');
   act(() => Simulate.click(line));
   expect(audio.currentTime).toBe(2);
+});
+
+test('lyric ticks only commit when the active cue changes', async () => {
+  const onRender = jest.fn();
+  await act(async () => root.render(
+    <Profiler id="player" onRender={onRender}>
+      <SSMusicPlayer mediaPath="song.mp3" title="Song" />
+    </Profiler>
+  ));
+  const audio = container.querySelector('audio');
+  Object.defineProperty(audio, 'paused', { configurable: true, value: false });
+  onRender.mockClear();
+  audio.currentTime = 0.5;
+  act(() => jest.advanceTimersByTime(500));
+  expect(onRender).not.toHaveBeenCalled();
+  audio.currentTime = 1.1;
+  act(() => jest.advanceTimersByTime(100));
+  expect(container.querySelector('.sylt-line.active').textContent).toBe('Hello world');
+  expect(onRender).toHaveBeenCalledTimes(1);
+  onRender.mockClear();
+  audio.currentTime = 2;
+  act(() => jest.advanceTimersByTime(500));
+  expect(onRender).not.toHaveBeenCalled();
+  audio.currentTime = 3.1;
+  act(() => audio.dispatchEvent(new Event('pause')));
+  expect(container.querySelector('.sylt-line.active').textContent).toBe('Next line');
+});
+
+test('video and plain lyrics do not start a fine-grained timer', async () => {
+  getSSMusicPlayback.mockResolvedValueOnce({ data: { ...playback, media_type: 'video' } });
+  await renderPlayer();
+  expect(jest.getTimerCount()).toBe(0);
+  act(() => root.render(null));
+  getSSMusicPlayback.mockResolvedValueOnce({ data: { ...playback, lyrics: { text: 'Plain', lines: [] } } });
+  await renderPlayer();
+  expect(jest.getTimerCount()).toBe(0);
 });

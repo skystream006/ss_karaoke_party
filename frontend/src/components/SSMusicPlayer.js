@@ -17,14 +17,37 @@ export function activeCueIndex(cues, timeMs) {
   return active;
 }
 
-export function SyltLyrics({ lyrics, currentTime, title, onSeek }) {
+export function SyltLyrics({ lyrics, currentTime = 0, title, onSeek, mediaRef, paused }) {
   const activeLineRef = useRef(null);
   const linesRef = useRef(null);
+  const mediaCueRef = useRef(-1);
+  const [mediaCue, setMediaCue] = useState(-1);
   const lines = useMemo(() => (lyrics?.lines || [])
     .filter((line) => Number.isFinite(line.time) && line.time >= 0 && typeof line.text === 'string')
     .slice().sort((a, b) => a.time - b.time), [lyrics]);
-  const timeMs = currentTime * 1000;
-  const active = activeCueIndex(lines, timeMs);
+  const active = mediaRef ? mediaCue : activeCueIndex(lines, currentTime * 1000);
+
+  useEffect(() => {
+    const media = mediaRef?.current;
+    if (!media) return;
+    const updateCue = () => {
+      const next = activeCueIndex(lines, media.currentTime * 1000);
+      if (next !== mediaCueRef.current) {
+        mediaCueRef.current = next;
+        setMediaCue(next);
+      }
+    };
+    const events = ['timeupdate', 'seeked', 'pause', 'loadedmetadata'];
+    events.forEach((event) => media.addEventListener(event, updateCue));
+    updateCue();
+    const interval = !paused && lines.length ? setInterval(() => {
+      if (!media.paused) updateCue();
+    }, 100) : null;
+    return () => {
+      events.forEach((event) => media.removeEventListener(event, updateCue));
+      if (interval !== null) clearInterval(interval);
+    };
+  }, [mediaRef, paused, lines]);
 
   useEffect(() => {
     const list = linesRef.current;
@@ -74,7 +97,6 @@ const SSMusicPlayer = forwardRef(function SSMusicPlayer({ mediaPath, mediaType, 
   onTimeUpdateRef.current = onTimeUpdate;
   const lastProgressRef = useRef(-Infinity);
   const [playback, setPlayback] = useState(null);
-  const [currentTime, setCurrentTime] = useState(0);
   const [error, setError] = useState('');
   const [needsPlay, setNeedsPlay] = useState(false);
 
@@ -88,7 +110,6 @@ const SSMusicPlayer = forwardRef(function SSMusicPlayer({ mediaPath, mediaType, 
   const publishTime = useCallback((force = false) => {
     const media = mediaRef.current;
     if (!media) return;
-    setCurrentTime(media.currentTime);
     const now = performance.now();
     if (force || now - lastProgressRef.current >= 2000) {
       lastProgressRef.current = now;
@@ -112,7 +133,6 @@ const SSMusicPlayer = forwardRef(function SSMusicPlayer({ mediaPath, mediaType, 
   useEffect(() => {
     const controller = new AbortController();
     setPlayback(null);
-    setCurrentTime(0);
     setError('');
     setNeedsPlay(false);
     getSSMusicPlayback(mediaPath, controller.signal).then(({ data }) => {
@@ -150,21 +170,12 @@ const SSMusicPlayer = forwardRef(function SSMusicPlayer({ mediaPath, mediaType, 
     };
   }, [playback]);
 
-  // Native timeupdate can be too coarse for closely spaced SYLT cues.
-  useEffect(() => {
-    if (!playback || paused) return;
-    const interval = setInterval(() => {
-      if (mediaRef.current && !mediaRef.current.paused) publishTime();
-    }, 100);
-    return () => clearInterval(interval);
-  }, [playback, paused, publishTime]);
-
   const isVideo = (playback?.media_type || mediaType) === 'video';
   const Media = isVideo ? 'video' : 'audio';
 
   return (
     <div className={`ssmusic-player${isVideo ? ' ssmusic-video' : ''}`}>
-      {!isVideo && <SyltLyrics lyrics={playback?.lyrics} currentTime={currentTime} title={title} onSeek={seekTo} />}
+      {!isVideo && <SyltLyrics lyrics={playback?.lyrics} title={title} onSeek={seekTo} mediaRef={mediaRef} paused={paused} />}
       {!playback && !error && <p className="ssmusic-notice" role="status">Loading ssMusic media…</p>}
       {error && <p className="ssmusic-notice" role="alert">{error}</p>}
       {playback && (

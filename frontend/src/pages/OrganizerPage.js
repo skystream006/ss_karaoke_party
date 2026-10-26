@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import { CircleStop, Lock, Trash2, Unlock } from 'lucide-react';
@@ -37,6 +37,35 @@ function isReadyForPlayback(item, ssmusicState) {
     && (item.source !== 'ssmusic' || Boolean(item.media_path));
 }
 
+function createPlaybackProgress() {
+  let snapshot = { currentTime: 0, duration: 0 };
+  const listeners = new Set();
+  return {
+    getSnapshot: () => snapshot,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
+    },
+    update: (currentTime, duration) => {
+      if (snapshot.currentTime === currentTime && snapshot.duration === duration) return;
+      snapshot = { currentTime, duration };
+      listeners.forEach((listener) => listener());
+    },
+  };
+}
+
+function OrganizerPlaylist({ progress, ...props }) {
+  const [visible, setVisible] = useState(() => document.visibilityState !== 'hidden');
+  useEffect(() => {
+    const onVisibility = () => setVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, []);
+  const subscribe = useCallback((listener) => visible ? progress.subscribe(listener) : () => {}, [progress, visible]);
+  const position = useSyncExternalStore(subscribe, progress.getSnapshot);
+  return <Playlist {...props} currentTime={position.currentTime} duration={position.duration} />;
+}
+
 export default function OrganizerPage({ signOutAction, accountInfoAction }) {
   const { authLevel } = useAuth();
   const { partyId, memberId: memberIdFromUrl } = useParams();
@@ -56,8 +85,7 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [isLocked, setIsLocked] = useState(false);
-  const [videoCurrentTime, setVideoCurrentTime] = useState(0);
-  const [videoDuration, setVideoDuration] = useState(0);
+  const [playbackProgress] = useState(createPlaybackProgress);
 
   const socketRef = useRef(null);
   const videoPlayerRef = useRef(null);
@@ -73,9 +101,8 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
 
   // Reset video progress when the playing song changes
   useEffect(() => {
-    setVideoCurrentTime(0);
-    setVideoDuration(0);
-  }, [currentItem?.id, currentVideoId]);
+    playbackProgress.update(0, 0);
+  }, [currentItem?.id, currentVideoId, playbackProgress]);
 
   // Load party data
   useEffect(() => {
@@ -301,10 +328,9 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
 
   // Emit playback progress to guests and update local display
   const handleTimeUpdate = useCallback((currentTime, duration) => {
-    setVideoCurrentTime(currentTime);
-    setVideoDuration(duration);
+    playbackProgress.update(currentTime, duration);
     socketRef.current?.emit('video:progress', { partyId, currentTime, duration });
-  }, [partyId]);
+  }, [partyId, playbackProgress]);
 
   // Seek the local player (triggered by the organizer dragging the slider)
   const handleSeek = useCallback((seekTime) => {
@@ -489,7 +515,7 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
           </div>
 
           <div className="sidebar-body">
-            {sidebarTab === 'playlist' && (
+            {sidebarOpen && sidebarTab === 'playlist' && (
               <>
                 <div className="queue-count-row">
                   <span className="queue-count">
@@ -503,7 +529,8 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
                     ↺ Reset All
                   </button>
                 </div>
-                <Playlist
+                <OrganizerPlaylist
+                  progress={playbackProgress}
                   queue={queue}
                   onRemove={handleRemove}
                   onReorder={handleReorder}
@@ -512,19 +539,17 @@ export default function OrganizerPage({ signOutAction, accountInfoAction }) {
                   onSendToSSMusic={isLocked ? undefined : sendToSSMusic}
                   ssmusicState={ssmusicState}
                   isOrganizer={true}
-                  currentTime={videoCurrentTime}
-                  duration={videoDuration}
                   onSeek={handleSeek}
                 />
               </>
             )}
-            {authLevel !== 'hostscreen' && sidebarTab === 'search' && (
+            {sidebarOpen && authLevel !== 'hostscreen' && sidebarTab === 'search' && (
               <SongSearch
                 partyId={partyId}
                 member={{ name: memberName }}
               />
             )}
-            {sidebarTab === 'settings' && (
+            {sidebarOpen && sidebarTab === 'settings' && (
               <CustomizationPanel settings={settings} onChange={setSettings} />
             )}
           </div>

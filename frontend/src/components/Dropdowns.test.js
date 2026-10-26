@@ -178,6 +178,43 @@ test.each([true, false])('playlist titles appear above details and controls (org
   expect(row.querySelector('button[aria-label="Play now"]')).not.toBeNull();
 });
 
+test('playlist progress does not render inactive rows or re-sort an unchanged queue', () => {
+  const titleRead = jest.fn(() => 'Upcoming');
+  const positionRead = jest.fn(() => 2);
+  const queue = [{ ...song, status: 'playing' }, {
+    ...song, id: 'next', get video_title() { return titleRead(); }, get position() { return positionRead(); },
+  }];
+  const onSeek = jest.fn();
+  const renderProgress = (currentTime) => act(() => root.render(
+    <Playlist queue={queue} currentTime={currentTime} duration={100} onSeek={onSeek} />
+  ));
+  renderProgress(10);
+  expect(titleRead).toHaveBeenCalled();
+  titleRead.mockClear();
+  positionRead.mockClear();
+  renderProgress(12);
+  expect(titleRead).not.toHaveBeenCalled();
+  expect(positionRead).not.toHaveBeenCalled();
+  expect(container.querySelector('.progress-slider').value).toBe('12');
+});
+
+test('progress preserves an in-flight scrub and seeks once after a playback update', () => {
+  const queue = [{ ...song, status: 'playing' }];
+  const onSeek = jest.fn();
+  const renderProgress = (currentTime) => act(() => root.render(
+    <Playlist queue={queue} currentTime={currentTime} duration={100} onSeek={onSeek} />
+  ));
+  renderProgress(10);
+  const slider = container.querySelector('.progress-slider');
+  act(() => Simulate.mouseDown(slider));
+  act(() => Simulate.change(slider, { target: { value: '45' } }));
+  renderProgress(12);
+  expect(slider.value).toBe('45');
+  act(() => Simulate.mouseUp(slider));
+  expect(onSeek).toHaveBeenCalledTimes(1);
+  expect(onSeek).toHaveBeenCalledWith(45);
+});
+
 test('playlist playback stays inline while secondary actions remain in the three-dot menu', () => {
   const onPlay = jest.fn();
   const onPause = jest.fn();

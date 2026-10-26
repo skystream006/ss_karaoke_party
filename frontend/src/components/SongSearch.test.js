@@ -17,11 +17,13 @@ const song = {
   video_id: 'ssmusic-song', title: 'Library song', channel: 'Artist',
   source: 'ssmusic', media_path: 'user/playlist/song.mp3', media_type: 'audio',
 };
+let artworkSession = 0;
 
 beforeEach(() => {
   global.IS_REACT_ACT_ENVIRONMENT = true;
   jest.resetAllMocks();
   jest.useFakeTimers();
+  sessionStorage.setItem('authToken', `artwork-test-${++artworkSession}`);
   URL.createObjectURL = jest.fn(() => 'blob:artwork');
   URL.revokeObjectURL = jest.fn();
   getSSMusicArtwork.mockResolvedValue({ data: new Blob(['artwork'], { type: 'image/webp' }) });
@@ -40,6 +42,7 @@ afterEach(() => {
   container.remove();
   jest.runOnlyPendingTimers();
   jest.useRealTimers();
+  sessionStorage.removeItem('authToken');
 });
 
 async function search(text = 'song') {

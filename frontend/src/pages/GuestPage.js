@@ -28,6 +28,8 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
   const [error, setError] = useState('');
   const [isLocked, setIsLocked] = useState(false);
   const [activeTab, setActiveTab] = useState('search');
+  const [isMobile, setIsMobile] = useState(() => window.matchMedia?.('(max-width: 768px)').matches ?? false);
+  const [pageVisible, setPageVisible] = useState(() => document.visibilityState !== 'hidden');
   const [statusPanelOpen, setStatusPanelOpen] = useState(false);
   const [audioPanelOpen, setAudioPanelOpen] = useState(false);
   const [qrPanelOpen, setQrPanelOpen] = useState(false);
@@ -44,6 +46,21 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
   const memberName = sessionStorage.getItem('memberName') || 'Guest';
   const memberId = memberIdFromUrl || sessionStorage.getItem('memberId');
   const member = { id: memberId, name: memberName };
+  const queueVisible = pageVisible && (!isMobile || activeTab === 'queue');
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia?.('(max-width: 768px)');
+    const onResize = () => setIsMobile(mediaQuery.matches);
+    const onVisibility = () => setPageVisible(document.visibilityState !== 'hidden');
+    if (mediaQuery?.addEventListener) mediaQuery.addEventListener('change', onResize);
+    else mediaQuery?.addListener(onResize);
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      if (mediaQuery?.removeEventListener) mediaQuery.removeEventListener('change', onResize);
+      else mediaQuery?.removeListener(onResize);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, []);
 
   useEffect(() => {
     if (qrPanelOpen) qrDialogRef.current?.showModal();
@@ -125,7 +142,8 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
   // the React state update (which triggers a full component re-render) is
   // throttled here.
   useEffect(() => {
-    const id = setInterval(() => {
+    if (!queueVisible) return;
+    const flushProgress = () => {
       setVideoProgress((prev) => {
         const next = latestProgressRef.current;
         if (prev.currentTime === next.currentTime && prev.duration === next.duration) {
@@ -133,9 +151,11 @@ export default function GuestPage({ signOutAction, accountInfoAction }) {
         }
         return { ...next };
       });
-    }, 2000);
+    };
+    flushProgress();
+    const id = setInterval(flushProgress, 2000);
     return () => clearInterval(id);
-  }, []);
+  }, [queueVisible]);
 
   // Send a seek request to the organizer's player
   const handleSeek = useCallback(
